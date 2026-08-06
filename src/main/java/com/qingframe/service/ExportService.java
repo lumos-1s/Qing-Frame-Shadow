@@ -41,8 +41,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class ExportService {
 
-    /** 导出渲染的安全长边（约 2400px，约 400 万像素），落在大多数环境的稳定渲染区 */
-    public static final int EXPORT_SAFE_EDGE = 2400;
+    /** 导出渲染的安全长边（约 1600px），落在大多数 GPU 的稳定渲染区，避免 D3D 设备丢失 */
+    public static final int EXPORT_SAFE_EDGE = 1600;
 
     /** 导出设置文件：记住上次导出目录 */
     public static final String EXPORT_SETTINGS_FILE =
@@ -246,7 +246,7 @@ public class ExportService {
         return scaled;
     }
 
-    /** 单张/批量导出：渲染空白时逐级缩小重试，直到成功或全部失败（后台线程调用） */
+    /** 单张/批量导出：渲染空白或异常时逐级缩小重试，直到成功或全部失败（后台线程调用） */
     private WritableImage renderAwtWithFallback(BufferedImage awt, TemplateModel tmpl) throws Exception {
         // 超大图先预降级，避免在界面线程上做注定失败的全尺寸渲染
         BufferedImage target = awt;
@@ -259,20 +259,34 @@ public class ExportService {
             logExport("预降级到 " + target.getWidth() + "x" + target.getHeight() + "，模板参数缩放 x"
                     + String.format("%.2f", (double) target.getWidth() / awt.getWidth()));
         }
-        WritableImage r = renderAwtScaled(target, awt, renderTmpl);
-        boolean firstBlank = r == null || ImageExportUtil.looksBlank(r);
-        logExport("首轮渲染 " + target.getWidth() + "x" + target.getHeight() + " 空白=" + firstBlank);
-        if (!firstBlank) return r;
+        Exception lastErr = null;
+        try {
+            WritableImage r = renderAwtScaled(target, awt, renderTmpl);
+            boolean firstBlank = r == null || ImageExportUtil.looksBlank(r);
+            logExport("首轮渲染 " + target.getWidth() + "x" + target.getHeight() + " 空白=" + firstBlank);
+            if (!firstBlank) return r;
+        } catch (Exception e) {
+            lastErr = e;
+            logExport("首轮渲染异常: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+        }
         BufferedImage cur = target;
-        int[] edges = {1800, 1200};
+        int[] edges = {1280, 1024};
         for (int edge : edges) {
             BufferedImage scaled = downscaleAwtToMaxEdge(cur, edge);
             if (scaled == cur) break;
             cur = scaled;
-            r = renderAwtScaled(cur, awt, scaleTemplateForExport(tmpl, (double) cur.getWidth() / awt.getWidth()));
-            boolean blank = r == null || ImageExportUtil.looksBlank(r);
-            logExport("降级长边 " + edge + "(" + cur.getWidth() + "x" + cur.getHeight() + ") 渲染空白=" + blank);
-            if (!blank) return r;
+            try {
+                WritableImage r = renderAwtScaled(cur, awt, scaleTemplateForExport(tmpl, (double) cur.getWidth() / awt.getWidth()));
+                boolean blank = r == null || ImageExportUtil.looksBlank(r);
+                logExport("降级长边 " + edge + "(" + cur.getWidth() + "x" + cur.getHeight() + ") 渲染空白=" + blank);
+                if (!blank) return r;
+            } catch (Exception e) {
+                lastErr = e;
+                logExport("降级长边 " + edge + " 渲染异常: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+            }
+        }
+        if (lastErr != null) {
+            throw new IOException("渲染失败（全部分级均异常）: " + lastErr.getMessage(), lastErr);
         }
         return null;
     }

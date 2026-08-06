@@ -122,6 +122,7 @@ public class MainController implements Initializable {
     private static final int THUMB_CACHE_MAX = 200;
     private static final long RENDER_DEBOUNCE_MS = 50;
     private volatile boolean isExporting = false;
+    private final List<String> exportFailNames = new ArrayList<>();
     private final ExportService.Listener exportListener = new ExportService.Listener() {
         @Override
         public void onProgress(int done, int total, String fileName) {
@@ -131,7 +132,7 @@ public class MainController implements Initializable {
 
         @Override
         public void onFileFailed(String fileName, String message) {
-            showAlert("跳过损坏文件: " + fileName + "\n" + message);
+            exportFailNames.add(fileName);
         }
 
         @Override
@@ -143,6 +144,15 @@ public class MainController implements Initializable {
             if (failed > 0) msg += " 跳过" + failed + "张";
             msg += " 用时" + elapsedSeconds + "秒";
             statusLabel.setText(msg);
+            if (!exportFailNames.isEmpty()) {
+                int show = Math.min(exportFailNames.size(), 10);
+                String detail = String.join("\n", exportFailNames.subList(0, show));
+                if (exportFailNames.size() > show) {
+                    detail += "\n... 等共 " + exportFailNames.size() + " 张";
+                }
+                showAlert("以下图片导出失败（已跳过）：\n" + detail);
+                exportFailNames.clear();
+            }
         }
     };
 
@@ -1052,6 +1062,7 @@ public class MainController implements Initializable {
 
         progressBar.setVisible(true);
         progressBar.setProgress(0);
+        exportFailNames.clear();
         exportService.exportFiles(files, exportDir, fmt, jpegQuality, cloneTemplate(template), exportListener);
     }
 
@@ -1724,6 +1735,7 @@ public class MainController implements Initializable {
         setExportUI(true);
         progressBar.setVisible(true);
         progressBar.setProgress(0);
+        exportFailNames.clear();
 
         syncModelFromUI();
 

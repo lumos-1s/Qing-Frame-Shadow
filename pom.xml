@@ -80,6 +80,8 @@
                 <mainClass>com.qingframe.Main</mainClass>
                 <options>
                     <option>-Xmx4g</option>
+                    <option>-Dprism.maxvram=1g</option>
+                    <option>-Dprism.targetvram=768m</option>
                 </options>
                 </configuration>
             </plugin>
