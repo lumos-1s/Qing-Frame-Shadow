@@ -74,9 +74,6 @@ public class MainController implements Initializable {
     @FXML private TextField tfStrokeDash, tfTemplateName, tfTemplateTag, tfCustomText;
     @FXML private TextField tfExifBrand, tfExifModel, tfExifFocal, tfExifAperture, tfExifIso, tfExifShutter;
     @FXML private CheckBox cbMarginLock, cbLayerVisible, cbCornerLock;
-    @FXML private CheckBox cbBgBlur;
-    @FXML private CheckBox cbBgBlurWhite;
-    @FXML private Slider slBgBlurRadius, slBgBlurIntensity;
     @FXML private CheckBox cbTearEnable, cbShadow, cbGlow;
     @FXML private CheckBox cbVignette, cbLightLeak, cbExifText, cbCornerDecor;
     @FXML private ColorPicker cpFillColor, cpStrokeColor, cpGlowColor, cpTextColor;
@@ -439,11 +436,6 @@ public class MainController implements Initializable {
         slGlowBlur.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slGlowOpacity.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slVignetteStrength.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
-        slBgBlurRadius.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
-        slBgBlurIntensity.valueProperty().addListener((o,ov,nv) -> {
-            BorderProcessor.setBlurIntensity((int) nv.doubleValue());
-            onSettingChanged();
-        });
         slTextSize.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slCornerDecorSize.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         setupSliderUndo(slImgScale, slFillOpacity, slStrokeWidth, slStrokeOpacity,
@@ -508,8 +500,6 @@ public class MainController implements Initializable {
         });
         cbLayerVisible.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbCornerLock.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
-        cbBgBlur.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
-        cbBgBlurWhite.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbTearEnable.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbShadow.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbGlow.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
@@ -600,9 +590,6 @@ public class MainController implements Initializable {
             margin.setImgScale(slImgScale.getValue());
             margin.setImgOffsetX(parseInt(tfImgOffsetX.getText(), 0));
             margin.setImgOffsetY(parseInt(tfImgOffsetY.getText(), 0));
-            margin.setBgBlurEnable(cbBgBlur.isSelected() ? 1 : 0);
-            margin.setBgBlurRadius((int) slBgBlurRadius.getValue());
-            margin.setBgBlurWhiteOverlay(cbBgBlurWhite.isSelected() ? 1 : 0);
             int top = parseInt(tfMarginTop.getText(), 80);
             int bot = parseInt(tfMarginBottom.getText(), 120);
             int left = parseInt(tfMarginLeft.getText(), 80);
@@ -755,10 +742,6 @@ public class MainController implements Initializable {
 
         BaseMargin margin = template.getBaseMargin();
         cbMarginLock.setSelected(margin.getMarginLock() == 1);
-        cbBgBlur.setSelected(margin.getBgBlurEnable() == 1);
-        cbBgBlurWhite.setSelected(margin.getBgBlurWhiteOverlay() == 1);
-        slBgBlurRadius.setValue(margin.getBgBlurRadius());
-        slBgBlurIntensity.setValue(BorderProcessor.getBlurIntensity());
         boolean marginLocked = margin.getMarginLock() == 1;
         tfMarginTop.setDisable(marginLocked);
         tfMarginBottom.setDisable(marginLocked);
