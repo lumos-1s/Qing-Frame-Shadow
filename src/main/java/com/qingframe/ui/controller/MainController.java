@@ -8,6 +8,7 @@ import com.qingframe.core.IconManager;
 import com.qingframe.core.IconRenderer;
 import com.qingframe.core.WatermarkRender;
 import com.qingframe.model.*;
+import com.qingframe.service.ExportService;
 import com.qingframe.util.FileUtil;
 import com.qingframe.util.ImageExportUtil;
 import com.qingframe.util.JsonUtil;
@@ -53,7 +54,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class MainController implements Initializable {
@@ -104,6 +104,7 @@ public class MainController implements Initializable {
     private Image originImage;
     private TemplateModel template;
     private BorderEngine engine = new BorderEngine();
+    private final ExportService exportService = new ExportService(engine);
     private boolean isDarkTheme = true;
     private boolean isUpdating = false;
     private final Stack<TemplateModel> undoStack = new Stack<>();
@@ -120,11 +121,6 @@ public class MainController implements Initializable {
     private static final int THUMB_MAX_DIM = 1280;
     private static final int THUMB_CACHE_MAX = 200;
     private static final long RENDER_DEBOUNCE_MS = 50;
-    /** 导出渲染的安全长边（约 2400px，约 400 万像素），落在大多数环境的稳定渲染区 */
-    private static final int EXPORT_SAFE_EDGE = 2400;
-    /** 导出设置文件：记住上次导出目录 */
-    private static final String EXPORT_SETTINGS_FILE =
-            System.getProperty("user.home") + "/.qingkuangying-export-settings.txt";
     /** 随机边框使用的协调色板（每组 3 色：主色 / 辅色 / 点缀） */
     private static final String[][] COLOR_PALETTES = {
             {"#f7f4ef", "#d8cdb8", "#8b7355"},
@@ -137,6 +133,29 @@ public class MainController implements Initializable {
             {"#f4ece7", "#7c3a3d", "#4a1f21"}
     };
     private volatile boolean isExporting = false;
+    private final ExportService.Listener exportListener = new ExportService.Listener() {
+        @Override
+        public void onProgress(int done, int total, String fileName) {
+            progressBar.setProgress((double) done / total);
+            statusLabel.setText("正在导出 " + done + "/" + total + " - " + fileName);
+        }
+
+        @Override
+        public void onFileFailed(String fileName, String message) {
+            showAlert("跳过损坏文件: " + fileName + "\n" + message);
+        }
+
+        @Override
+        public void onFinished(int success, int failed, long elapsedSeconds) {
+            isExporting = false;
+            setExportUI(false);
+            progressBar.setVisible(false);
+            String msg = "导出完成 成功" + success + "张";
+            if (failed > 0) msg += " 跳过" + failed + "张";
+            msg += " 用时" + elapsedSeconds + "秒";
+            statusLabel.setText(msg);
+        }
+    };
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -1025,11 +1044,11 @@ public class MainController implements Initializable {
         if (selectedIndices.isEmpty()) return;
         javafx.stage.DirectoryChooser dc = new javafx.stage.DirectoryChooser();
         dc.setTitle("选择导出目录");
-        File lastDir = getLastExportDir();
+        File lastDir = exportService.getLastExportDir();
         if (lastDir != null) dc.setInitialDirectory(lastDir);
         File exportDir = dc.showDialog(previewCanvas.getScene().getWindow());
         if (exportDir == null) return;
-        saveLastExportDir(exportDir);
+        exportService.saveLastExportDir(exportDir);
 
         syncModelFromUI();
         isExporting = true;
@@ -1041,125 +1060,10 @@ public class MainController implements Initializable {
         for (int idx : selectedIndices) {
             files.add(imageFiles.get(idx));
         }
-        int total = files.size();
 
         progressBar.setVisible(true);
         progressBar.setProgress(0);
-        exportImagesInParallel(files, exportDir, fmt, jpegQuality);
-    }
-
-    /**
-     * 批量导出：解码与写盘阶段并行（有限线程池），
-     * 渲染因依赖 Canvas snapshot 仍在界面线程串行执行；输出内容与顺序无关，结果与串行版本一致。
-     */
-    private void exportImagesInParallel(List<File> files, File exportDir, String fmt, float jpegQuality) {
-        int threads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors()));
-        ExecutorService pool = Executors.newFixedThreadPool(threads, r -> {
-            Thread t = new Thread(r, "export-worker");
-            t.setDaemon(true);
-            return t;
-        });
-        // 导出开始前固化当前设置，避免导出过程中界面改动影响后续图片
-        TemplateModel exportTemplate = cloneTemplate(template);
-        // 自动编号：从目录已有最大编号 +1 开始，批内原子递增，保证不重复
-        String ext = "png".equalsIgnoreCase(fmt) ? "png" : "jpg";
-        AtomicInteger fileNum = new AtomicInteger(nextExportNumber(exportDir, ext));
-        int total = files.size();
-        AtomicInteger completed = new AtomicInteger(0);
-        AtomicInteger failed = new AtomicInteger(0);
-        CountDownLatch allDone = new CountDownLatch(total);
-        long startTime = System.currentTimeMillis();
-
-        for (File src : files) {
-            final String fileName = src.getName();
-            pool.execute(() -> {
-                try {
-                    WritableImage result = renderFileOnFxThread(src, exportTemplate);
-                    int n = fileNum.getAndIncrement();
-                    String outPath = exportDir.getAbsolutePath() + File.separator +
-                            FileUtil.getFileNameWithoutExt(fileName) + "_bordered_" + String.format("%03d", n) + "." + ext;
-                    ImageExportUtil.export(result, outPath, fmt, jpegQuality);
-                } catch (Exception e) {
-                    failed.incrementAndGet();
-                    e.printStackTrace();
-                    Platform.runLater(() -> showAlert("跳过损坏文件: " + fileName + "\n" + e.getMessage()));
-                }
-                int doneN = completed.incrementAndGet();
-                allDone.countDown();
-                if (doneN % 5 == 0 || doneN == total) {
-                    final double p = (double) doneN / total;
-                    final String label = "正在导出 " + doneN + "/" + total + " - " + fileName;
-                    Platform.runLater(() -> {
-                        progressBar.setProgress(p);
-                        statusLabel.setText(label);
-                    });
-                }
-            });
-        }
-        pool.shutdown();
-
-        new Thread(() -> {
-            try {
-                allDone.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            final int failedFinal = failed.get();
-            final int doneFinal = total - failedFinal;
-            final long elapsed = (System.currentTimeMillis() - startTime + 500) / 1000;
-            Platform.runLater(() -> {
-                isExporting = false;
-                setExportUI(false);
-                progressBar.setVisible(false);
-                String msg = "导出完成 成功" + doneFinal + "张";
-                if (failedFinal > 0) msg += " 跳过" + failedFinal + "张";
-                msg += " 用时" + elapsed + "秒";
-                statusLabel.setText(msg);
-            });
-        }).start();
-    }
-
-    /** 读取上次导出目录（无记录或已失效返回 null） */
-    private File getLastExportDir() {
-        try {
-            String p = java.nio.file.Files.readString(
-                    java.nio.file.Paths.get(EXPORT_SETTINGS_FILE), StandardCharsets.UTF_8).trim();
-            if (!p.isEmpty()) {
-                File f = new File(p);
-                if (f.isDirectory()) return f;
-            }
-        } catch (Exception ignored) {}
-        return null;
-    }
-
-    /** 记住导出目录，供下次导出默认打开 */
-    private void saveLastExportDir(File dir) {
-        if (dir == null) return;
-        try {
-            java.nio.file.Files.writeString(
-                    java.nio.file.Paths.get(EXPORT_SETTINGS_FILE), dir.getAbsolutePath(), StandardCharsets.UTF_8);
-        } catch (Exception ignored) {}
-    }
-
-    /** 扫描目录中 *_bordered_NNN.ext 文件，返回下一个编号（跨会话不重复） */
-    private int nextExportNumber(File dir, String ext) {
-        int max = 0;
-        File[] files = dir.listFiles();
-        if (files != null) {
-            String suffix = "_bordered_";
-            String lowerExt = ext.toLowerCase();
-            for (File f : files) {
-                String name = f.getName().toLowerCase();
-                if (name.endsWith("." + lowerExt) && name.contains(suffix)) {
-                    int idx = name.lastIndexOf(suffix);
-                    String numPart = name.substring(idx + suffix.length(), name.length() - lowerExt.length() - 1);
-                    try {
-                        max = Math.max(max, Integer.parseInt(numPart));
-                    } catch (Exception ignored) {}
-                }
-            }
-        }
-        return max + 1;
+        exportService.exportFiles(files, exportDir, fmt, jpegQuality, cloneTemplate(template), exportListener);
     }
 
     @FXML
@@ -1481,18 +1385,18 @@ public class MainController implements Initializable {
         if ("PNG".equals(fmt)) {
             fc.setSelectedExtensionFilter(fc.getExtensionFilters().get(1));
         }
-        File lastDir = getLastExportDir();
+        File lastDir = exportService.getLastExportDir();
         if (lastDir != null) fc.setInitialDirectory(lastDir);
         String ext = "PNG".equals(fmt) ? "png" : "jpg";
         String base = "output";
         if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
             base = FileUtil.getFileNameWithoutExt(imageFiles.get(currentImageIndex).getName());
         }
-        int num = (lastDir != null && lastDir.exists()) ? nextExportNumber(lastDir, ext) : 1;
+        int num = (lastDir != null && lastDir.exists()) ? exportService.nextExportNumber(lastDir, ext) : 1;
         fc.setInitialFileName(base + "_bordered_" + String.format("%03d", num) + "." + ext);
         File file = fc.showSaveDialog(btnSaveImage.getScene().getWindow());
         if (file == null) return;
-        saveLastExportDir(file.getParentFile());
+        exportService.saveLastExportDir(file.getParentFile());
 
         setExportUI(true);
         progressBar.setVisible(true);
@@ -1509,34 +1413,34 @@ public class MainController implements Initializable {
         // 导出全程后台执行：读图/缩放/写文件不占界面线程，界面线程只做渲染快照（短暂）
         new Thread(() -> {
             try {
-                logExport("== 开始导出: " + outFile.getName());
+                ExportService.logExport("== 开始导出: " + outFile.getName());
                 // 1. 后台读取当前照片
                 BufferedImage awt = null;
                 if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
                     File srcFile = imageFiles.get(currentImageIndex);
-                    logExport("照片文件: " + srcFile.getAbsolutePath());
+                    ExportService.logExport("照片文件: " + srcFile.getAbsolutePath());
                     try {
                         awt = ImageIO.read(srcFile);
                         ExifReader.ExifData exif = ExifReader.parse(srcFile);
                         if (awt != null && exif != null) {
-                            awt = applyOrientation(awt, exif.orientation);
+                            awt = exportService.applyOrientation(awt, exif.orientation);
                         }
-                        logExport(awt != null ? ("ImageIO 读取成功: " + awt.getWidth() + "x" + awt.getHeight())
+                        ExportService.logExport(awt != null ? ("ImageIO 读取成功: " + awt.getWidth() + "x" + awt.getHeight())
                                 : "ImageIO 读取返回 null（将回退到界面图像）");
                     } catch (Exception ex) {
-                        logExport("ImageIO 读取异常: " + ex);
+                        ExportService.logExport("ImageIO 读取异常: " + ex);
                         awt = null;
                     }
                 }
                 if (awt == null) {
                     // 回退：界面线程做一次像素转换
-                    logExport("回退：从界面图像转换像素");
+                    ExportService.logExport("回退：从界面图像转换像素");
                     CountDownLatch latch = new CountDownLatch(1);
                     AtomicReference<BufferedImage> ref = new AtomicReference<>();
                     Platform.runLater(() -> {
                         try {
                             ref.set(SwingFXUtils.fromFXImage(originImage, null));
-                            logExport("界面图像转换成功: " + originImage.getWidth() + "x" + originImage.getHeight());
+                            ExportService.logExport("界面图像转换成功: " + originImage.getWidth() + "x" + originImage.getHeight());
                         } finally {
                             latch.countDown();
                         }
@@ -1547,8 +1451,8 @@ public class MainController implements Initializable {
                 if (awt == null) throw new IOException("无法读取照片");
 
                 // 2. 渲染（超大图自动预降级；失败再分级缩小，界面线程只做快照）
-                WritableImage result = renderAwtWithFallback(awt, exportTemplate);
-                logExport(result != null ? "渲染成功: " + (int) result.getWidth() + "x" + (int) result.getHeight()
+                WritableImage result = exportService.renderFromAwt(awt, exportTemplate);
+                ExportService.logExport(result != null ? "渲染成功: " + (int) result.getWidth() + "x" + (int) result.getHeight()
                         : "渲染失败（全部分级均空白）");
                 if (result == null) {
                     final int pw = awt.getWidth();
@@ -1575,7 +1479,7 @@ public class MainController implements Initializable {
                 });
             } catch (Exception e) {
                 e.printStackTrace();
-                logExport("导出异常: " + e);
+                ExportService.logExport("导出异常: " + e);
                 Platform.runLater(() -> {
                     setExportUI(false);
                     progressBar.setVisible(false);
@@ -2010,11 +1914,11 @@ public class MainController implements Initializable {
 
         javafx.stage.DirectoryChooser outDir = new javafx.stage.DirectoryChooser();
         outDir.setTitle("选择导出目录");
-        File lastDir = getLastExportDir();
+        File lastDir = exportService.getLastExportDir();
         if (lastDir != null) outDir.setInitialDirectory(lastDir);
         File exportDir = outDir.showDialog(previewCanvas.getScene().getWindow());
         if (exportDir == null) return;
-        saveLastExportDir(exportDir);
+        exportService.saveLastExportDir(exportDir);
 
         isExporting = true;
         setExportUI(true);
@@ -2029,7 +1933,7 @@ public class MainController implements Initializable {
         for (String p : images) {
             files.add(new File(p));
         }
-        exportImagesInParallel(files, exportDir, fmt, jpegQuality);
+        exportService.exportFiles(files, exportDir, fmt, jpegQuality, cloneTemplate(template), exportListener);
     }
 
     @FXML
@@ -2410,213 +2314,6 @@ public class MainController implements Initializable {
         try { return Integer.parseInt(text.trim()); } catch (Exception e) { return def; }
     }
 
-    private WritableImage renderFileOnFxThread(File src, TemplateModel tmpl) throws Exception {
-        BufferedImage awtImg = ImageIO.read(src);
-        if (awtImg == null) throw new IOException("无法读取图片: " + src.getName());
-        ExifReader.ExifData exif = ExifReader.parse(src);
-        if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
-        WritableImage result = renderAwtWithFallback(awtImg, tmpl);
-        if (result == null) {
-            throw new IOException(String.format("渲染结果异常（接近空白），且自动缩放后仍失败：照片 %dx%d",
-                    awtImg.getWidth(), awtImg.getHeight()));
-        }
-        return result;
-    }
-
-    /** 单张导出：渲染空白时逐级缩小重试，直到成功或全部失败 */
-    /** 批量导出：AWT 版本的分级降级（后台线程调用） */
-    private WritableImage renderAwtWithFallback(BufferedImage awt, TemplateModel tmpl) throws Exception {
-        // 超大图先预降级，避免在界面线程上做注定失败的全尺寸渲染
-        BufferedImage target = awt;
-        TemplateModel renderTmpl = tmpl;
-        logExport("原始尺寸: " + awt.getWidth() + "x" + awt.getHeight());
-        if (Math.max(awt.getWidth(), awt.getHeight()) > EXPORT_SAFE_EDGE) {
-            target = downscaleAwtToMaxEdge(awt, EXPORT_SAFE_EDGE);
-            // 模板参数按同一比例缩放，保证导出边框/文字相对照片大小与预览一致
-            renderTmpl = scaleTemplateForExport(tmpl, (double) target.getWidth() / awt.getWidth());
-            logExport("预降级到 " + target.getWidth() + "x" + target.getHeight() + "，模板参数缩放 x"
-                    + String.format("%.2f", (double) target.getWidth() / awt.getWidth()));
-        }
-        WritableImage r = renderAwtScaled(target, awt, renderTmpl);
-        boolean firstBlank = r == null || ImageExportUtil.looksBlank(r);
-        logExport("首轮渲染 " + target.getWidth() + "x" + target.getHeight() + " 空白=" + firstBlank);
-        if (!firstBlank) return r;
-        BufferedImage cur = target;
-        int[] edges = {1800, 1200};
-        for (int edge : edges) {
-            BufferedImage scaled = downscaleAwtToMaxEdge(cur, edge);
-            if (scaled == cur) break;
-            cur = scaled;
-            r = renderAwtScaled(cur, awt, scaleTemplateForExport(tmpl, (double) cur.getWidth() / awt.getWidth()));
-            boolean blank = r == null || ImageExportUtil.looksBlank(r);
-            logExport("降级长边 " + edge + "(" + cur.getWidth() + "x" + cur.getHeight() + ") 渲染空白=" + blank);
-            if (!blank) return r;
-        }
-        return null;
-    }
-
-    /** 按比例缩放模板的全部像素参数（边距/描边/圆角/阴影/文字/胶片效果），用于降级导出保持视觉一致 */
-    private TemplateModel scaleTemplateForExport(TemplateModel src, double s) {
-        TemplateModel t = cloneTemplate(src);
-        BaseMargin m = t.getBaseMargin();
-        m.setMarginTop((int) Math.round(m.getMarginTop() * s));
-        m.setMarginBottom((int) Math.round(m.getMarginBottom() * s));
-        m.setMarginLeft((int) Math.round(m.getMarginLeft() * s));
-        m.setMarginRight((int) Math.round(m.getMarginRight() * s));
-        m.setImgOffsetX((int) Math.round(m.getImgOffsetX() * s));
-        m.setImgOffsetY((int) Math.round(m.getImgOffsetY() * s));
-        m.setBgBlurRadius((int) Math.round(m.getBgBlurRadius() * s));
-
-        for (LayerBorder layer : t.getLayerList()) {
-            layer.setMarginTop((int) Math.round(layer.getMarginTop() * s));
-            layer.setMarginBottom((int) Math.round(layer.getMarginBottom() * s));
-            layer.setMarginLeft((int) Math.round(layer.getMarginLeft() * s));
-            layer.setMarginRight((int) Math.round(layer.getMarginRight() * s));
-            StrokeConfig st = layer.getStrokeConfig();
-            if (st.getStrokeWidth() > 0) {
-                st.setStrokeWidth(Math.max(1, (int) Math.round(st.getStrokeWidth() * s)));
-            }
-            if (st.getStrokeDashArray() != null && !st.getStrokeDashArray().isEmpty()) {
-                List<Double> scaledDashes = new ArrayList<>();
-                for (double d : st.getStrokeDashArray()) scaledDashes.add(d * s);
-                st.setStrokeDashArray(scaledDashes);
-            }
-            st.setStrokeDashOffset(st.getStrokeDashOffset() * s);
-            ShadowGlowConfig sg = layer.getShadowGlowConfig();
-            sg.setShadowOffsetX(sg.getShadowOffsetX() * s);
-            sg.setShadowOffsetY(sg.getShadowOffsetY() * s);
-            sg.setShadowBlur(sg.getShadowBlur() * s);
-            sg.setShadowSpread(sg.getShadowSpread() * s);
-            sg.setGlowBlur(sg.getGlowBlur() * s);
-            sg.setGlowSpread(sg.getGlowSpread() * s);
-        }
-
-        CornerConfig c = t.getCornerConfig();
-        c.setCornerRadiusAll(c.getCornerRadiusAll() * s);
-        c.setCornerRadiusTL(c.getCornerRadiusTL() * s);
-        c.setCornerRadiusTR(c.getCornerRadiusTR() * s);
-        c.setCornerRadiusBL(c.getCornerRadiusBL() * s);
-        c.setCornerRadiusBR(c.getCornerRadiusBR() * s);
-
-        FilmTearConfig ft = t.getFilmTearConfig();
-        ft.setTearStrength(ft.getTearStrength() * s);
-        ft.setTearDensity(ft.getTearDensity() * s);
-        ft.setFilmPerforationSize(ft.getFilmPerforationSize() * s);
-        ft.setFilmPerforationSpacing(ft.getFilmPerforationSpacing() * s);
-        ft.setDustScratchIntensity((int) Math.round(ft.getDustScratchIntensity() * s));
-        ft.setYellowingStrength((int) Math.round(ft.getYellowingStrength() * s));
-
-        TextStickerConfig dec = t.getDecorConfig();
-        for (TextStickerConfig.TextLine line : dec.getTextLines()) {
-            line.setFontSize(line.getFontSize() * s);
-            line.setX(line.getX() * s);
-            line.setY(line.getY() * s);
-            line.setLetterSpacing(line.getLetterSpacing() * s);
-        }
-        dec.setCornerDecorSize(dec.getCornerDecorSize() * s);
-        t.setParamFontSize((int) Math.round(t.getParamFontSize() * s));
-        return t;
-    }
-
-    /** 渲染指定尺寸图，并按比例同步图标位置/大小（保证降级导出时 Logo 位置与预览一致） */
-    private WritableImage renderAwtScaled(BufferedImage renderImg, BufferedImage origImg, TemplateModel tmpl) throws Exception {
-        double sx = (double) renderImg.getWidth() / origImg.getWidth();
-        double sy = (double) renderImg.getHeight() / origImg.getHeight();
-        engine.setIconRenderScale(sx, sy);
-        try {
-            WritableImage fx = SwingFXUtils.toFXImage(renderImg, null);
-            return renderOnFx(fx, tmpl);
-        } finally {
-            engine.setIconRenderScale(1.0, 1.0);
-        }
-    }
-
-    /** 导出诊断日志：写入用户目录 QingFrameShadow-export.log，用于定位导出失败原因 */
-    private void logExport(String msg) {
-        try {
-            java.io.FileWriter fw = new java.io.FileWriter(
-                    System.getProperty("user.home") + "/QingFrameShadow-export.log", true);
-            fw.write(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "  " + msg + "\n");
-            fw.close();
-        } catch (Exception ignored) {}
-    }
-
-    private WritableImage renderOnFx(WritableImage fx, TemplateModel tmpl) throws Exception {
-        CountDownLatch latch = new CountDownLatch(1);
-        WritableImage[] result = new WritableImage[1];
-        Exception[] err = new Exception[1];
-        Platform.runLater(() -> {
-            try {
-                result[0] = engine.renderBorder(fx, tmpl);
-            } catch (Exception e) {
-                err[0] = e;
-            } finally {
-                latch.countDown();
-            }
-        });
-        latch.await();
-        if (err[0] != null) throw err[0];
-        return result[0];
-    }
-
-    /** 按长边上限缩小 AWT 图像（不超过上限则原样返回） */
-    private BufferedImage downscaleAwtToMaxEdge(BufferedImage awt, int maxEdge) {
-        int longEdge = Math.max(awt.getWidth(), awt.getHeight());
-        if (longEdge <= maxEdge) return awt;
-        double scale = (double) maxEdge / longEdge;
-        int nw = Math.max(1, (int) (awt.getWidth() * scale));
-        int nh = Math.max(1, (int) (awt.getHeight() * scale));
-        BufferedImage scaled = new BufferedImage(nw, nh, BufferedImage.TYPE_INT_ARGB);
-        java.awt.Graphics2D g = scaled.createGraphics();
-        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g.drawImage(awt, 0, 0, nw, nh, null);
-        g.dispose();
-        return scaled;
-    }
-
-    /** 按 EXIF 方向旋转图像（与 JavaFX 预览自动应用方向保持一致） */
-    private BufferedImage applyOrientation(BufferedImage img, int orientation) {
-        if (img == null || orientation == 1 || orientation == 0) return img;
-        int w = img.getWidth(), h = img.getHeight();
-        switch (orientation) {
-            case 3:
-            {
-                BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-                for (int y = 0; y < h; y++) {
-                    int[] row = img.getRGB(0, y, w, 1, null, 0, w);
-                    int[] rev = new int[w];
-                    for (int x = 0; x < w; x++) rev[x] = row[w - 1 - x];
-                    out.setRGB(0, h - 1 - y, w, 1, rev, 0, w);
-                }
-                return out;
-            }
-            case 6: {
-                // 顺时针 90°：源 (x,y) -> 目标 (h-1-y, x)
-                BufferedImage out = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
-                for (int y = 0; y < h; y++) {
-                    int[] row = img.getRGB(0, y, w, 1, null, 0, w);
-                    for (int x = 0; x < w; x++) {
-                        out.setRGB(h - 1 - y, x, row[x]);
-                    }
-                }
-                return out;
-            }
-            case 8: {
-                // 逆时针 90°：源 (x,y) -> 目标 (y, w-1-x)
-                BufferedImage out = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
-                for (int y = 0; y < h; y++) {
-                    int[] row = img.getRGB(0, y, w, 1, null, 0, w);
-                    for (int x = 0; x < w; x++) {
-                        out.setRGB(y, w - 1 - x, row[x]);
-                    }
-                }
-                return out;
-            }
-            default:
-                return img;
-        }
-    }
-
     private BufferedImage downscaleIfNeeded(BufferedImage img) {
         int w = img.getWidth();
         int h = img.getHeight();
@@ -2639,7 +2336,7 @@ public class MainController implements Initializable {
             BufferedImage awtImg = ImageIO.read(file);
             if (awtImg == null) return null;
             ExifReader.ExifData exif = ExifReader.parse(file);
-            if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
+            if (exif != null) awtImg = exportService.applyOrientation(awtImg, exif.orientation);
             awtImg = downscaleIfNeeded(awtImg);
             CountDownLatch latch = new CountDownLatch(1);
             Image[] result = new Image[1];
