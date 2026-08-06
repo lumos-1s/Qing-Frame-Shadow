@@ -1,0 +1,548 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.shape.*?>
+<?import javafx.scene.text.Font?>
+<?import javafx.scene.text.Text?>
+
+<BorderPane fx:id="rootPane" prefHeight="900" prefWidth="1400" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.qingframe.ui.controller.MainController">
+
+    <!-- ═══════════════ 顶部工具栏（三组分区） ═══════════════ -->
+    <top>
+        <ToolBar prefHeight="38.0">
+            <!-- 第1组：文件操作 -->
+            <HBox styleClass="toolbar-group">
+                <Button fx:id="btnOpenImage" onAction="#onOpenImage" styleClass="toolbar-btn" text="打开图片">
+                    <graphic><SVGPath styleClass="ui-icon" content="M3 6h6l2 2h10v12H3z" /></graphic>
+                </Button>
+                <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
+                <Button fx:id="btnBatchExport" onAction="#onBatchExport" styleClass="toolbar-btn" text="批量导出">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 4h12v12H4z M9 9h11v11H9z" /></graphic>
+                </Button>
+                <Button fx:id="btnSaveImage" onAction="#onSaveImage" styleClass="toolbar-btn-primary" text="导出图片">
+                    <graphic><SVGPath styleClass="ui-icon" content="M5 3h14v18H5z M5 12h14 M12 3v6" /></graphic>
+                </Button>
+                <ComboBox fx:id="cbExportFormat" prefWidth="80.0" styleClass="toolbar-combo" />
+                <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
+                <Button onAction="#onSyncToSelected" styleClass="toolbar-btn" text="同步到选中">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 9a8 8 0 0 1 13.5-3.5 M20 15a8 8 0 0 1-13.5 3.5 M18 2v4h-4 M6 22v-4h4" /></graphic>
+                </Button>
+            </HBox>
+            <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
+            <!-- 第2组：编辑操作 -->
+            <HBox styleClass="toolbar-group">
+                <Button onAction="#onUndo" styleClass="toolbar-btn" text="撤销">
+                    <graphic><SVGPath styleClass="ui-icon" content="M9 14L4 9l5-5 M4 9h9a6 6 0 0 1 0 12h-5" /></graphic>
+                </Button>
+                <Button onAction="#onRedo" styleClass="toolbar-btn" text="重做">
+                    <graphic><SVGPath styleClass="ui-icon" content="M15 14l5-5-5-5 M20 9h-9a6 6 0 0 0 0 12h5" /></graphic>
+                </Button>
+                <Button onAction="#onResetAll" styleClass="toolbar-btn-warning" text="重置">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 12a8 8 0 0 1 14-5 M20 12a8 8 0 0 1-14 5 M18 3v4h-4 M6 21v-4h4" /></graphic>
+                </Button>
+                <Button onAction="#onRandomizeBorder" styleClass="toolbar-btn" text="随机边框">
+                    <graphic><SVGPath styleClass="ui-icon" content="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z" /></graphic>
+                </Button>
+            </HBox>
+            <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
+            <!-- 第3组：预览控制 -->
+            <HBox styleClass="toolbar-group">
+                <Button onAction="#onZoomOut" styleClass="toolbar-btn" text="">
+                    <graphic><SVGPath styleClass="ui-icon" content="M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0 M21 21l-4.5-4.5 M8 11h6" /></graphic>
+                </Button>
+                <Button onAction="#onZoomIn" styleClass="toolbar-btn" text="">
+                    <graphic><SVGPath styleClass="ui-icon" content="M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0 M21 21l-4.5-4.5 M11 8v6 M8 11h6" /></graphic>
+                </Button>
+                <Button onAction="#onZoomFit" styleClass="toolbar-btn" text="适应">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5" /></graphic>
+                </Button>
+                <TextField fx:id="tfZoomValue" prefWidth="50.0" styleClass="toolbar-zoom-input" />
+                <Slider fx:id="zoomSlider" blockIncrement="0.1" max="3.0" min="0.1" prefWidth="80.0" value="1.0" />
+                <Label fx:id="zoomLabel" text="100%" />
+            </HBox>
+            <Pane HBox.hgrow="ALWAYS" />
+            <ToggleButton fx:id="btnThemeToggle" mnemonicParsing="false" onAction="#onToggleTheme" text="">
+                <graphic><SVGPath styleClass="ui-icon" content="M20 13A8 8 0 1 1 11 3a6 6 0 0 0 9 10z" /></graphic>
+            </ToggleButton>
+        </ToolBar>
+    </top>
+
+    <!-- ═══════════════ 左侧侧边栏（折叠分组） ═══════════════ -->
+    <left>
+        <ScrollPane fitToWidth="true" prefWidth="185.0" styleClass="sidebar-scroll">
+            <VBox styleClass="sidebar-panel">
+                <!-- 基础边框 -->
+                <TitledPane animated="true" expanded="true" text="基础边框">
+                    <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetNoBorder" styleClass="sidebar-btn" text="无边框" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetSimpleWhite" styleClass="sidebar-btn" text="简约白边" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetRounded" styleClass="sidebar-btn" text="圆角边框" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetVintage" styleClass="sidebar-btn" text="复古边框" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetPolaroid" styleClass="sidebar-btn" text="拍立得" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetFilm" styleClass="sidebar-btn" text="胶片框" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetDoubleLine" styleClass="sidebar-btn" text="双线边框" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetShadow" styleClass="sidebar-btn" text="投影边框" />
+                    </VBox>
+                </TitledPane>
+                <!-- 背景模糊 -->
+                <TitledPane animated="true" expanded="false" text="背景模糊">
+                    <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onBlurNormal" styleClass="sidebar-btn" text="背景模糊" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onBlurWhite" styleClass="sidebar-btn" text="日期模糊" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onBlurImageBg" styleClass="sidebar-btn" text="图片背景" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onSelectBgImage" styleClass="sidebar-btn" text="导入背景图" />
+                    </VBox>
+                </TitledPane>
+                <!-- 水印边框 -->
+                <TitledPane animated="true" expanded="false" text="水印边框">
+                    <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onWatermarkExif" styleClass="sidebar-btn" text="水印边框" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onWatermarkSingle" styleClass="sidebar-btn" text="单行水印" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onWatermarkBrand" styleClass="sidebar-btn" text="品牌水印" />
+                    </VBox>
+                </TitledPane>
+                <!-- 印象风格 -->
+                <TitledPane animated="true" expanded="false" text="印象风格">
+                    <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetImpFrosted" styleClass="sidebar-btn" text="磨砂印象" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetImpClassic" styleClass="sidebar-btn" text="经典印象" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetXiaomiImp" styleClass="sidebar-btn" text="小米印象" />
+                    </VBox>
+                </TitledPane>
+                <!-- 卡片风格 -->
+                <TitledPane animated="true" expanded="false" text="卡片风格">
+                    <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardLeica" styleClass="sidebar-btn" text="徕卡卡片" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardLogoParam" styleClass="sidebar-btn" text="Logo参数" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardPureLogo" styleClass="sidebar-btn" text="纯Logo" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardSimple" styleClass="sidebar-btn" text="简洁卡片" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardImmersion" styleClass="sidebar-btn" text="沉浸卡片" />
+                    </VBox>
+                </TitledPane>
+                <!-- 色彩色卡 -->
+                <TitledPane animated="true" expanded="false" text="色彩色卡">
+                    <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetColorClassic" styleClass="sidebar-btn" text="经典色卡" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetColorRefined" styleClass="sidebar-btn" text="精致色卡" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetArtCard" styleClass="sidebar-btn" text="艺术卡片" />
+                    </VBox>
+                </TitledPane>
+                <!-- 白边/简约风格 -->
+                <TitledPane animated="true" expanded="false" text="白边 / 简约">
+                    <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetWhitePlain" styleClass="sidebar-btn" text="白边素净" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetFujiWhite" styleClass="sidebar-btn" text="富士白边" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetParamTopLeft" styleClass="sidebar-btn" text="左上参数" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetParamBottomLeft" styleClass="sidebar-btn" text="左下参数" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetParamBottomSingle" styleClass="sidebar-btn" text="单行参数" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetSimpleFilm" styleClass="sidebar-btn" text="胶片简约" />
+                    </VBox>
+                </TitledPane>
+            </VBox>
+        </ScrollPane>
+    </left>
+
+    <!-- ═══════════════ 中央区域（预览 + 右侧面板） ═══════════════ -->
+    <center>
+        <SplitPane dividerPositions="0.72">
+            <!-- 预览画布区 -->
+            <VBox HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS">
+                <StackPane fx:id="dropTarget" styleClass="preview-pane" VBox.vgrow="ALWAYS">
+                    <Canvas fx:id="previewCanvas" />
+                    <VBox fx:id="placeholderView" styleClass="placeholder-container" visible="true" managed="true">
+                <SVGPath scaleX="2.5" scaleY="2.5" styleClass="placeholder-icon" content="M4 7h4l2-2h4l2 2h4v12H4z M12 16m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0" />
+                        <Label styleClass="placeholder-text" text="点击左上角【打开图片】导入照片开始编辑" />
+                    </VBox>
+                    <ScrollBar fx:id="hScrollBar" orientation="HORIZONTAL" visible="false" managed="false" />
+                    <ScrollBar fx:id="vScrollBar" orientation="VERTICAL" visible="false" managed="false" />
+                </StackPane>
+                <ScrollPane fx:id="filmStrip" prefHeight="90.0" fitToHeight="true" hbarPolicy="ALWAYS" vbarPolicy="NEVER" styleClass="filmstrip" visible="false">
+                    <HBox fx:id="thumbnailBox" spacing="4.0" />
+                </ScrollPane>
+            </VBox>
+            <!-- 右侧面板 -->
+            <TabPane fx:id="rightTabPane" side="TOP" tabClosingPolicy="UNAVAILABLE" prefWidth="310.0">
+                <!-- ═══ 参数 ═══ -->
+                <Tab text="参数">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 7h16 M4 17h16 M9 7m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0 M15 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0" /></graphic>
+                    <ScrollPane fitToWidth="true">
+                        <VBox spacing="5.0" styleClass="settings-panel">
+                            <!-- 背景模糊 -->
+                            <Label styleClass="param-group-title" text="背景模糊" />
+                            <CheckBox fx:id="cbBgBlur" text="启用背景模糊（毛玻璃卡片）" />
+                            <CheckBox fx:id="cbBgBlurWhite" text="白色提亮（毛玻璃更柔和）" />
+                            <HBox alignment="CENTER_LEFT" spacing="4.0">
+                                <Label text="模糊半径" />
+                                <Slider fx:id="slBgBlurRadius" blockIncrement="5" max="80" min="10" prefWidth="120.0" value="40" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="4.0">
+                                <Label text="模糊强度" />
+                                <Slider fx:id="slBgBlurIntensity" blockIncrement="5" max="100" min="0" prefWidth="120.0" value="50" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 画布比例 -->
+                            <Label styleClass="param-group-title" text="画布比例" />
+                            <ComboBox fx:id="cbCanvasRatio" prefWidth="200.0" />
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 画布边距 -->
+                            <Label styleClass="param-group-title" text="画布边距" />
+                            <HBox alignment="CENTER_LEFT" spacing="4.0">
+                                <Label text="锁定" /><CheckBox fx:id="cbMarginLock" />
+                            </HBox>
+                            <GridPane hgap="6.0" vgap="4.0">
+                                <Label text="上" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                                <TextField fx:id="tfMarginTop" prefWidth="55.0" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                                <Label text="下" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+                                <TextField fx:id="tfMarginBottom" prefWidth="55.0" GridPane.columnIndex="3" GridPane.rowIndex="0" />
+                                <Label text="左" GridPane.columnIndex="0" GridPane.rowIndex="1" />
+                                <TextField fx:id="tfMarginLeft" prefWidth="55.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                <Label text="右" GridPane.columnIndex="2" GridPane.rowIndex="1" />
+                                <TextField fx:id="tfMarginRight" prefWidth="55.0" GridPane.columnIndex="3" GridPane.rowIndex="1" />
+                            </GridPane>
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="全局缩放" />
+                                <Slider fx:id="slGlobalMargin" blockIncrement="0.05" max="3.0" min="0.1" prefWidth="100.0" value="1.0" />
+                                <Label fx:id="lblGlobalMargin" text="100%" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="缩放" />
+                                <Slider fx:id="slImgScale" blockIncrement="0.01" max="1.5" min="0.1" prefWidth="80.0" value="1.0" />
+                                <Label fx:id="lblImgScale" text="100%" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="偏移 X" />
+                                <TextField fx:id="tfImgOffsetX" prefWidth="50.0" />
+                                <Label text="Y" />
+                                <TextField fx:id="tfImgOffsetY" prefWidth="50.0" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 图片圆角 -->
+                            <Label styleClass="param-group-title" text="图片圆角" />
+                            <HBox alignment="CENTER_LEFT" spacing="4.0">
+                                <Label text="四角同步" /><CheckBox fx:id="cbCornerLock" />
+                            </HBox>
+                            <GridPane hgap="6.0" vgap="4.0">
+                                <Label text="左上" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                                <Slider fx:id="slCornerTL" blockIncrement="10" max="500" min="0" prefWidth="70.0" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+
+                                <Slider fx:id="slCornerTR" blockIncrement="10" max="500" min="0" prefWidth="70.0" GridPane.columnIndex="3" GridPane.rowIndex="0" />
+
+                                <Slider fx:id="slCornerBL" blockIncrement="10" max="500" min="0" prefWidth="70.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+
+                                <Slider fx:id="slCornerBR" blockIncrement="10" max="500" min="0" prefWidth="70.0" GridPane.columnIndex="3" GridPane.rowIndex="1" />
+                            </GridPane>
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="统一直径" />
+                                <Slider fx:id="slCornerRadius" blockIncrement="10" max="500" min="0" prefWidth="100.0" value="250" />
+                                <TextField fx:id="tfCornerRadius" prefWidth="60.0" text="250" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 参数位置 -->
+                            <Label styleClass="param-group-title" text="参数位置" />
+                            <ComboBox fx:id="cbParamPosition" prefWidth="200.0" />
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 参数字号 -->
+                            <Label styleClass="param-group-title" text="参数字号" />
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Slider fx:id="slParamFontSize" blockIncrement="2" max="160" min="8" prefWidth="100.0" value="100" />
+                                <Label fx:id="lblParamFontSize" text="35px" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 参数编辑 -->
+                            <Label styleClass="param-group-title" text="参数编辑" />
+                            <GridPane hgap="6.0" vgap="4.0">
+                                <Label text="品牌" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                                <TextField fx:id="tfExifBrand" prefWidth="80.0" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                                <Label text="型号" GridPane.columnIndex="0" GridPane.rowIndex="1" />
+                                <TextField fx:id="tfExifModel" prefWidth="80.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                <Label text="焦距" GridPane.columnIndex="0" GridPane.rowIndex="2" />
+                                <TextField fx:id="tfExifFocal" prefWidth="80.0" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                                <Label text="光圈" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+                                <TextField fx:id="tfExifAperture" prefWidth="80.0" GridPane.columnIndex="3" GridPane.rowIndex="0" />
+                                <Label text="ISO" GridPane.columnIndex="2" GridPane.rowIndex="1" />
+                                <TextField fx:id="tfExifIso" prefWidth="80.0" GridPane.columnIndex="3" GridPane.rowIndex="1" />
+                                <Label text="快门" GridPane.columnIndex="2" GridPane.rowIndex="2" />
+                                <TextField fx:id="tfExifShutter" prefWidth="80.0" GridPane.columnIndex="3" GridPane.rowIndex="2" />
+                            </GridPane>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 参数类型 -->
+                            <Label styleClass="param-group-title" text="EXIF 参数类型" />
+                            <ComboBox fx:id="cbParamType" prefWidth="200.0" />
+                        </VBox>
+                    </ScrollPane>
+                </Tab>
+                <!-- ═══ 边框 ═══ -->
+                <Tab text="边框">
+                    <graphic><SVGPath styleClass="ui-icon" content="M5 4h14v16H5z M9 4v16" /></graphic>
+                    <ScrollPane fitToWidth="true">
+                        <VBox spacing="6.0" styleClass="settings-panel">
+                            <!-- 图层控制 -->
+                            <Label styleClass="param-group-title" text="图层控制" />
+                            <HBox alignment="CENTER_LEFT" spacing="6.0">
+                <Button fx:id="btnAddLayer" onAction="#onAddLayer" text="新增">
+                    <graphic><SVGPath styleClass="ui-icon" content="M12 5v14 M5 12h14" /></graphic>
+                </Button>
+                <Button fx:id="btnRemoveLayer" onAction="#onRemoveLayer" text="删除">
+                    <graphic><SVGPath styleClass="ui-icon" content="M5 12h14" /></graphic>
+                </Button>
+                                <Label text="当前:" />
+                                <ComboBox fx:id="cbLayerSelect" prefWidth="90.0" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="可见" />
+                                <CheckBox fx:id="cbLayerVisible" />
+                                <Button onAction="#onResetLayer" styleClass="btn-secondary" text="重置层" />
+                            </HBox>
+                            <GridPane hgap="6.0" vgap="4.0">
+                                <Label text="层上" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                                <TextField fx:id="tfLayerMarginTop" prefWidth="50.0" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                                <Label text="层下" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+                                <TextField fx:id="tfLayerMarginBottom" prefWidth="50.0" GridPane.columnIndex="3" GridPane.rowIndex="0" />
+                                <Label text="层左" GridPane.columnIndex="0" GridPane.rowIndex="1" />
+                                <TextField fx:id="tfLayerMarginLeft" prefWidth="50.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                <Label text="层右" GridPane.columnIndex="2" GridPane.rowIndex="1" />
+                                <TextField fx:id="tfLayerMarginRight" prefWidth="50.0" GridPane.columnIndex="3" GridPane.rowIndex="1" />
+                            </GridPane>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 填充 -->
+                            <Label styleClass="param-group-title" text="填充" />
+                            <CheckBox fx:id="cbTearEnable" text="撕边效果" />
+                            <HBox alignment="CENTER_LEFT" spacing="6.0">
+                                <Label text="强度" /><Slider fx:id="slTearStrength" blockIncrement="5" max="100" min="0" prefWidth="60.0" />
+                                <Label text="密度" /><Slider fx:id="slTearDensity" blockIncrement="5" max="100" min="0" prefWidth="60.0" />
+                            </HBox>
+                            <ComboBox fx:id="cbFillType" prefWidth="140.0" />
+                            <ComboBox fx:id="cbGradientType" prefWidth="140.0" />
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="颜色" />
+                                <ColorPicker fx:id="cpFillColor" />
+                                <Label text="透明度" />
+                                <Slider fx:id="slFillOpacity" blockIncrement="5" max="100" min="0" prefWidth="70.0" value="100" />
+                                <Label fx:id="lblFillOpacity" text="100%" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 描边 -->
+                            <Label styleClass="param-group-title" text="描边" />
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="粗细" />
+                                <Slider fx:id="slStrokeWidth" blockIncrement="1" max="50" min="0" prefWidth="80.0" value="0" />
+                                <Label fx:id="lblStrokeWidth" text="0px" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="位置" />
+                                <ComboBox fx:id="cbStrokePos" prefWidth="80.0" />
+                                <Label text="颜色" />
+                                <ColorPicker fx:id="cpStrokeColor" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="透明度" />
+                                <Slider fx:id="slStrokeOpacity" blockIncrement="5" max="100" min="0" prefWidth="80.0" value="100" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="6.0">
+                                <Label text="虚线" /><TextField fx:id="tfStrokeDash" prefWidth="80.0" promptText="5,3" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 渐变/纹理 -->
+                            <Label styleClass="param-group-title" text="渐变 / 纹理" />
+                            <HBox alignment="CENTER_LEFT" spacing="6.0">
+                                <Label text="渐变角度" /><Slider fx:id="slGradientAngle" blockIncrement="15" max="360" min="0" prefWidth="80.0" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="6.0">
+                                <Label text="纹理缩放" /><Slider fx:id="slTextureScale" blockIncrement="0.1" max="3.0" min="0.1" prefWidth="80.0" value="1.0" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="6.0">
+                                <Label text="混合模式" />
+                                <ComboBox fx:id="cbTextureBlend" prefWidth="110.0" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="6.0">
+                <Button onAction="#onBuiltinTexture" text="内置纹理">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 4h16v16H4z M4 13l4-4 3 3 3-3 4 4" /></graphic>
+                </Button>
+                                <Button onAction="#onSelectTexture" text="选择图片…" />
+                            </HBox>
+                        </VBox>
+                    </ScrollPane>
+                </Tab>
+                <!-- ═══ 光影 ═══ -->
+                <Tab text="光影">
+                    <graphic><SVGPath styleClass="ui-icon" content="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0 M12 4V2 M12 22v-2 M5 12H3 M21 12h-2 M6.3 6.3L4.9 4.9 M19.1 19.1l-1.4-1.4 M17.7 6.3l1.4-1.4 M4.9 19.1l1.4-1.4" /></graphic>
+                    <ScrollPane fitToWidth="true">
+                        <VBox spacing="6.0" styleClass="settings-panel">
+                            <!-- 阴影 -->
+                            <Label styleClass="param-group-title" text="阴影" />
+                            <CheckBox fx:id="cbShadow" />
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <Label text="X" /><Slider fx:id="slShadowX" blockIncrement="1" max="30" min="-30" prefWidth="60.0" />
+                                <Label text="Y" /><Slider fx:id="slShadowY" blockIncrement="1" max="30" min="-30" prefWidth="60.0" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <Label text="模糊" /><Slider fx:id="slShadowBlur" blockIncrement="2" max="60" min="0" prefWidth="70.0" />
+                                <Label text="扩散" /><Slider fx:id="slShadowSpread" blockIncrement="5" max="100" min="0" prefWidth="70.0" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 发光 -->
+                            <Label styleClass="param-group-title" text="发光" />
+                            <CheckBox fx:id="cbGlow" />
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <Label text="颜色" /><ColorPicker fx:id="cpGlowColor" />
+                                <Label text="模糊" /><Slider fx:id="slGlowBlur" blockIncrement="2" max="60" min="0" prefWidth="70.0" />
+                                <Label text="透明度" /><Slider fx:id="slGlowOpacity" blockIncrement="5" max="100" min="0" prefWidth="70.0" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 全局暗角 -->
+                            <Label styleClass="param-group-title" text="暗角" />
+                            <CheckBox fx:id="cbVignette" />
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <Label text="强度" /><Slider fx:id="slVignetteStrength" blockIncrement="5" max="100" min="0" prefWidth="100.0" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 胶片漏光 -->
+                            <Label styleClass="param-group-title" text="漏光" />
+                            <CheckBox fx:id="cbLightLeak" />
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <Label text="类型" /><ComboBox fx:id="cbLeakType" prefWidth="100.0" />
+                            </HBox>
+                        </VBox>
+                    </ScrollPane>
+                </Tab>
+                <!-- ═══ 装饰 ═══ -->
+                <Tab text="装饰">
+                    <graphic><SVGPath styleClass="ui-icon" content="M12 4l2.1 4.3 4.7.7-3.4 3.3.8 4.7L12 14.9 7.8 17l.8-4.7L5.2 9l4.7-.7z" /></graphic>
+                    <ScrollPane fitToWidth="true">
+                        <VBox spacing="6.0" styleClass="settings-panel">
+                            <!-- EXIF 水印 -->
+                            <Label styleClass="param-group-title" text="EXIF 水印" />
+                            <CheckBox fx:id="cbExifText" text="显示参数水印" />
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 自定义文字 -->
+                            <Label styleClass="param-group-title" text="自定义文字" />
+                            <TextField fx:id="tfCustomText" promptText="输入文字内容" />
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <Label text="字号" />
+                                <Slider fx:id="slTextSize" blockIncrement="2" max="72" min="8" prefWidth="80.0" value="16" />
+                                <Label text="颜色" />
+                                <ColorPicker fx:id="cpTextColor" />
+                            </HBox>
+                <Button onAction="#onAddTextLine" text="添加文字">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 5h16 M12 5v15 M8 20h8" /></graphic>
+                </Button>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 贴纸 -->
+                            <Label styleClass="param-group-title" text="贴纸" />
+                <Button onAction="#onAddSticker" text="选择贴纸图片">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 4h16v16H4z M4 14l5-5 4 4 3-3 5 5" /></graphic>
+                </Button>
+                            <Separator styleClass="param-group-separator" />
+                            <!-- 边角装饰 -->
+                            <Label styleClass="param-group-title" text="边角装饰" />
+                            <CheckBox fx:id="cbCornerDecor" />
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <Label text="大小" />
+                                <Slider fx:id="slCornerDecorSize" blockIncrement="5" max="100" min="10" prefWidth="100.0" value="30" />
+                            </HBox>
+                        </VBox>
+                    </ScrollPane>
+                </Tab>
+                <!-- ═══ Logo ═══ -->
+                <Tab text="ℹ Logo">
+                    <graphic><SVGPath styleClass="ui-icon" content="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0 M8.5 12.3l2.4 2.4 4.6-5" /></graphic>
+                    <ScrollPane fitToWidth="true">
+                        <VBox spacing="6.0" styleClass="settings-panel">
+                            <Label styleClass="param-group-title" text="品牌图标" />
+                            <ScrollPane fx:id="brandIconScroll" prefHeight="50.0" hbarPolicy="ALWAYS" vbarPolicy="NEVER">
+                                <HBox fx:id="brandIconBox" spacing="6.0" />
+                            </ScrollPane>
+                            <Separator styleClass="param-group-separator" />
+                            <Label styleClass="param-group-title" text="摄影装饰" />
+                            <ScrollPane fx:id="photoDecorScroll" prefHeight="50.0" hbarPolicy="ALWAYS" vbarPolicy="NEVER">
+                                <HBox fx:id="photoDecorBox" spacing="6.0" />
+                            </ScrollPane>
+                            <Separator styleClass="param-group-separator" />
+                            <Label styleClass="param-group-title" text="简约标识" />
+                            <ScrollPane fx:id="simpleIconScroll" prefHeight="50.0" hbarPolicy="ALWAYS" vbarPolicy="NEVER">
+                                <HBox fx:id="simpleIconBox" spacing="6.0" />
+                            </ScrollPane>
+                            <Separator styleClass="param-group-separator" />
+                            <Label styleClass="param-group-title" text="风光天气" />
+                            <ScrollPane fx:id="weatherIconScroll" prefHeight="50.0" hbarPolicy="ALWAYS" vbarPolicy="NEVER">
+                                <HBox fx:id="weatherIconBox" spacing="6.0" />
+                            </ScrollPane>
+                            <Separator styleClass="param-group-separator" />
+                            <Label styleClass="param-group-title" text="自定义图标" />
+                <Button maxWidth="1.7976931348623157E308" onAction="#onAddCustomIcon" text="添加自定义图标">
+                    <graphic><SVGPath styleClass="ui-icon" content="M12 5v14 M5 12h14" /></graphic>
+                </Button>
+                            <ScrollPane fx:id="customIconScroll" prefHeight="50.0" hbarPolicy="ALWAYS" vbarPolicy="NEVER">
+                                <HBox fx:id="customIconBox" spacing="6.0" />
+                            </ScrollPane>
+                            <Separator styleClass="param-group-separator" />
+                            <Label styleClass="param-group-title" text="画布图标管理" />
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="透明度" />
+                                <Slider fx:id="slActiveIconOpacity" blockIncrement="5" max="100" min="0" prefWidth="100.0" value="100" />
+                <Button onAction="#onDeleteActiveIcon" text="删除选中">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13" /></graphic>
+                    <tooltip>
+                                        <Tooltip text="先在画布上点击图标选中（出现蓝色虚线框），再点此删除；也可选中后按 Delete 键" />
+                                    </tooltip>
+                                </Button>
+                            </HBox>
+                <Button maxWidth="1.7976931348623157E308" onAction="#onClearAllIcons" text="清空所有图标">
+                    <graphic><SVGPath styleClass="ui-icon" content="M6 6l12 12 M18 6L6 18" /></graphic>
+                </Button>
+                        </VBox>
+                    </ScrollPane>
+                </Tab>
+                <!-- ═══ 模板 ═══ -->
+                <Tab text="模板">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z" /></graphic>
+                    <ScrollPane fitToWidth="true">
+                        <VBox spacing="6.0" styleClass="settings-panel">
+                            <Label styleClass="param-group-title" text="模板管理" />
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="模板名" />
+                                <TextField fx:id="tfTemplateName" prefWidth="140.0" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="标签" />
+                                <TextField fx:id="tfTemplateTag" prefWidth="140.0" />
+                            </HBox>
+                <Button maxWidth="1.7976931348623157E308" onAction="#onSaveTemplate" text="保存模板">
+                    <graphic><SVGPath styleClass="ui-icon" content="M5 3h14v18H5z M5 12h14 M12 3v6" /></graphic>
+                </Button>
+                <Button maxWidth="1.7976931348623157E308" onAction="#onLoadTemplate" text="加载模板">
+                    <graphic><SVGPath styleClass="ui-icon" content="M3 6h6l2 2h10v12H3z" /></graphic>
+                </Button>
+                            <Separator styleClass="param-group-separator" />
+                            <Label styleClass="param-group-title" text="内置预设" />
+                            <ListView fx:id="lvPresets" prefHeight="100.0" />
+                <Button maxWidth="1.7976931348623157E308" onAction="#onLoadPreset" text="应用预设">
+                    <graphic><SVGPath styleClass="ui-icon" content="M9 18l6-6-6-6" /></graphic>
+                </Button>
+                        </VBox>
+                    </ScrollPane>
+                </Tab>
+            </TabPane>
+        </SplitPane>
+    </center>
+
+    <!-- ═══════════════ 底部状态栏 ═══════════════ -->
+    <bottom>
+        <HBox styleClass="status-bar">
+            <Label fx:id="lblResolution" text="分辨率: -" />
+            <Label fx:id="lblImageInfo" text="未加载图片" />
+            <Label fx:id="lblCanvasSize" text="画布: -" />
+            <Label fx:id="statusLabel" styleClass="status-label" text="就绪" />
+            <Pane HBox.hgrow="ALWAYS" />
+            <Label text="配方筛选:" />
+            <ComboBox fx:id="cbRecipeFilter" prefWidth="120.0" />
+                <Button onAction="#onCompareToggle" styleClass="btn-secondary" text="对比原图">
+                    <graphic><SVGPath styleClass="ui-icon" content="M12 3v18 M5 7h7 M5 17h7 M19 7h-7 M19 17h-7" /></graphic>
+                </Button>
+            <ProgressBar fx:id="progressBar" prefWidth="100.0" visible="false" />
+        </HBox>
+    </bottom>
+</BorderPane>

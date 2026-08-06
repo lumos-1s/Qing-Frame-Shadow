@@ -1,0 +1,1287 @@
+﻿{
+    "brands":  [
+                   {
+                       "id":  "LEICA",
+                       "aliases":  [
+                                       "leica",
+                                       "leica camera"
+                                   ]
+                   },
+                   {
+                       "id":  "NIKON",
+                       "aliases":  [
+                                       "nikon",
+                                       "nikon corporation",
+                                       "nikon inc."
+                                   ]
+                   },
+                   {
+                       "id":  "CANON",
+                       "aliases":  [
+                                       "canon",
+                                       "canon inc."
+                                   ]
+                   },
+                   {
+                       "id":  "SONY",
+                       "aliases":  [
+                                       "sony",
+                                       "sony corporation",
+                                       "sony group corporation",
+                                       "sony mobile"
+                                   ]
+                   },
+                   {
+                       "id":  "FUJIFILM",
+                       "aliases":  [
+                                       "fujifilm",
+                                       "fuji",
+                                       "fujifilm corporation",
+                                       "fuji photo film co., ltd."
+                                   ]
+                   },
+                   {
+                       "id":  "PANASONIC",
+                       "aliases":  [
+                                       "panasonic",
+                                       "panasonic corporation",
+                                       "lumix"
+                                   ]
+                   },
+                   {
+                       "id":  "OLYMPUS",
+                       "aliases":  [
+                                       "olympus",
+                                       "olympus corporation",
+                                       "om system"
+                                   ]
+                   },
+                   {
+                       "id":  "PENTAX",
+                       "aliases":  [
+                                       "pentax",
+                                       "pentax corporation"
+                                   ]
+                   },
+                   {
+                       "id":  "HASSELBLAD",
+                       "aliases":  [
+                                       "hasselblad",
+                                       "hasselblad ab"
+                                   ]
+                   },
+                   {
+                       "id":  "SIGMA",
+                       "aliases":  [
+                                       "sigma",
+                                       "sigma corporation"
+                                   ]
+                   },
+                   {
+                       "id":  "APPLE",
+                       "aliases":  [
+                                       "apple",
+                                       "apple inc."
+                                   ]
+                   },
+                   {
+                       "id":  "SAMSUNG",
+                       "aliases":  [
+                                       "samsung",
+                                       "samsung electronics",
+                                       "samsung techwin"
+                                   ]
+                   },
+                   {
+                       "id":  "XIAOMI",
+                       "aliases":  [
+                                       "xiaomi",
+                                       "mi ",
+                                       "xiaomi communications"
+                                   ]
+                   },
+                   {
+                       "id":  "HUAWEI",
+                       "aliases":  [
+                                       "huawei",
+                                       "huawei technologies"
+                                   ]
+                   },
+                   {
+                       "id":  "GOOGLE",
+                       "aliases":  [
+                                       "google",
+                                       "google llc",
+                                       "google inc."
+                                   ]
+                   },
+                   {
+                       "id":  "OPPO",
+                       "aliases":  [
+                                       "oppo",
+                                       "oppo digital"
+                                   ]
+                   },
+                   {
+                       "id":  "VIVO",
+                       "aliases":  [
+                                       "vivo"
+                                   ]
+                   },
+                   {
+                       "id":  "DJI",
+                       "aliases":  [
+                                       "dji",
+                                       "dji technologies"
+                                   ]
+                   },
+                   {
+                       "id":  "ZEISS",
+                       "aliases":  [
+                                       "zeiss",
+                                       "carl zeiss"
+                                   ]
+                   },
+                   {
+                       "id":  "MAMIYA",
+                       "aliases":  [
+                                       "mamiya",
+                                       "mamiya digital imaging"
+                                   ]
+                   },
+                   {
+                       "id":  "PHASE ONE",
+                       "aliases":  [
+                                       "phase one"
+                                   ]
+                   },
+                   {
+                       "id":  "KODAK",
+                       "aliases":  [
+                                       "kodak",
+                                       "eastman kodak"
+                                   ]
+                   },
+                   {
+                       "id":  "MINOLTA",
+                       "aliases":  [
+                                       "minolta",
+                                       "konica minolta"
+                                   ]
+                   },
+                   {
+                       "id":  "YASHICA",
+                       "aliases":  [
+                                       "yashica",
+                                       "kyocera"
+                                   ]
+                   },
+                   {
+                       "id":  "NOKIA",
+                       "aliases":  [
+                                       "nokia",
+                                       "microsoft mobile"
+                                   ]
+                   },
+                   {
+                       "id":  "MOTOROLA",
+                       "aliases":  [
+                                       "motorola",
+                                       "moto"
+                                   ]
+                   },
+                   {
+                       "id":  "LG",
+                       "aliases":  [
+                                       "lg",
+                                       "lg electronics"
+                                   ]
+                   },
+                   {
+                       "id":  "ASUS",
+                       "aliases":  [
+                                       "asus",
+                                       "zenfone"
+                                   ]
+                   },
+                   {
+                       "id":  "BLACKBERRY",
+                       "aliases":  [
+                                       "blackberry",
+                                       "rim"
+                                   ]
+                   },
+                   {
+                       "id":  "HTC",
+                       "aliases":  [
+                                       "htc"
+                                   ]
+                   },
+                   {
+                       "id":  "LENOVO",
+                       "aliases":  [
+                                       "lenovo"
+                                   ]
+                   },
+                   {
+                       "id":  "ZTE",
+                       "aliases":  [
+                                       "zte"
+                                   ]
+                   },
+                   {
+                       "id":  "MEIZU",
+                       "aliases":  [
+                                       "meizu"
+                                   ]
+                   },
+                   {
+                       "id":  "TCL",
+                       "aliases":  [
+                                       "tcl",
+                                       "alcatel"
+                                   ]
+                   },
+                   {
+                       "id":  "SONY ERICSSON",
+                       "aliases":  [
+                                       "sony ericsson"
+                                   ]
+                   },
+                   {
+                       "id":  "TOSHIBA",
+                       "aliases":  [
+                                       "toshiba"
+                                   ]
+                   },
+                   {
+                       "id":  "CASIO",
+                       "aliases":  [
+                                       "casio",
+                                       "casio computer"
+                                   ]
+                   },
+                   {
+                       "id":  "ROLLEI",
+                       "aliases":  [
+                                       "rollei",
+                                       "rolleiflex"
+                                   ]
+                   },
+                   {
+                       "id":  "CONTAX",
+                       "aliases":  [
+                                       "contax"
+                                   ]
+                   },
+                   {
+                       "id":  "VOIGTLÄNDER",
+                       "aliases":  [
+                                       "voigtlander",
+                                       "voigtländer"
+                                   ]
+                   },
+                   {
+                       "id":  "HORSEMAN",
+                       "aliases":  [
+                                       "horseman"
+                                   ]
+                   },
+                   {
+                       "id":  "LINHOF",
+                       "aliases":  [
+                                       "linhof"
+                                   ]
+                   },
+                   {
+                       "id":  "TOYO",
+                       "aliases":  [
+                                       "toyo"
+                                   ]
+                   },
+                   {
+                       "id":  "SEAGULL",
+                       "aliases":  [
+                                       "seagull",
+                                       "shanghai"
+                                   ]
+                   },
+                   {
+                       "id":  "LOMO",
+                       "aliases":  [
+                                       "lomo",
+                                       "lomography"
+                                   ]
+                   },
+                   {
+                       "id":  "ALPA",
+                       "aliases":  [
+                                       "alpa"
+                                   ]
+                   },
+                   {
+                       "id":  "NUBIA",
+                       "aliases":  [
+                                       "nubia"
+                                   ]
+                   },
+                   {
+                       "id":  "REDMAGIC",
+                       "aliases":  [
+                                       "redmagic",
+                                       "red magic"
+                                   ]
+                   },
+                   {
+                       "id":  "BLACKSHARK",
+                       "aliases":  [
+                                       "black shark",
+                                       "blackshark"
+                                   ]
+                   },
+                   {
+                       "id":  "ITEL",
+                       "aliases":  [
+                                       "itel"
+                                   ]
+                   },
+                   {
+                       "id":  "DOOGEE",
+                       "aliases":  [
+                                       "doogee"
+                                   ]
+                   },
+                   {
+                       "id":  "ULEFONE",
+                       "aliases":  [
+                                       "ulefone"
+                                   ]
+                   },
+                   {
+                       "id":  "CAT",
+                       "aliases":  [
+                                       "cat",
+                                       "caterpillar"
+                                   ]
+                   },
+                   {
+                       "id":  "VERTU",
+                       "aliases":  [
+                                       "vertu"
+                                   ]
+                   },
+                   {
+                       "id":  "HONOR",
+                       "aliases":  [
+                                       "honor",
+                                       "honor device"
+                                   ]
+                   },
+                   {
+                       "id":  "ONEPLUS",
+                       "aliases":  [
+                                       "oneplus",
+                                       "one plus"
+                                   ]
+                   },
+                   {
+                       "id":  "REALME",
+                       "aliases":  [
+                                       "realme"
+                                   ]
+                   },
+                   {
+                       "id":  "IQOO",
+                       "aliases":  [
+                                       "iqoo",
+                                       "i-qoo"
+                                   ]
+                   },
+                   {
+                       "id":  "REDMI",
+                       "aliases":  [
+                                       "redmi"
+                                   ]
+                   },
+                   {
+                       "id":  "POCO",
+                       "aliases":  [
+                                       "poco"
+                                   ]
+                   },
+                   {
+                       "id":  "RICOH",
+                       "aliases":  [
+                                       "ricoh",
+                                       "ricoh imaging"
+                                   ]
+                   }
+               ],
+    "models":  {
+                   "SONY":  {
+                                "ilce-7m4":  "A7 IV",
+                                "ilce-7rm5":  "A7R V",
+                                "ilce-7rm4":  "A7R IV",
+                                "ilce-7rm3":  "A7R III",
+                                "ilce-7m3":  "A7 III",
+                                "ilce-7m2":  "A7 II",
+                                "ilce-7c":  "A7C",
+                                "ilce-9":  "A9",
+                                "ilce-9m2":  "A9 II",
+                                "ilce-9m3":  "A9 III",
+                                "ilce-1":  "A1",
+                                "ilce-6700":  "A6700",
+                                "ilce-6600":  "A6600",
+                                "ilce-6400":  "A6400",
+                                "ilce-6100":  "A6100",
+                                "ilce-6000":  "A6000",
+                                "ilce-7s":  "A7S",
+                                "ilce-7sm2":  "A7S II",
+                                "ilce-7sm3":  "A7S III",
+                                "ilce-7rm2":  "A7R II",
+                                "ilce-7rm3a":  "A7R IIIa",
+                                "ilce-7rm4a":  "A7R IVa",
+                                "ilce-7rm5a":  "A7R Va",
+                                "ilce-5100":  "A5100",
+                                "ilce-5000":  "A5000",
+                                "ilce-3000":  "A3000",
+                                "ilce-3500":  "A3500",
+                                "ilca-77m2":  "A77M2",
+                                "ilca-99m2":  "A99 II",
+                                "ilca-68":  "A68",
+                                "dslr-a900":  "A900",
+                                "dslr-a850":  "A850",
+                                "dslr-a700":  "A700",
+                                "dslr-a580":  "A580",
+                                "dslr-a550":  "A550",
+                                "dslr-a500":  "A500",
+                                "dslr-a450":  "A450",
+                                "dslr-a390":  "A390",
+                                "dslr-a290":  "A290",
+                                "dslr-a230":  "A230",
+                                "dslr-a330":  "A330",
+                                "dslr-a100":  "A100",
+                                "slt-a99v":  "A99V",
+                                "slt-a58":  "A58",
+                                "slt-a57":  "A57",
+                                "slt-a55v":  "A55V",
+                                "slt-a37":  "A37",
+                                "slt-a35":  "A35",
+                                "slt-a33":  "A33",
+                                "slt-a65v":  "A65V",
+                                "slt-a77v":  "A77V",
+                                "slt-a77ii":  "A77 II",
+                                "slt-a99":  "A99",
+                                "dc-rx1rm2":  "RX1R II",
+                                "dc-rx1":  "RX1",
+                                "dsc-rx100m7":  "RX100 VII",
+                                "dsc-rx100m6":  "RX100 VI",
+                                "dsc-rx100m5":  "RX100 V",
+                                "dsc-rx100m4":  "RX100 IV",
+                                "dsc-rx100m3":  "RX100 III",
+                                "dsc-rx100m2":  "RX100 II",
+                                "dsc-rx100":  "RX100",
+                                "dsc-rx10m4":  "RX10 IV",
+                                "dsc-rx10m3":  "RX10 III",
+                                "dsc-rx10m2":  "RX10 II",
+                                "dsc-rx10":  "RX10",
+                                "zv-e1":  "ZV-E1",
+                                "zv-e10":  "ZV-E10",
+                                "zv-1":  "ZV-1",
+                                "zv-1f":  "ZV-1F",
+                                "xperia 1 vi":  "Xperia 1 VI",
+                                "xperia 1 v":  "Xperia 1 V",
+                                "xperia 1 iv":  "Xperia 1 IV",
+                                "xperia 5 v":  "Xperia 5 V",
+                                "xperia 5 iv":  "Xperia 5 IV",
+                                "xperia pro-i":  "Xperia PRO-I",
+                                "xperia 10 vi":  "Xperia 10 VI",
+                                "ilce-7cm2":  "A7C II",
+                                "ilce-7cr":  "A7CR",
+                                "zv-e10 ii":  "ZV-E10 II",
+                                "fx30":  "FX30",
+                                "fx3":  "FX3"
+                            },
+                   "CANON":  {
+                                 "eos r5":  "EOS R5",
+                                 "eos r5c":  "EOS R5C",
+                                 "eos r6 mark ii":  "EOS R6 Mark II",
+                                 "eos r6":  "EOS R6",
+                                 "eos r3":  "EOS R3",
+                                 "eos r":  "EOS R",
+                                 "eos ra":  "EOS Ra",
+                                 "eos r8":  "EOS R8",
+                                 "eos r7":  "EOS R7",
+                                 "eos r10":  "EOS R10",
+                                 "eos r50":  "EOS R50",
+                                 "eos r100":  "EOS R100",
+                                 "eos rs":  "EOS RS",
+                                 "eos-1d x mark iii":  "EOS-1D X Mark III",
+                                 "eos-1d x mark ii":  "EOS-1D X Mark II",
+                                 "eos-1d x":  "EOS-1D X",
+                                 "eos 5d mark iii":  "EOS 5D Mark III",
+                                 "eos 5ds":  "EOS 5DS",
+                                 "eos 5d mark ii":  "EOS 5D Mark II",
+                                 "eos 6d":  "EOS 6D",
+                                 "eos 7d mark ii":  "EOS 7D Mark II",
+                                 "eos 80d":  "EOS 80D",
+                                 "eos 70d":  "EOS 70D",
+                                 "eos 60d":  "EOS 60D",
+                                 "eos 77d":  "EOS 77D",
+                                 "eos 800d":  "EOS 800D",
+                                 "eos 200d":  "EOS 200D",
+                                 "eos 250d":  "EOS 250D",
+                                 "eos 2000d":  "EOS 2000D",
+                                 "eos 4000d":  "EOS 4000D",
+                                 "eos m6 mark ii":  "EOS M6 Mark II",
+                                 "eos m50":  "EOS M50",
+                                 "eos m200":  "EOS M200",
+                                 "powershot g1 x mark iii":  "PowerShot G1 X Mark III",
+                                 "powershot sx70 hs":  "PowerShot SX70 HS",
+                                 "powershot sx740 hs":  "PowerShot SX740 HS",
+                                 "ixus 285 hs":  "IXUS 285 HS",
+                                 "eos 850d":  "EOS 850D",
+                                 "powershot g5 x mark ii":  "PowerShot G5 X Mark II",
+                                 "eos 5d mark iv":  "EOS 5D Mark IV",
+                                 "powershot g7 x mark iii":  "PowerShot G7 X Mark III",
+                                 "eos 90d":  "EOS 90D",
+                                 "eos 5ds r":  "EOS 5Ds R",
+                                 "eos r5 mark ii":  "EOS R5 Mark II",
+                                 "eos 6d mark ii":  "EOS 6D Mark II",
+                                 "eos r1":  "EOS R1",
+                                 "eos 1d x mark iii":  "EOS-1D X Mark III",
+                                 "eos rp":  "EOS RP"
+                             },
+                   "NIKON":  {
+                                 "z 9":  "Z 9",
+                                 "z 8":  "Z 8",
+                                 "z 6iii":  "Z6III",
+                                 "z 7ii":  "Z7 II",
+                                 "z 6ii":  "Z6 II",
+                                 "z 7":  "Z7",
+                                 "z 6":  "Z6",
+                                 "z 5":  "Z5",
+                                 "z 50":  "Z50",
+                                 "z 30":  "Z30",
+                                 "z fc":  "Z fc",
+                                 "z f":  "Z f",
+                                 "d810":  "D810",
+                                 "d800":  "D800",
+                                 "d800e":  "D800E",
+                                 "d750":  "D750",
+                                 "d610":  "D610",
+                                 "d600":  "D600",
+                                 "d7500":  "D7500",
+                                 "d7200":  "D7200",
+                                 "d7100":  "D7100",
+                                 "d7000":  "D7000",
+                                 "d5600":  "D5600",
+                                 "d5500":  "D5500",
+                                 "d5300":  "D5300",
+                                 "d5200":  "D5200",
+                                 "d5100":  "D5100",
+                                 "d3500":  "D3500",
+                                 "d3400":  "D3400",
+                                 "d3300":  "D3300",
+                                 "d3200":  "D3200",
+                                 "d5":  "D5",
+                                 "d4s":  "D4S",
+                                 "d4":  "D4",
+                                 "d3x":  "D3X",
+                                 "d3s":  "D3S",
+                                 "d3":  "D3",
+                                 "d700":  "D700",
+                                 "d300s":  "D300S",
+                                 "d300":  "D300",
+                                 "d200":  "D200",
+                                 "df":  "DF",
+                                 "coolpix p900":  "Coolpix P900",
+                                 "coolpix a1000":  "Coolpix A1000",
+                                 "coolpix b700":  "Coolpix B700",
+                                 "nikon 1 j5":  "Nikon 1 J5",
+                                 "nikon 1 v3":  "Nikon 1 V3",
+                                 "z 5ii":  "Z5II",
+                                 "coolpix p950":  "COOLPIX P950",
+                                 "d500":  "D500",
+                                 "d780":  "D780",
+                                 "d850":  "D850",
+                                 "d6":  "D6",
+                                 "coolpix p1000":  "COOLPIX P1000"
+                             },
+                   "FUJIFILM":  {
+                                    "x-t5":  "X-T5",
+                                    "x-t4":  "X-T4",
+                                    "x-t3":  "X-T3",
+                                    "x-t30 ii":  "X-T30 II",
+                                    "x-t30":  "X-T30",
+                                    "x-t200":  "X-T200",
+                                    "x-t20":  "X-T20",
+                                    "x-t10":  "X-T10",
+                                    "x-e4":  "X-E4",
+                                    "x-e3":  "X-E3",
+                                    "x-pro3":  "X-Pro3",
+                                    "x-pro2":  "X-Pro2",
+                                    "x100f":  "X100F",
+                                    "x-s10":  "X-S10",
+                                    "x-h1":  "X-H1",
+                                    "gfx100s":  "GFX100S",
+                                    "gfx100":  "GFX100",
+                                    "gfx50s ii":  "GFX50S II",
+                                    "gfx50s":  "GFX50S",
+                                    "gfx50r":  "GFX50R",
+                                    "x-m1":  "X-M1",
+                                    "x-a7":  "X-A7",
+                                    "x-a5":  "X-A5",
+                                    "finepix xp150":  "FinePix XP150",
+                                    "instax mini evo":  "INSTAX mini EVO",
+                                    "instax wide 300":  "INSTAX Wide 300",
+                                    "instax square sq1":  "INSTAX Square SQ1",
+                                    "instax mini 40":  "INSTAX Mini 40",
+                                    "instax mini 12":  "INSTAX Mini 12",
+                                    "instax mini link 2":  "INSTAX mini Link 2",
+                                    "instax pal":  "INSTAX Pal",
+                                    "x-m5":  "X-M5",
+                                    "x-h2":  "X-H2",
+                                    "gfx100s ii":  "GFX100S II",
+                                    "x-t50":  "X-T50",
+                                    "x-h2s":  "X-H2S",
+                                    "x-s20":  "X-S20",
+                                    "x100vi":  "X100VI",
+                                    "x100v":  "X100V",
+                                    "gfx100 ii":  "GFX100 II"
+                                },
+                   "LEICA":  {
+                                 "m10-p":  "M10-P",
+                                 "m10":  "M10",
+                                 "m10-r":  "M10-R",
+                                 "m10 monochrom":  "M10 Monochrom",
+                                 "m11":  "M11",
+                                 "m11-p":  "M11-P",
+                                 "m11 monochrom":  "M11 Monochrom",
+                                 "m (typ 240)":  "M (Typ 240)",
+                                 "m-p (typ 240)":  "M-P (Typ 240)",
+                                 "m 262":  "M 262",
+                                 "q2":  "Q2",
+                                 "q (typ 116)":  "Q (Typ 116)",
+                                 "sl (typ 601)":  "SL (Typ 601)",
+                                 "s (typ 007)":  "S (Typ 007)",
+                                 "d-lux 7":  "D-Lux 7",
+                                 "d-lux (typ 109)":  "D-Lux (Typ 109)",
+                                 "v-lux 5":  "V-Lux 5",
+                                 "c-lux":  "C-Lux",
+                                 "x (typ 113)":  "X (Typ 113)",
+                                 "x vario (typ 107)":  "X Vario (Typ 107)",
+                                 "sl3":  "SL3",
+                                 "q3":  "Q3",
+                                 "d-lux 8":  "D-Lux 8",
+                                 "sl2":  "SL2",
+                                 "q3 43":  "Q3 43",
+                                 "sl2-s":  "SL2-S",
+                                 "s3":  "S3"
+                             },
+                   "PANASONIC":  {
+                                     "lumix dc-s5iix":  "Lumix S5IIX",
+                                     "lumix dc-s5ii":  "Lumix S5II",
+                                     "lumix dc-s5":  "Lumix S5",
+                                     "lumix dc-s1r":  "Lumix S1R",
+                                     "lumix dc-s1":  "Lumix S1",
+                                     "lumix dc-s1h":  "Lumix S1H",
+                                     "lumix dc-gh7":  "Lumix GH7",
+                                     "lumix dc-gh6":  "Lumix GH6",
+                                     "lumix dc-gh5s":  "Lumix GH5S",
+                                     "lumix dc-gh5":  "Lumix GH5",
+                                     "lumix dc-gh4":  "Lumix GH4",
+                                     "lumix dc-g9m2":  "Lumix G9 II",
+                                     "lumix dc-g9":  "Lumix G9",
+                                     "lumix dc-g95":  "Lumix G95",
+                                     "lumix dc-g85":  "Lumix G85",
+                                     "lumix dc-g7":  "Lumix G7",
+                                     "lumix dc-fz1000ii":  "Lumix FZ1000 II",
+                                     "lumix dc-fz80":  "Lumix FZ80",
+                                     "lumix dc-zs80":  "Lumix ZS80",
+                                     "lumix dc-zs70":  "Lumix ZS70",
+                                     "lumix dc-lx100m2":  "Lumix LX100 II",
+                                     "lumix dc-tz90":  "Lumix TZ90",
+                                     "lumix dc-ts20":  "Lumix TS20",
+                                     "lumix dc-tz200":  "Lumix TZ200",
+                                     "lumix dc-tz95":  "Lumix TZ95",
+                                     "lumix dc-fx30":  "Lumix FX30",
+                                     "lumix dc-g100":  "Lumix G100",
+                                     "lumix dc-s9":  "Lumix S9",
+                                     "lumix dc-tz202":  "Lumix TZ202",
+                                     "lumix dc-fz1000 ii":  "Lumix FZ1000 II",
+                                     "lumix dc-lx100 ii":  "Lumix LX100 II",
+                                     "lumix dc-g9ii":  "Lumix G9 II"
+                                 },
+                   "OLYMPUS":  {
+                                   "om-3":  "OM-3",
+                                   "e-m1x":  "E-M1X",
+                                   "e-m1 mark iii":  "E-M1 Mark III",
+                                   "e-m1 mark ii":  "E-M1 Mark II",
+                                   "e-m5 mark iii":  "E-M5 Mark III",
+                                   "e-m10 mark iv":  "E-M10 Mark IV",
+                                   "e-m10 mark ii":  "E-M10 Mark II",
+                                   "e-m10 mark iii":  "E-M10 Mark III",
+                                   "pen-f":  "PEN-F",
+                                   "e-p7":  "E-P7",
+                                   "e-pl10":  "E-PL10",
+                                   "e-pl9":  "E-PL9",
+                                   "e-pm2":  "E-PM2",
+                                   "stylus 1":  "Stylus 1",
+                                   "tough tg-6":  "Tough TG-6",
+                                   "om-d e-m1 mark iii":  "OM-D E-M1 Mark III",
+                                   "om-1 mark ii":  "OM-1 Mark II",
+                                   "om-1":  "OM-1",
+                                   "om-d e-m10 mark iv":  "OM-D E-M10 Mark IV",
+                                   "om-5":  "OM-5",
+                                   "tough tg-7":  "Tough TG-7"
+                               },
+                   "PENTAX":  {
+                                  "k-3 mark iii":  "K-3 Mark III",
+                                  "k-3":  "K-3",
+                                  "k-1":  "K-1",
+                                  "k-1 mark ii":  "K-1 Mark II",
+                                  "k-70":  "K-70",
+                                  "k-50":  "K-50",
+                                  "k-5 iis":  "K-5 IIs",
+                                  "k-5":  "K-5",
+                                  "k-500":  "K-500",
+                                  "k-s2":  "K-S2",
+                                  "k-r":  "K-r",
+                                  "k-m":  "K-m",
+                                  "k-30":  "K-30",
+                                  "k-3 ii":  "K-3 II",
+                                  "645d":  "645D",
+                                  "optio wg-90":  "Optio WG-90",
+                                  "optio wg-80":  "Optio WG-80",
+                                  "optio wg-70":  "Optio WG-70",
+                                  "optio wg-60":  "Optio WG-60",
+                                  "kf":  "KF",
+                                  "k-3 iii":  "K-3 III",
+                                  "645z":  "645Z",
+                                  "k-1 ii":  "K-1 II",
+                                  "k-3 iii monochrome":  "K-3 III Monochrome"
+                              },
+                   "HASSELBLAD":  {
+                                      "x1d-50c":  "X1D-50C",
+                                      "907x special edition":  "907X Special Edition",
+                                      "h5d-50c":  "H5D-50C",
+                                      "h5d-40":  "H5D-40",
+                                      "h4d-60":  "H4D-60",
+                                      "h4d-50":  "H4D-50",
+                                      "h3dii-50":  "H3DII-50",
+                                      "h3d-39":  "H3D-39",
+                                      "h2d-22":  "H2D-22",
+                                      "x1d ii 50c":  "X1D II 50C",
+                                      "h6d-100c":  "H6D-100c",
+                                      "907x 50c":  "907X 50C",
+                                      "x2d 100c":  "X2D 100C"
+                                  },
+                   "SIGMA":  {
+                                 "sd quattro":  "SD Quattro",
+                                 "dp3 quattro":  "DP3 Quattro",
+                                 "dp2 quattro":  "DP2 Quattro",
+                                 "dp1 quattro":  "DP1 Quattro",
+                                 "dp3 merrill":  "DP3 Merrill",
+                                 "dp2 merrill":  "DP2 Merrill",
+                                 "dp1 merrill":  "DP1 Merrill",
+                                 "sd1 merrill":  "SD1 Merrill",
+                                 "sd15":  "SD15",
+                                 "sd14":  "SD14",
+                                 "fp l":  "fp L",
+                                 "sd quattro h":  "sd Quattro H",
+                                 "bf":  "BF",
+                                 "fp":  "fp"
+                             },
+                   "DJI":  {
+                               "fc7303":  "Air 3",
+                               "fc3582":  "Air 3S",
+                               "fc3170":  "Air 2S",
+                               "fc3175":  "Air 2",
+                               "fc330x":  "Mavic 3 Pro",
+                               "fc3411":  "Mavic 3",
+                               "fc3412":  "Mavic 3 Classic",
+                               "fc3171":  "Mavic Air 2",
+                               "fc7270":  "Mini 4 Pro",
+                               "fc7240":  "Mini 3 Pro",
+                               "fc3580":  "Mini 3",
+                               "fc7203":  "Mini 2",
+                               "fc7200":  "Mini 1",
+                               "fc6310":  "Phantom 4 Pro",
+                               "fc6510":  "Phantom 4",
+                               "fc550":  "Phantom 3 Professional",
+                               "fc350":  "Phantom 3",
+                               "osmo action 5":  "Osmo Action 5",
+                               "osmo action 4":  "Osmo Action 4",
+                               "osmo action 3":  "Osmo Action 3",
+                               "pocket 3":  "Pocket 3",
+                               "pocket 2":  "Pocket 2",
+                               "mini 3 pro":  "Mini 3 Pro",
+                               "air 3":  "Air 3",
+                               "mavic 3 pro":  "Mavic 3 Pro",
+                               "osmo pocket 3":  "Osmo Pocket 3",
+                               "osmo action 5 pro":  "Osmo Action 5 Pro",
+                               "mini 4 pro":  "Mini 4 Pro",
+                               "phantom 4 pro v2.0":  "Phantom 4 Pro V2.0",
+                               "mavic 3":  "Mavic 3"
+                           },
+                   "APPLE":  {
+                                 "iphone 16 pro max":  "iPhone 16 Pro Max",
+                                 "iphone 16 pro":  "iPhone 16 Pro",
+                                 "iphone 16 plus":  "iPhone 16 Plus",
+                                 "iphone 16":  "iPhone 16",
+                                 "iphone 15 pro max":  "iPhone 15 Pro Max",
+                                 "iphone 15 pro":  "iPhone 15 Pro",
+                                 "iphone 15 plus":  "iPhone 15 Plus",
+                                 "iphone 15":  "iPhone 15",
+                                 "iphone 14 pro max":  "iPhone 14 Pro Max",
+                                 "iphone 14 pro":  "iPhone 14 Pro",
+                                 "iphone 14 plus":  "iPhone 14 Plus",
+                                 "iphone 14":  "iPhone 14",
+                                 "iphone se (2nd generation)":  "iPhone SE (2nd gen)",
+                                 "iphone 7 plus":  "iPhone 7 Plus",
+                                 "iphone 7":  "iPhone 7",
+                                 "iphone 6s plus":  "iPhone 6s Plus",
+                                 "iphone 6s":  "iPhone 6s",
+                                 "iphone 6 plus":  "iPhone 6 Plus",
+                                 "iphone 6":  "iPhone 6",
+                                 "iphone 5s":  "iPhone 5s",
+                                 "iphone 5":  "iPhone 5",
+                                 "iphone 4s":  "iPhone 4s",
+                                 "iphone 12 mini":  "iPhone 12 mini",
+                                 "iphone xr":  "iPhone XR",
+                                 "iphone 11 pro max":  "iPhone 11 Pro Max",
+                                 "iphone 8":  "iPhone 8",
+                                 "iphone se (3rd generation)":  "iPhone SE (3rd generation)",
+                                 "iphone 12 pro max":  "iPhone 12 Pro Max",
+                                 "iphone 12 pro":  "iPhone 12 Pro",
+                                 "iphone 11":  "iPhone 11",
+                                 "iphone 13":  "iPhone 13",
+                                 "iphone 13 pro max":  "iPhone 13 Pro Max",
+                                 "iphone xs max":  "iPhone XS Max",
+                                 "iphone x":  "iPhone X",
+                                 "iphone xs":  "iPhone XS",
+                                 "iphone 13 mini":  "iPhone 13 mini",
+                                 "iphone 11 pro":  "iPhone 11 Pro",
+                                 "iphone 13 pro":  "iPhone 13 Pro",
+                                 "iphone 8 plus":  "iPhone 8 Plus",
+                                 "iphone 12":  "iPhone 12"
+                             },
+                   "SAMSUNG":  {
+                                   "sm-s928b":  "Galaxy S24 Ultra",
+                                   "sm-s928n":  "Galaxy S24 Ultra",
+                                   "sm-s926b":  "Galaxy S24+",
+                                   "sm-s926n":  "Galaxy S24+",
+                                   "sm-s921b":  "Galaxy S24",
+                                   "sm-s921n":  "Galaxy S24",
+                                   "sm-s938b":  "Galaxy S25 Ultra",
+                                   "sm-s931b":  "Galaxy S25",
+                                   "sm-s936b":  "Galaxy S25+",
+                                   "sm-s918b":  "Galaxy S23 Ultra",
+                                   "sm-s916b":  "Galaxy S23+",
+                                   "sm-s911b":  "Galaxy S23",
+                                   "sm-s908b":  "Galaxy S22 Ultra",
+                                   "sm-s906b":  "Galaxy S22+",
+                                   "sm-s901b":  "Galaxy S22",
+                                   "sm-n986b":  "Galaxy Note 20 Ultra",
+                                   "sm-n981b":  "Galaxy Note 20",
+                                   "sm-f736b":  "Galaxy Z Fold 5",
+                                   "sm-a546b":  "Galaxy A54",
+                                   "sm-a346b":  "Galaxy A34",
+                                   "sm-a256e":  "Galaxy A25",
+                                   "sm-a055f":  "Galaxy A05s",
+                                   "sm-a156b":  "Galaxy A15",
+                                   "sm-f956b":  "Galaxy Z Fold6",
+                                   "sm-f946b":  "Galaxy Z Fold5",
+                                   "sm-m556b":  "Galaxy M55",
+                                   "sm-a556b":  "Galaxy A55 5G",
+                                   "sm-f936b":  "Galaxy Z Fold4",
+                                   "sm-a356b":  "Galaxy A35 5G",
+                                   "sm-f741b":  "Galaxy Z Flip6",
+                                   "sm-f731b":  "Galaxy Z Flip5"
+                               },
+                   "XIAOMI":  {
+                                  "xiaomi 14 ultra":  "Xiaomi 14 Ultra",
+                                  "xiaomi 14 pro":  "Xiaomi 14 Pro",
+                                  "xiaomi 14":  "Xiaomi 14",
+                                  "xiaomi 13 ultra":  "Xiaomi 13 Ultra",
+                                  "xiaomi 13 pro":  "Xiaomi 13 Pro",
+                                  "xiaomi 13":  "Xiaomi 13",
+                                  "xiaomi 12s ultra":  "Xiaomi 12S Ultra",
+                                  "xiaomi 12 pro":  "Xiaomi 12 Pro",
+                                  "xiaomi 12":  "Xiaomi 12",
+                                  "xiaomi 11 ultra":  "Xiaomi 11 Ultra",
+                                  "xiaomi 11":  "Xiaomi 11",
+                                  "xiaomi mi 10 ultra":  "Xiaomi Mi 10 Ultra",
+                                  "xiaomi mi 10 pro":  "Xiaomi Mi 10 Pro",
+                                  "xiaomi mi 10":  "Xiaomi Mi 10",
+                                  "2106118c":  "Mi 11 Ultra",
+                                  "2107113si":  "Mi 11i",
+                                  "2203121c":  "Xiaomi 12",
+                                  "2210132c":  "Xiaomi 12S Ultra",
+                                  "2304fpn6dc":  "Xiaomi 13 Pro",
+                                  "23043rp34c":  "Xiaomi 13",
+                                  "24030p60c":  "Xiaomi 14",
+                                  "24031pn0dc":  "Xiaomi 14 Pro",
+                                  "2403fpn6dc":  "Xiaomi 14 Ultra",
+                                  "redmi note 13 pro+":  "Redmi Note 13 Pro+",
+                                  "redmi note 13 pro":  "Redmi Note 13 Pro",
+                                  "redmi note 13":  "Redmi Note 13",
+                                  "redmi note 12 pro+":  "Redmi Note 12 Pro+",
+                                  "redmi note 12 pro":  "Redmi Note 12 Pro",
+                                  "redmi note 12":  "Redmi Note 12",
+                                  "redmi note 11 pro+":  "Redmi Note 11 Pro+",
+                                  "redmi note 11 pro":  "Redmi Note 11 Pro",
+                                  "redmi note 11":  "Redmi Note 11",
+                                  "redmi k70":  "Redmi K70",
+                                  "redmi k60 pro":  "Redmi K60 Pro",
+                                  "redmi k60":  "Redmi K60",
+                                  "poco f6":  "POCO F6",
+                                  "poco f5 pro":  "POCO F5 Pro",
+                                  "poco f5":  "POCO F5",
+                                  "poco x6":  "POCO X6",
+                                  "poco m6 pro":  "POCO M6 Pro",
+                                  "poco f4 gt":  "POCO F4 GT",
+                                  "poco f3":  "POCO F3",
+                                  "poco x3 pro":  "POCO X3 Pro",
+                                  "poco x3 nfc":  "POCO X3 NFC",
+                                  "poco m3":  "POCO M3",
+                                  "redmi k70 pro":  "Redmi K70 Pro",
+                                  "poco x6 pro":  "POCO X6 Pro",
+                                  "xiaomi 15":  "Xiaomi 15",
+                                  "xiaomi 15 pro":  "Xiaomi 15 Pro",
+                                  "xiaomi 15 ultra":  "Xiaomi 15 Ultra",
+                                  "poco f6 pro":  "POCO F6 Pro",
+                                  "redmi k80 pro":  "Redmi K80 Pro",
+                                  "xiaomi 14 civi":  "Xiaomi 14 Civi",
+                                  "redmi note 14 pro+":  "Redmi Note 14 Pro+"
+                              },
+                   "HUAWEI":  {
+                                  "huawei pura 70 ultra":  "HUAWEI Pura 70 Ultra",
+                                  "huawei pura 70 pro+":  "HUAWEI Pura 70 Pro+",
+                                  "huawei pura 70 pro":  "HUAWEI Pura 70 Pro",
+                                  "huawei pura 70":  "HUAWEI Pura 70",
+                                  "huawei p60 pro":  "HUAWEI P60 Pro",
+                                  "huawei p60":  "HUAWEI P60",
+                                  "huawei mate 60 pro+":  "HUAWEI Mate 60 Pro+",
+                                  "huawei mate 60 pro":  "HUAWEI Mate 60 Pro",
+                                  "huawei mate 60":  "HUAWEI Mate 60",
+                                  "huawei mate 40":  "HUAWEI Mate 40",
+                                  "huawei p50":  "HUAWEI P50",
+                                  "huawei p40":  "HUAWEI P40",
+                                  "huawei p20 pro":  "HUAWEI P20 Pro",
+                                  "huawei p20":  "HUAWEI P20",
+                                  "huawei mate 20 pro":  "HUAWEI Mate 20 Pro",
+                                  "huawei mate 20":  "HUAWEI Mate 20",
+                                  "huawei mate 10 pro":  "HUAWEI Mate 10 Pro",
+                                  "huawei mate 10":  "HUAWEI Mate 10",
+                                  "honor magic6 pro":  "Honor Magic6 Pro",
+                                  "honor magic6":  "Honor Magic6",
+                                  "honor magic5 pro":  "Honor Magic5 Pro",
+                                  "honor magic5":  "Honor Magic5",
+                                  "honor 200 pro":  "Honor 200 Pro",
+                                  "honor 200":  "Honor 200",
+                                  "honor 90":  "Honor 90",
+                                  "honor 70":  "Honor 70",
+                                  "honor 50":  "Honor 50",
+                                  "honor 20":  "Honor 20",
+                                  "honor view20":  "Honor View20",
+                                  "honor view10":  "Honor View10",
+                                  "honor play":  "Honor Play",
+                                  "honor 9x":  "Honor 9X",
+                                  "honor 8x":  "Honor 8X",
+                                  "huawei pocket 2":  "HUAWEI Pocket 2",
+                                  "huawei mate x5":  "HUAWEI Mate X5",
+                                  "huawei p30":  "HUAWEI P30",
+                                  "huawei nova 12 ultra":  "HUAWEI nova 12 Ultra",
+                                  "huawei p30 pro":  "HUAWEI P30 Pro",
+                                  "huawei p40 pro":  "HUAWEI P40 Pro",
+                                  "huawei mate 40 pro":  "HUAWEI Mate 40 Pro",
+                                  "huawei p50 pro":  "HUAWEI P50 Pro"
+                              },
+                   "GOOGLE":  {
+                                  "pixel 9 pro fold":  "Pixel 9 Pro Fold",
+                                  "pixel 9 pro":  "Pixel 9 Pro",
+                                  "pixel 9 pro xl":  "Pixel 9 Pro XL",
+                                  "pixel 9":  "Pixel 9",
+                                  "pixel 8 pro":  "Pixel 8 Pro",
+                                  "pixel 8":  "Pixel 8",
+                                  "pixel 8a":  "Pixel 8a",
+                                  "pixel 7 pro":  "Pixel 7 Pro",
+                                  "pixel 7":  "Pixel 7",
+                                  "pixel 7a":  "Pixel 7a",
+                                  "pixel 6a":  "Pixel 6a",
+                                  "pixel 4":  "Pixel 4",
+                                  "pixel 3a":  "Pixel 3a",
+                                  "pixel 3":  "Pixel 3",
+                                  "pixel 2":  "Pixel 2",
+                                  "pixel":  "Pixel",
+                                  "pixel fold":  "Pixel Fold",
+                                  "pixel 3 xl":  "Pixel 3 XL",
+                                  "pixel 6 pro":  "Pixel 6 Pro",
+                                  "pixel 6":  "Pixel 6",
+                                  "pixel 5":  "Pixel 5",
+                                  "pixel 4 xl":  "Pixel 4 XL",
+                                  "pixel 4a":  "Pixel 4a"
+                              },
+                   "OPPO":  {
+                                "find x7 ultra":  "Find X7 Ultra",
+                                "find x7":  "Find X7",
+                                "find x6 pro":  "Find X6 Pro",
+                                "find x6":  "Find X6",
+                                "find x5 pro":  "Find X5 Pro",
+                                "find x5":  "Find X5",
+                                "find n3 flip":  "Find N3 Flip",
+                                "find n3":  "Find N3",
+                                "find n2 flip":  "Find N2 Flip",
+                                "find n2":  "Find N2",
+                                "reno 12 pro":  "Reno 12 Pro",
+                                "reno 12":  "Reno 12",
+                                "reno 11 pro":  "Reno 11 Pro",
+                                "reno 11":  "Reno 11",
+                                "reno 10 pro+":  "Reno 10 Pro+",
+                                "reno 10 pro":  "Reno 10 Pro",
+                                "oneplus 10 pro":  "OnePlus 10 Pro",
+                                "oneplus 9 pro":  "OnePlus 9 Pro",
+                                "oneplus 9":  "OnePlus 9",
+                                "oneplus 8 pro":  "OnePlus 8 Pro",
+                                "oneplus 8":  "OnePlus 8",
+                                "oneplus 7t pro":  "OnePlus 7T Pro",
+                                "oneplus 7t":  "OnePlus 7T",
+                                "oneplus 7 pro":  "OnePlus 7 Pro",
+                                "oneplus 7":  "OnePlus 7",
+                                "oneplus nord 4":  "OnePlus Nord 4",
+                                "oneplus nord 3":  "OnePlus Nord 3",
+                                "oneplus nord ce3":  "OnePlus Nord CE3",
+                                "oneplus nord":  "OnePlus Nord",
+                                "realme gt 7 pro":  "realme GT 7 Pro",
+                                "realme gt 6":  "realme GT 6",
+                                "realme gt 5 pro":  "realme GT 5 Pro",
+                                "realme gt 5":  "realme GT 5",
+                                "realme gt neo5":  "realme GT Neo5",
+                                "realme 12 pro+":  "realme 12 Pro+",
+                                "realme 12 pro":  "realme 12 Pro",
+                                "realme 12":  "realme 12",
+                                "realme 11 pro+":  "realme 11 Pro+",
+                                "realme 11 pro":  "realme 11 Pro",
+                                "find x8 pro":  "Find X8 Pro",
+                                "realme 13 pro+":  "realme 13 Pro+",
+                                "oneplus 13":  "OnePlus 13",
+                                "find n5":  "Find N5",
+                                "realme gt6":  "realme GT6",
+                                "oneplus 11":  "OnePlus 11",
+                                "reno13":  "Reno13",
+                                "find n4 flip":  "Find N4 Flip",
+                                "oneplus 12":  "OnePlus 12",
+                                "realme gt7 pro":  "realme GT7 Pro",
+                                "find x8":  "Find X8",
+                                "reno13 pro+":  "Reno13 Pro+",
+                                "oneplus open":  "OnePlus Open"
+                            },
+                   "VIVO":  {
+                                "vivo x100 ultra":  "vivo X100 Ultra",
+                                "vivo x100 pro":  "vivo X100 Pro",
+                                "vivo x100":  "vivo X100",
+                                "vivo x90 pro+":  "vivo X90 Pro+",
+                                "vivo x90 pro":  "vivo X90 Pro",
+                                "vivo x90":  "vivo X90",
+                                "vivo x80 pro":  "vivo X80 Pro",
+                                "vivo x80":  "vivo X80",
+                                "vivo x70 pro+":  "vivo X70 Pro+",
+                                "vivo x70 pro":  "vivo X70 Pro",
+                                "vivo x60 pro+":  "vivo X60 Pro+",
+                                "vivo x60 pro":  "vivo X60 Pro",
+                                "vivo x50 pro+":  "vivo X50 Pro+",
+                                "vivo x50 pro":  "vivo X50 Pro",
+                                "vivo x fold3 pro":  "vivo X Fold3 Pro",
+                                "vivo x fold3":  "vivo X Fold3",
+                                "vivo x flip":  "vivo X Flip",
+                                "vivo s18 pro":  "vivo S18 Pro",
+                                "vivo s18":  "vivo S18",
+                                "vivo s17 pro":  "vivo S17 Pro",
+                                "vivo s17":  "vivo S17",
+                                "iqoo 12 pro":  "iQOO 12 Pro",
+                                "iqoo 12":  "iQOO 12",
+                                "iqoo 11 pro":  "iQOO 11 Pro",
+                                "iqoo 11":  "iQOO 11",
+                                "iqoo neo9 pro":  "iQOO Neo9 Pro",
+                                "iqoo neo9":  "iQOO Neo9",
+                                "iqoo z9 turbo":  "iQOO Z9 Turbo",
+                                "iqoo z9":  "iQOO Z9",
+                                "vivo x200 ultra":  "vivo X200 Ultra",
+                                "vivo s20 pro":  "vivo S20 Pro",
+                                "vivo x fold4":  "vivo X Fold4",
+                                "iqoo neo10 pro":  "iQOO Neo10 Pro",
+                                "vivo x200 pro":  "vivo X200 Pro",
+                                "vivo s20":  "vivo S20",
+                                "iqoo 13":  "iQOO 13",
+                                "vivo x200":  "vivo X200",
+                                "vivo y300 pro":  "vivo Y300 Pro",
+                                "iqoo 13 pro":  "iQOO 13 Pro"
+                            },
+                   "ZEISS":  {
+                                 "zx1":  "ZX1"
+                             },
+                   "ROLLEI":  {
+                                  "rolleiflex sl66":  "Rolleiflex SL66",
+                                  "rolleiflex 2.8f":  "Rolleiflex 2.8F",
+                                  "rolleiflex 35":  "Rolleiflex 35",
+                                  "rolleiflex 6008":  "Rolleiflex 6008",
+                                  "rolleiflex 3.5f":  "Rolleiflex 3.5F"
+                              },
+                   "CONTAX":  {
+                                  "contax g1":  "Contax G1",
+                                  "contax g2":  "Contax G2",
+                                  "contax t3":  "Contax T3",
+                                  "contax rts ii":  "Contax RTS II",
+                                  "contax t2":  "Contax T2",
+                                  "contax rx":  "Contax RX"
+                              },
+                   "VOIGTLÄNDER":  {
+                                       "voigtlander bessa r3a":  "Bessa R3A",
+                                       "voigtlander bessa r2":  "Bessa R2",
+                                       "voigtlander bessa r4a":  "Bessa R4A",
+                                       "voigtlander vitessa":  "Vitessa"
+                                   },
+                   "HORSEMAN":  {
+                                    "horseman sw612":  "Horseman SW612",
+                                    "horseman 45fa":  "Horseman 45FA",
+                                    "horseman 45hd":  "Horseman 45HD"
+                                },
+                   "LINHOF":  {
+                                  "linhof master technika":  "Master Technika",
+                                  "linhof technika 70":  "Technika 70",
+                                  "linhof m 679":  "M 679"
+                              },
+                   "TOYO":  {
+                                "toyo vx125":  "Toyo VX125",
+                                "toyo 45g":  "Toyo 45G",
+                                "toyo 45a ii":  "Toyo 45A II"
+                            },
+                   "SEAGULL":  {
+                                   "seagull 4b":  "Seagull 4B",
+                                   "seagull df-102":  "Seagull DF-102",
+                                   "seagull 4a":  "Seagull 4A",
+                                   "seagull df-1":  "Seagull DF-1"
+                               },
+                   "LOMO":  {
+                                "lomo lc-a":  "Lomo LC-A",
+                                "lomo lc-a+":  "Lomo LC-A+",
+                                "lomo lc-wide":  "Lomo LC-Wide",
+                                "lomo lubitel 166":  "Lubitel 166"
+                            },
+                   "ALPA":  {
+                                "alpa 12 swa":  "Alpa 12 SWA",
+                                "alpa 12 tc":  "Alpa 12 TC",
+                                "alpa 12 max":  "Alpa 12 MAX"
+                            },
+                   "NUBIA":  {
+                                 "nubia z60 ultra":  "nubia Z60 Ultra",
+                                 "nubia flip":  "nubia Flip",
+                                 "nubia z50s pro":  "nubia Z50S Pro",
+                                 "nubia z70 ultra":  "nubia Z70 Ultra"
+                             },
+                   "REDMAGIC":  {
+                                    "redmagic 10 pro":  "RedMagic 10 Pro",
+                                    "redmagic 9s pro":  "RedMagic 9S Pro",
+                                    "redmagic 8 pro":  "RedMagic 8 Pro",
+                                    "redmagic 9 pro":  "RedMagic 9 Pro"
+                                },
+                   "BLACKSHARK":  {
+                                      "black shark 5 pro":  "Black Shark 5 Pro",
+                                      "black shark 4 pro":  "Black Shark 4 Pro",
+                                      "black shark 5":  "Black Shark 5"
+                                  },
+                   "ITEL":  {
+                                "itel a70":  "itel A70",
+                                "itel p55":  "itel P55",
+                                "itel s24":  "itel S24",
+                                "itel vision 3":  "itel Vision 3"
+                            },
+                   "DOOGEE":  {
+                                  "doogee v max":  "DOOGEE V Max",
+                                  "doogee v30 pro":  "DOOGEE V30 Pro",
+                                  "doogee note 30":  "DOOGEE Note 30",
+                                  "doogee s200":  "DOOGEE S200"
+                              },
+                   "ULEFONE":  {
+                                   "ulefone armor 15":  "Ulefone Armor 15",
+                                   "ulefone armor 24 ultra":  "Ulefone Armor 24 Ultra",
+                                   "ulefone power armor 18":  "Ulefone Power Armor 18",
+                                   "ulefone armor 18t":  "Ulefone Armor 18T"
+                               },
+                   "CAT":  {
+                               "cat s62 pro":  "CAT S62 Pro",
+                               "cat s75":  "CAT S75",
+                               "cat b35":  "CAT B35",
+                               "cat s42":  "CAT S42"
+                           },
+                   "VERTU":  {
+                                 "vertu signature":  "VERTU Signature",
+                                 "vertu constellation x":  "VERTU Constellation X",
+                                 "vertu metavertu":  "VERTU Metavertu",
+                                 "vertu aster p":  "VERTU Aster P"
+                             },
+                   "HONOR":  {
+                                 "honor 200":  "HONOR 200",
+                                 "honor magic7 pro":  "HONOR Magic7 Pro",
+                                 "honor magic7":  "HONOR Magic7",
+                                 "honor 90 lite":  "HONOR 90 Lite",
+                                 "honor magic6":  "HONOR Magic6",
+                                 "honor x9b":  "HONOR X9b",
+                                 "honor magic6 pro":  "HONOR Magic6 Pro",
+                                 "honor 90":  "HONOR 90",
+                                 "honor 200 pro":  "HONOR 200 Pro"
+                             },
+                   "ONEPLUS":  {
+                                   "oneplus 9 pro":  "OnePlus 9 Pro",
+                                   "oneplus 10 pro":  "OnePlus 10 Pro",
+                                   "oneplus 13":  "OnePlus 13",
+                                   "oneplus 12":  "OnePlus 12",
+                                   "oneplus 11":  "OnePlus 11",
+                                   "oneplus nord 4":  "OnePlus Nord 4",
+                                   "oneplus open":  "OnePlus Open"
+                               },
+                   "REALME":  {
+                                  "realme 12 pro+":  "realme 12 Pro+",
+                                  "realme gt6":  "realme GT6",
+                                  "realme 13 pro+":  "realme 13 Pro+",
+                                  "realme gt neo6":  "realme GT Neo6",
+                                  "realme c75":  "realme C75",
+                                  "realme gt7 pro":  "realme GT7 Pro"
+                              },
+                   "IQOO":  {
+                                "iqoo 13":  "iQOO 13",
+                                "iqoo 12 pro":  "iQOO 12 Pro",
+                                "iqoo z9 turbo":  "iQOO Z9 Turbo",
+                                "iqoo neo10 pro":  "iQOO Neo10 Pro",
+                                "iqoo 12":  "iQOO 12",
+                                "iqoo 13 pro":  "iQOO 13 Pro"
+                            },
+                   "REDMI":  {
+                                 "redmi note 14 pro+":  "Redmi Note 14 Pro+",
+                                 "redmi note 13 pro+":  "Redmi Note 13 Pro+",
+                                 "redmi k80 pro":  "Redmi K80 Pro",
+                                 "redmi k70 pro":  "Redmi K70 Pro",
+                                 "redmi k70":  "Redmi K70",
+                                 "redmi turbo 4":  "Redmi Turbo 4",
+                                 "redmi 13c":  "Redmi 13C",
+                                 "redmi k80":  "Redmi K80"
+                             },
+                   "POCO":  {
+                                "poco f6":  "POCO F6",
+                                "poco x6 pro":  "POCO X6 Pro",
+                                "poco x6":  "POCO X6",
+                                "poco m6 pro":  "POCO M6 Pro",
+                                "poco c65":  "POCO C65",
+                                "poco f6 pro":  "POCO F6 Pro"
+                            },
+                   "RICOH":  {
+                                 "ricoh gr iii":  "RICOH GR III",
+                                 "ricoh gr iiix":  "RICOH GR IIIx",
+                                 "ricoh gr ii":  "RICOH GR II",
+                                 "ricoh gr":  "RICOH GR",
+                                 "ricoh gr digital iv":  "RICOH GR Digital IV"
+                             }
+               }
+}
