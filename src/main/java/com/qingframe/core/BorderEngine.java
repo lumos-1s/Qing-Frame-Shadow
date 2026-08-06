@@ -189,6 +189,7 @@ public class BorderEngine {
         gc.translate(ox, oy);
         gc.scale(scale, scale);
         gc.drawImage(fxResult, 0, 0);
+        drawActiveIcons(gc, bw, bh);
         gc.restore();
     }
 
@@ -624,13 +625,14 @@ public class BorderEngine {
                 }
             }
             if (!exifText.isEmpty()) {
-                double barH = 40;
+                double fs = Math.min(BorderProcessor.getExifFontSize(), Math.max(14, ch * 0.08));
+                double barH = Math.max(40, fs + 20);
                 gc.setFill(Color.rgb(0, 0, 0, 0.6));
                 gc.fillRect(0, ch - barH, cw, barH);
                 gc.setFill(Color.WHITE);
-                gc.setFont(new Font("Microsoft YaHei", 14));
+                gc.setFont(new Font("Microsoft YaHei", fs));
                 gc.setTextAlign(TextAlignment.CENTER);
-                gc.fillText(exifText, cw / 2, ch - barH + 26);
+                gc.fillText(exifText, cw / 2, ch - barH + fs + 10);
             }
         }
     }
