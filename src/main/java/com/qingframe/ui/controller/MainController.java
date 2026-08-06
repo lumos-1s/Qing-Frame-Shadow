@@ -83,7 +83,7 @@ public class MainController implements Initializable {
     @FXML private ScrollPane brandIconScroll, photoDecorScroll, simpleIconScroll, weatherIconScroll;
     @FXML private HBox brandIconBox, photoDecorBox, simpleIconBox, weatherIconBox, customIconBox;
     @FXML private Slider slActiveIconOpacity;
-    @FXML private ComboBox<String> cbLayerSelect, cbFillType, cbGradientType, cbStrokePos, cbLeakType, cbExportFormat;
+    @FXML private ComboBox<String> cbLayerSelect, cbFillType, cbGradientType, cbStrokePos, cbLeakType, cbExportFormat, cbExportResolution;
     @FXML private ComboBox<String> cbTextureBlend;
     @FXML private ListView<String> lvPresets;
     @FXML private ProgressBar progressBar;
@@ -123,6 +123,7 @@ public class MainController implements Initializable {
     private static final long RENDER_DEBOUNCE_MS = 50;
     private volatile boolean isExporting = false;
     private final List<String> exportFailNames = new ArrayList<>();
+    private final List<String> exportDegradedNames = new ArrayList<>();
     private final ExportService.Listener exportListener = new ExportService.Listener() {
         @Override
         public void onProgress(int done, int total, String fileName) {
@@ -136,6 +137,11 @@ public class MainController implements Initializable {
         }
 
         @Override
+        public void onQualityDegraded(String fileName, int requestedEdge, int usedEdge) {
+            exportDegradedNames.add(fileName + "（" + requestedEdge + "→" + usedEdge + "）");
+        }
+
+        @Override
         public void onFinished(int success, int failed, long elapsedSeconds) {
             isExporting = false;
             setExportUI(false);
@@ -144,6 +150,15 @@ public class MainController implements Initializable {
             if (failed > 0) msg += " 跳过" + failed + "张";
             msg += " 用时" + elapsedSeconds + "秒";
             statusLabel.setText(msg);
+            if (!exportDegradedNames.isEmpty()) {
+                int show = Math.min(exportDegradedNames.size(), 10);
+                String detail = String.join("\n", exportDegradedNames.subList(0, show));
+                if (exportDegradedNames.size() > show) {
+                    detail += "\n... 等共 " + exportDegradedNames.size() + " 张";
+                }
+                showAlert("以下图片因显卡渲染限制降低了导出分辨率（可尝试升级显卡驱动）：\n" + detail);
+                exportDegradedNames.clear();
+            }
             if (!exportFailNames.isEmpty()) {
                 int show = Math.min(exportFailNames.size(), 10);
                 String detail = String.join("\n", exportFailNames.subList(0, show));
@@ -155,6 +170,19 @@ public class MainController implements Initializable {
             }
         }
     };
+
+    /** 分辨率选项 → 导出长边上限像素（原画质以 D3D 4096px 纹理上限封顶，超过会降级） */
+    private int resolutionToMaxEdge(String label) {
+        if (label == null) return 4096;
+        switch (label) {
+            case "4K": return 3840;
+            case "2K": return 2560;
+            case "1080P": return 1920;
+            case "安全模式": return ExportService.EXPORT_SAFE_EDGE;
+            case "原画质":
+            default: return 4096;
+        }
+    }
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -193,6 +221,8 @@ public class MainController implements Initializable {
 
         cbExportFormat.setItems(FXCollections.observableArrayList("JPEG", "PNG"));
         cbExportFormat.setValue("JPEG");
+        cbExportResolution.setItems(FXCollections.observableArrayList("原画质", "4K", "2K", "1080P", "安全模式"));
+        cbExportResolution.setValue("原画质");
 
         lvPresets.setItems(FXCollections.observableArrayList(presetService.loadPresetList()));
 
@@ -1063,7 +1093,9 @@ public class MainController implements Initializable {
         progressBar.setVisible(true);
         progressBar.setProgress(0);
         exportFailNames.clear();
-        exportService.exportFiles(files, exportDir, fmt, jpegQuality, cloneTemplate(template), exportListener);
+        exportDegradedNames.clear();
+        int maxEdge = resolutionToMaxEdge(cbExportResolution.getValue());
+        exportService.exportFiles(files, exportDir, fmt, jpegQuality, cloneTemplate(template), maxEdge, exportListener);
     }
 
     @FXML
@@ -1409,6 +1441,7 @@ public class MainController implements Initializable {
         final float quality = 0.9f;
         final String format = outFile.getName().toLowerCase().endsWith(".png") ? "png" : "jpg";
         final TemplateModel exportTemplate = cloneTemplate(template);
+        final int maxEdge = resolutionToMaxEdge(cbExportResolution.getValue());
 
         // 导出全程后台执行：读图/缩放/写文件不占界面线程，界面线程只做渲染快照（短暂）
         new Thread(() -> {
@@ -1450,24 +1483,15 @@ public class MainController implements Initializable {
                 }
                 if (awt == null) throw new IOException("无法读取照片");
 
-                // 2. 渲染（超大图自动预降级；失败再分级缩小，界面线程只做快照）
-                WritableImage result = exportService.renderFromAwt(awt, exportTemplate);
-                ExportService.logExport(result != null ? "渲染成功: " + (int) result.getWidth() + "x" + (int) result.getHeight()
-                        : "渲染失败（全部分级均空白）");
-                if (result == null) {
-                    final int pw = awt.getWidth();
-                    final int ph = awt.getHeight();
-                    final String tn = exportTemplate.getTemplateName();
-                    Platform.runLater(() -> {
-                        setExportUI(false);
-                        progressBar.setVisible(false);
-                        showAlert("渲染结果异常（接近全白/透明），且自动缩放后仍失败。\n照片: "
-                                + pw + "x" + ph + "  模板: " + tn
-                                + "\n渲染环境可能已异常，请完全退出软件后重新打开，再导出一次；"
-                                + "若仍失败，请把 C:\\Users\\" + System.getProperty("user.name")
-                                + "\\QingFrameShadow-export.log 内容发给我。");
-                    });
-                    return;
+                // 2. 渲染（按选择的分辨率上限；显卡渲染失败会自动降级重试，界面线程只做快照）
+                ExportService.RenderResult rr = exportService.renderFromAwt(awt, exportTemplate, maxEdge);
+                WritableImage result = rr.image;
+                ExportService.logExport("渲染成功: " + (int) result.getWidth() + "x" + (int) result.getHeight()
+                        + (rr.usedEdge < rr.requestedEdge ? "（已降级 " + rr.requestedEdge + "→" + rr.usedEdge + "）" : ""));
+                if (rr.usedEdge < rr.requestedEdge) {
+                    final int req = rr.requestedEdge;
+                    final int used = rr.usedEdge;
+                    Platform.runLater(() -> statusLabel.setText("已导出（显卡限制降级 " + req + "→" + used + "）: " + outFile.getName()));
                 }
 
                 // 3. 后台写文件
@@ -1736,6 +1760,7 @@ public class MainController implements Initializable {
         progressBar.setVisible(true);
         progressBar.setProgress(0);
         exportFailNames.clear();
+        exportDegradedNames.clear();
 
         syncModelFromUI();
 
@@ -1745,7 +1770,8 @@ public class MainController implements Initializable {
         for (String p : images) {
             files.add(new File(p));
         }
-        exportService.exportFiles(files, exportDir, fmt, jpegQuality, cloneTemplate(template), exportListener);
+        int maxEdge = resolutionToMaxEdge(cbExportResolution.getValue());
+        exportService.exportFiles(files, exportDir, fmt, jpegQuality, cloneTemplate(template), maxEdge, exportListener);
     }
 
     @FXML

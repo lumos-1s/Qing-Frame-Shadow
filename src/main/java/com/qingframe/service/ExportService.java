@@ -54,7 +54,25 @@ public class ExportService {
 
         void onFileFailed(String fileName, String message);
 
+        /** 某张图因显卡渲染限制被降级导出（requestedEdge > usedEdge 时触发） */
+        void onQualityDegraded(String fileName, int requestedEdge, int usedEdge);
+
         void onFinished(int success, int failed, long elapsedSeconds);
+    }
+
+    /** 单张渲染结果：图片 + 实际使用的长边像素（用于判断是否发生了降级） */
+    public static final class RenderResult {
+        public final WritableImage image;
+        /** 期望长边 = min(图片原始长边, 用户选择的上限) */
+        public final int requestedEdge;
+        /** 实际成功渲染的长边 */
+        public final int usedEdge;
+
+        public RenderResult(WritableImage image, int requestedEdge, int usedEdge) {
+            this.image = image;
+            this.requestedEdge = requestedEdge;
+            this.usedEdge = usedEdge;
+        }
     }
 
     private final BorderEngine engine;
@@ -107,9 +125,11 @@ public class ExportService {
     /**
      * 批量导出：解码与写盘阶段并行（有限线程池），
      * 渲染因依赖 Canvas snapshot 仍在界面线程串行执行；输出内容与顺序无关，结果与串行版本一致。
+     *
+     * @param maxEdge 用户选择的长边上限（如原画质 4096 / 2K 2560 / 安全 1600），渲染失败会自动向下降级
      */
     public void exportFiles(List<File> files, File exportDir, String fmt, float jpegQuality,
-                            TemplateModel template, Listener listener) {
+                            TemplateModel template, int maxEdge, Listener listener) {
         int threads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors()));
         ExecutorService pool = Executors.newFixedThreadPool(threads, r -> {
             Thread t = new Thread(r, "export-worker");
@@ -130,11 +150,16 @@ public class ExportService {
             final String fileName = src.getName();
             pool.execute(() -> {
                 try {
-                    WritableImage result = renderFile(src, exportTemplate);
+                    RenderResult result = renderFile(src, exportTemplate, maxEdge);
+                    if (result.usedEdge < result.requestedEdge) {
+                        final int req = result.requestedEdge;
+                        final int used = result.usedEdge;
+                        Platform.runLater(() -> listener.onQualityDegraded(fileName, req, used));
+                    }
                     int n = fileNum.getAndIncrement();
                     String outPath = exportDir.getAbsolutePath() + File.separator +
                             FileUtil.getFileNameWithoutExt(fileName) + "_bordered_" + String.format("%03d", n) + "." + ext;
-                    ImageExportUtil.export(result, outPath, fmt, jpegQuality);
+                    ImageExportUtil.export(result.image, outPath, fmt, jpegQuality);
                 } catch (Exception e) {
                     failed.incrementAndGet();
                     e.printStackTrace();
@@ -165,27 +190,17 @@ public class ExportService {
     }
 
     /** 读取文件并渲染出边框图（后台线程调用） */
-    public WritableImage renderFile(File src, TemplateModel tmpl) throws Exception {
+    public RenderResult renderFile(File src, TemplateModel tmpl, int maxEdge) throws Exception {
         BufferedImage awtImg = ImageIO.read(src);
         if (awtImg == null) throw new IOException("无法读取图片: " + src.getName());
         ExifReader.ExifData exif = ExifReader.parse(src);
         if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
-        WritableImage result = renderAwtWithFallback(awtImg, tmpl);
-        if (result == null) {
-            throw new IOException(String.format("渲染结果异常（接近空白），且自动缩放后仍失败：照片 %dx%d",
-                    awtImg.getWidth(), awtImg.getHeight()));
-        }
-        return result;
+        return renderAwtWithFallback(awtImg, tmpl, maxEdge);
     }
 
     /** 由已解码的 AWT 图像渲染（后台线程调用，含分级降级） */
-    public WritableImage renderFromAwt(BufferedImage awt, TemplateModel tmpl) throws Exception {
-        WritableImage result = renderAwtWithFallback(awt, tmpl);
-        if (result == null) {
-            throw new IOException(String.format("渲染结果异常（接近空白），且自动缩放后仍失败：照片 %dx%d",
-                    awt.getWidth(), awt.getHeight()));
-        }
-        return result;
+    public RenderResult renderFromAwt(BufferedImage awt, TemplateModel tmpl, int maxEdge) throws Exception {
+        return renderAwtWithFallback(awt, tmpl, maxEdge);
     }
 
     /** 按 EXIF 方向旋转图像（与 JavaFX 预览自动应用方向保持一致） */
@@ -246,49 +261,39 @@ public class ExportService {
         return scaled;
     }
 
-    /** 单张/批量导出：渲染空白或异常时逐级缩小重试，直到成功或全部失败（后台线程调用） */
-    private WritableImage renderAwtWithFallback(BufferedImage awt, TemplateModel tmpl) throws Exception {
-        // 超大图先预降级，避免在界面线程上做注定失败的全尺寸渲染
-        BufferedImage target = awt;
-        TemplateModel renderTmpl = tmpl;
-        logExport("原始尺寸: " + awt.getWidth() + "x" + awt.getHeight());
-        if (Math.max(awt.getWidth(), awt.getHeight()) > EXPORT_SAFE_EDGE) {
-            target = downscaleAwtToMaxEdge(awt, EXPORT_SAFE_EDGE);
-            // 模板参数按同一比例缩放，保证导出边框/文字相对照片大小与预览一致
-            renderTmpl = scaleTemplateForExport(tmpl, (double) target.getWidth() / awt.getWidth());
-            logExport("预降级到 " + target.getWidth() + "x" + target.getHeight() + "，模板参数缩放 x"
-                    + String.format("%.2f", (double) target.getWidth() / awt.getWidth()));
+    /** 单张/批量导出：渲染空白或异常时自动向下降级，直到成功或全部失败（后台线程调用） */
+    private RenderResult renderAwtWithFallback(BufferedImage awt, TemplateModel tmpl, int maxEdge) throws Exception {
+        int longEdge = Math.max(awt.getWidth(), awt.getHeight());
+        int target = Math.min(longEdge, maxEdge);
+        logExport("原始尺寸: " + awt.getWidth() + "x" + awt.getHeight() + "，目标长边: " + target);
+
+        // 候选档位：目标长边 + 依次更低的降级档（图片本身小于目标时不做任何缩放）
+        List<Integer> candidates = new ArrayList<>();
+        candidates.add(target);
+        for (int fb : new int[]{2400, 1600, 1024}) {
+            if (fb < target && !candidates.contains(fb)) candidates.add(fb);
         }
+
         Exception lastErr = null;
-        try {
-            WritableImage r = renderAwtScaled(target, awt, renderTmpl);
-            boolean firstBlank = r == null || ImageExportUtil.looksBlank(r);
-            logExport("首轮渲染 " + target.getWidth() + "x" + target.getHeight() + " 空白=" + firstBlank);
-            if (!firstBlank) return r;
-        } catch (Exception e) {
-            lastErr = e;
-            logExport("首轮渲染异常: " + e.getClass().getSimpleName() + " - " + e.getMessage());
-        }
-        BufferedImage cur = target;
-        int[] edges = {1280, 1024};
-        for (int edge : edges) {
-            BufferedImage scaled = downscaleAwtToMaxEdge(cur, edge);
-            if (scaled == cur) break;
-            cur = scaled;
+        for (int edge : candidates) {
             try {
-                WritableImage r = renderAwtScaled(cur, awt, scaleTemplateForExport(tmpl, (double) cur.getWidth() / awt.getWidth()));
+                BufferedImage scaled = (edge >= longEdge) ? awt : downscaleAwtToMaxEdge(awt, edge);
+                TemplateModel scaledTmpl = (edge >= longEdge) ? tmpl
+                        : scaleTemplateForExport(tmpl, (double) scaled.getWidth() / awt.getWidth());
+                WritableImage r = renderAwtScaled(scaled, awt, scaledTmpl);
                 boolean blank = r == null || ImageExportUtil.looksBlank(r);
-                logExport("降级长边 " + edge + "(" + cur.getWidth() + "x" + cur.getHeight() + ") 渲染空白=" + blank);
-                if (!blank) return r;
+                logExport("渲染长边 " + edge + "(" + scaled.getWidth() + "x" + scaled.getHeight() + ") 空白=" + blank);
+                if (!blank) return new RenderResult(r, target, edge);
             } catch (Exception e) {
                 lastErr = e;
-                logExport("降级长边 " + edge + " 渲染异常: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                logExport("渲染长边 " + edge + " 异常: " + e.getClass().getSimpleName() + " - " + e.getMessage());
             }
         }
         if (lastErr != null) {
             throw new IOException("渲染失败（全部分级均异常）: " + lastErr.getMessage(), lastErr);
         }
-        return null;
+        throw new IOException(String.format("渲染结果异常（接近空白），且自动缩放后仍失败：照片 %dx%d",
+                awt.getWidth(), awt.getHeight()));
     }
 
     /** 渲染指定尺寸图，并按比例同步图标位置/大小（保证降级导出时 Logo 位置与预览一致） */

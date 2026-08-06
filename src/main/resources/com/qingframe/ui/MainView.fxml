@@ -26,6 +26,7 @@
                     <graphic><SVGPath styleClass="ui-icon" content="M5 3h14v18H5z M5 12h14 M12 3v6" /></graphic>
                 </Button>
                 <ComboBox fx:id="cbExportFormat" prefWidth="80.0" styleClass="toolbar-combo" />
+                <ComboBox fx:id="cbExportResolution" prefWidth="90.0" styleClass="toolbar-combo" promptText="分辨率" />
                 <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
                 <Button onAction="#onSyncToSelected" styleClass="toolbar-btn" text="同步到选中">
                     <graphic><SVGPath styleClass="ui-icon" content="M4 9a8 8 0 0 1 13.5-3.5 M20 15a8 8 0 0 1-13.5 3.5 M18 2v4h-4 M6 22v-4h4" /></graphic>
