@@ -90,6 +90,12 @@ public class BorderEngine {
         double originH = originImg.getHeight();
         double canvasW = originW + margin.getTotalLeft() + margin.getTotalRight();
         double canvasH = originH + margin.getTotalTop() + margin.getTotalBottom();
+        // 侧投影模式（如“浮影白框”）：画布四周额外预留柔和弥散阴影空间，避免阴影被裁剪
+        double shadowSpace = getShadowSpace(originImg, template);
+        if (shadowSpace > 0) {
+            canvasW += shadowSpace * 2;
+            canvasH += shadowSpace * 2;
+        }
 
         String ratio = template.getCanvasRatio();
         if (!"original".equals(ratio)) {
@@ -105,6 +111,20 @@ public class BorderEngine {
             }
         }
         return new double[]{canvasW, canvasH};
+    }
+
+    /** 侧投影模式的阴影预留空间：容纳环境阴影层的模糊半径 + 最大偏移量 */
+    private double getShadowSpace(Image originImg, TemplateModel template) {
+        if (template == null) return 0;
+        for (LayerBorder layer : template.getLayerList()) {
+            ShadowGlowConfig sg = layer.getShadowGlowConfig();
+            if (sg != null && sg.getSideShadow() == 1) {
+                double radius = Math.max(4.0, sg.getShadowBlur() * 1.5);
+                double off = Math.max(0, Math.max(sg.getShadowOffsetX(), sg.getShadowOffsetY())) * 2.4;
+                return Math.max(24.0, radius * 2.0 + off);
+            }
+        }
+        return 0;
     }
 
     // ═══════════════ Icon rendering ═══════════════
@@ -189,7 +209,6 @@ public class BorderEngine {
         gc.translate(ox, oy);
         gc.scale(scale, scale);
         gc.drawImage(fxResult, 0, 0);
-        drawActiveIcons(gc, bw, bh);
         gc.restore();
     }
 
@@ -220,10 +239,10 @@ public class BorderEngine {
                 }
             }
             BaseMargin margin = template.getBaseMargin();
-            double originW = originImg.getWidth();
-            double originH = originImg.getHeight();
-            int w = (int) Math.ceil(originW + margin.getTotalLeft() + margin.getTotalRight());
-            int h = (int) Math.ceil(originH + margin.getTotalTop() + margin.getTotalBottom());
+            // 统一按 computeCanvasSize 计算（含侧投影模式的阴影预留空间）
+            double[] cs = computeCanvasSize(originImg, template);
+            int w = (int) Math.ceil(cs[0]);
+            int h = (int) Math.ceil(cs[1]);
             if (w <= 0) w = 1;
             if (h <= 0) h = 1;
 
@@ -443,20 +462,71 @@ public class BorderEngine {
 
         if (photoShadow != null) {
             gc.save();
-            DropShadow ds = new DropShadow();
-            ds.setBlurType(BlurType.GAUSSIAN);
-            // 照片四边均匀阴影：偏移归零，投影从照片四周均匀扩散
-            ds.setOffsetX(0);
-            ds.setOffsetY(0);
-            ds.setRadius(photoShadow.getShadowBlur());
-            ds.setSpread(photoShadow.getShadowSpread() / 100.0);
-            ds.setColor(parseColor(photoShadow.getShadowColorHex(), photoShadow.getShadowOpacity()));
-            gc.setEffect(ds);
-            if (hasCorner) {
-                buildRoundedPath(gc, ox, oy, iw, ih, rTL, rTR, rBL, rBR);
-                gc.clip();
+            double offX = photoShadow.getShadowOffsetX();
+            double offY = photoShadow.getShadowOffsetY();
+            // 侧投影模式：模板显式开启（如“浮影白框”）时走平面悬浮卡片投影；
+            // 其余模板保持四边均匀投影（历史外观不变）
+            if (photoShadow.getSideShadow() != 1) {
+                // 四边均匀投影：投影从照片四周均匀扩散（默认）
+                DropShadow ds = new DropShadow();
+                ds.setBlurType(BlurType.GAUSSIAN);
+                ds.setOffsetX(0);
+                ds.setOffsetY(0);
+                ds.setRadius(photoShadow.getShadowBlur());
+                ds.setSpread(photoShadow.getShadowSpread() / 100.0);
+                ds.setColor(parseColor(photoShadow.getShadowColorHex(), photoShadow.getShadowOpacity()));
+                gc.setEffect(ds);
+                if (hasCorner) {
+                    buildRoundedPath(gc, ox, oy, iw, ih, rTL, rTR, rBL, rBR);
+                    gc.clip();
+                }
+                gc.drawImage(originImg, ox, oy, iw, ih);
+            } else {
+                // 立体悬浮卡片（浮影白框）：白色衬边 + 双层立体投影。
+                // 环境阴影（远、浅、大模糊）+ 接触阴影（近、深、小模糊）叠加，
+                // 阴影向四周柔和扩散且右下最重，呈现真实的悬浮立体感
+                double matL = margin.getMarginLeft();
+                double matT = margin.getMarginTop();
+                double matR = margin.getMarginRight();
+                double matB = margin.getMarginBottom();
+                double cx = ox - matL;
+                double cy = oy - matT;
+                double cw2 = iw + matL + matR;
+                double ch2 = ih + matT + matB;
+
+                Color sc = parseColor(photoShadow.getShadowColorHex(), photoShadow.getShadowOpacity());
+                double blur = Math.max(4.0, photoShadow.getShadowBlur());
+
+                // 环境阴影：大模糊、浅色、偏移更远，营造悬浮高度
+                DropShadow ambient = new DropShadow();
+                ambient.setBlurType(BlurType.GAUSSIAN);
+                ambient.setRadius(blur * 1.5);
+                // 环境阴影偏移加大：阴影离卡片更远，悬浮高度更强
+                ambient.setOffsetX(offX * 2.4);
+                ambient.setOffsetY(offY * 2.4);
+                ambient.setSpread(0);
+                ambient.setColor(Color.color(sc.getRed(), sc.getGreen(), sc.getBlue(), sc.getOpacity() * 0.6));
+                gc.setEffect(ambient);
+                gc.setFill(Color.WHITE);
+                gc.fillRect(cx, cy, cw2, ch2);
+
+                // 接触阴影：小模糊、深色、紧贴卡片，呈现“落地”层次
+                DropShadow contact = new DropShadow();
+                contact.setBlurType(BlurType.GAUSSIAN);
+                contact.setRadius(blur * 0.5);
+                contact.setOffsetX(offX * 0.5);
+                contact.setOffsetY(offY * 0.5);
+                contact.setSpread(0);
+                contact.setColor(Color.color(sc.getRed(), sc.getGreen(), sc.getBlue(), sc.getOpacity()));
+                gc.setEffect(contact);
+                gc.setFill(Color.WHITE);
+                gc.fillRect(cx, cy, cw2, ch2);
+
+                // 卡片本体（白色衬边）
+                gc.setEffect(null);
+                gc.setFill(Color.WHITE);
+                gc.fillRect(cx, cy, cw2, ch2);
             }
-            gc.drawImage(originImg, ox, oy, iw, ih);
             gc.restore();
         } else {
             // 默认小阴影（保持原有外观）
@@ -625,14 +695,13 @@ public class BorderEngine {
                 }
             }
             if (!exifText.isEmpty()) {
-                double fs = Math.min(BorderProcessor.getExifFontSize(), Math.max(14, ch * 0.08));
-                double barH = Math.max(40, fs + 20);
+                double barH = 40;
                 gc.setFill(Color.rgb(0, 0, 0, 0.6));
                 gc.fillRect(0, ch - barH, cw, barH);
                 gc.setFill(Color.WHITE);
-                gc.setFont(new Font("Microsoft YaHei", fs));
+                gc.setFont(new Font("Microsoft YaHei", 14));
                 gc.setTextAlign(TextAlignment.CENTER);
-                gc.fillText(exifText, cw / 2, ch - barH + fs + 10);
+                gc.fillText(exifText, cw / 2, ch - barH + 26);
             }
         }
     }

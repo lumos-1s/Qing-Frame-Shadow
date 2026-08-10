@@ -2,6 +2,8 @@ package com.qingframe.model;
 
 public class ShadowGlowConfig {
     private int shadowEnable;
+    /** 1=单向侧投影模式（如“浮影白框”右下投影），0=传统四边扩散投影 */
+    private int sideShadow;
     private double shadowOffsetX;
     private double shadowOffsetY;
     private double shadowBlur;
@@ -17,6 +19,7 @@ public class ShadowGlowConfig {
 
     public ShadowGlowConfig() {
         this.shadowEnable = 0;
+        this.sideShadow = 0;
         this.shadowOffsetX = 3;
         this.shadowOffsetY = 3;
         this.shadowBlur = 10;
@@ -33,6 +36,8 @@ public class ShadowGlowConfig {
 
     public int getShadowEnable() { return shadowEnable; }
     public void setShadowEnable(int shadowEnable) { this.shadowEnable = shadowEnable; }
+    public int getSideShadow() { return sideShadow; }
+    public void setSideShadow(int sideShadow) { this.sideShadow = sideShadow; }
     public double getShadowOffsetX() { return shadowOffsetX; }
     public void setShadowOffsetX(double shadowOffsetX) { this.shadowOffsetX = shadowOffsetX; }
     public double getShadowOffsetY() { return shadowOffsetY; }

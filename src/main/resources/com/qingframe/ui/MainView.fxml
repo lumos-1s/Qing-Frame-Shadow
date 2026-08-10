@@ -26,7 +26,6 @@
                     <graphic><SVGPath styleClass="ui-icon" content="M5 3h14v18H5z M5 12h14 M12 3v6" /></graphic>
                 </Button>
                 <ComboBox fx:id="cbExportFormat" prefWidth="80.0" styleClass="toolbar-combo" />
-                <ComboBox fx:id="cbExportResolution" prefWidth="90.0" styleClass="toolbar-combo" promptText="分辨率" />
                 <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
                 <Button onAction="#onSyncToSelected" styleClass="toolbar-btn" text="同步到选中">
                     <graphic><SVGPath styleClass="ui-icon" content="M4 9a8 8 0 0 1 13.5-3.5 M20 15a8 8 0 0 1-13.5 3.5 M18 2v4h-4 M6 22v-4h4" /></graphic>
@@ -116,6 +115,7 @@
                 <!-- 卡片风格 -->
                 <TitledPane animated="true" expanded="false" text="卡片风格">
                     <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetFloatWhite" styleClass="sidebar-btn" text="浮影白框" />
                         <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardLeica" styleClass="sidebar-btn" text="徕卡卡片" />
                         <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardLogoParam" styleClass="sidebar-btn" text="Logo参数" />
                         <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardPureLogo" styleClass="sidebar-btn" text="纯Logo" />
@@ -171,6 +171,19 @@
                     <graphic><SVGPath styleClass="ui-icon" content="M4 7h16 M4 17h16 M9 7m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0 M15 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0" /></graphic>
                     <ScrollPane fitToWidth="true">
                         <VBox spacing="5.0" styleClass="settings-panel">
+                            <!-- 背景模糊 -->
+                            <Label styleClass="param-group-title" text="背景模糊" />
+                            <CheckBox fx:id="cbBgBlur" text="启用背景模糊（毛玻璃卡片）" />
+                            <CheckBox fx:id="cbBgBlurWhite" text="白色提亮（毛玻璃更柔和）" />
+                            <HBox alignment="CENTER_LEFT" spacing="4.0">
+                                <Label text="模糊半径" />
+                                <Slider fx:id="slBgBlurRadius" blockIncrement="5" max="80" min="10" prefWidth="120.0" value="40" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="4.0">
+                                <Label text="模糊强度" />
+                                <Slider fx:id="slBgBlurIntensity" blockIncrement="5" max="100" min="0" prefWidth="120.0" value="50" />
+                            </HBox>
+                            <Separator styleClass="param-group-separator" />
                             <!-- 画布比例 -->
                             <Label styleClass="param-group-title" text="画布比例" />
                             <ComboBox fx:id="cbCanvasRatio" prefWidth="200.0" />

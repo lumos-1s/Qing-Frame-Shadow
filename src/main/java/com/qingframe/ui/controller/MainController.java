@@ -8,8 +8,6 @@ import com.qingframe.core.IconManager;
 import com.qingframe.core.IconRenderer;
 import com.qingframe.core.WatermarkRender;
 import com.qingframe.model.*;
-import com.qingframe.service.ExportService;
-import com.qingframe.service.PresetService;
 import com.qingframe.util.FileUtil;
 import com.qingframe.util.ImageExportUtil;
 import com.qingframe.util.JsonUtil;
@@ -45,7 +43,9 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -53,6 +53,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class MainController implements Initializable {
@@ -74,13 +75,16 @@ public class MainController implements Initializable {
     @FXML private TextField tfStrokeDash, tfTemplateName, tfTemplateTag, tfCustomText;
     @FXML private TextField tfExifBrand, tfExifModel, tfExifFocal, tfExifAperture, tfExifIso, tfExifShutter;
     @FXML private CheckBox cbMarginLock, cbLayerVisible, cbCornerLock;
+    @FXML private CheckBox cbBgBlur;
+    @FXML private CheckBox cbBgBlurWhite;
+    @FXML private Slider slBgBlurRadius, slBgBlurIntensity;
     @FXML private CheckBox cbTearEnable, cbShadow, cbGlow;
     @FXML private CheckBox cbVignette, cbLightLeak, cbExifText, cbCornerDecor;
     @FXML private ColorPicker cpFillColor, cpStrokeColor, cpGlowColor, cpTextColor;
     @FXML private ScrollPane brandIconScroll, photoDecorScroll, simpleIconScroll, weatherIconScroll;
     @FXML private HBox brandIconBox, photoDecorBox, simpleIconBox, weatherIconBox, customIconBox;
     @FXML private Slider slActiveIconOpacity;
-    @FXML private ComboBox<String> cbLayerSelect, cbFillType, cbGradientType, cbStrokePos, cbLeakType, cbExportFormat, cbExportResolution;
+    @FXML private ComboBox<String> cbLayerSelect, cbFillType, cbGradientType, cbStrokePos, cbLeakType, cbExportFormat;
     @FXML private ComboBox<String> cbTextureBlend;
     @FXML private ListView<String> lvPresets;
     @FXML private ProgressBar progressBar;
@@ -100,8 +104,6 @@ public class MainController implements Initializable {
     private Image originImage;
     private TemplateModel template;
     private BorderEngine engine = new BorderEngine();
-    private final ExportService exportService = new ExportService(engine);
-    private final PresetService presetService = new PresetService();
     private boolean isDarkTheme = true;
     private boolean isUpdating = false;
     private final Stack<TemplateModel> undoStack = new Stack<>();
@@ -118,68 +120,23 @@ public class MainController implements Initializable {
     private static final int THUMB_MAX_DIM = 1280;
     private static final int THUMB_CACHE_MAX = 200;
     private static final long RENDER_DEBOUNCE_MS = 50;
-    private volatile boolean isExporting = false;
-    private final List<String> exportFailNames = new ArrayList<>();
-    private final List<String> exportDegradedNames = new ArrayList<>();
-    private final ExportService.Listener exportListener = new ExportService.Listener() {
-        @Override
-        public void onProgress(int done, int total, String fileName) {
-            progressBar.setProgress((double) done / total);
-            statusLabel.setText("正在导出 " + done + "/" + total + " - " + fileName);
-        }
-
-        @Override
-        public void onFileFailed(String fileName, String message) {
-            exportFailNames.add(fileName);
-        }
-
-        @Override
-        public void onQualityDegraded(String fileName, int requestedEdge, int usedEdge) {
-            exportDegradedNames.add(fileName + "（" + requestedEdge + "→" + usedEdge + "）");
-        }
-
-        @Override
-        public void onFinished(int success, int failed, long elapsedSeconds) {
-            isExporting = false;
-            setExportUI(false);
-            progressBar.setVisible(false);
-            String msg = "导出完成 成功" + success + "张";
-            if (failed > 0) msg += " 跳过" + failed + "张";
-            msg += " 用时" + elapsedSeconds + "秒";
-            statusLabel.setText(msg);
-            if (!exportDegradedNames.isEmpty()) {
-                int show = Math.min(exportDegradedNames.size(), 10);
-                String detail = String.join("\n", exportDegradedNames.subList(0, show));
-                if (exportDegradedNames.size() > show) {
-                    detail += "\n... 等共 " + exportDegradedNames.size() + " 张";
-                }
-                showAlert("以下图片因显卡渲染限制降低了导出分辨率（可尝试升级显卡驱动）：\n" + detail);
-                exportDegradedNames.clear();
-            }
-            if (!exportFailNames.isEmpty()) {
-                int show = Math.min(exportFailNames.size(), 10);
-                String detail = String.join("\n", exportFailNames.subList(0, show));
-                if (exportFailNames.size() > show) {
-                    detail += "\n... 等共 " + exportFailNames.size() + " 张";
-                }
-                showAlert("以下图片导出失败（已跳过）：\n" + detail);
-                exportFailNames.clear();
-            }
-        }
+    /** 导出渲染的安全长边（约 2400px，约 400 万像素），落在大多数环境的稳定渲染区 */
+    private static final int EXPORT_SAFE_EDGE = 2400;
+    /** 导出设置文件：记住上次导出目录 */
+    private static final String EXPORT_SETTINGS_FILE =
+            System.getProperty("user.home") + "/.qingkuangying-export-settings.txt";
+    /** 随机边框使用的协调色板（每组 3 色：主色 / 辅色 / 点缀） */
+    private static final String[][] COLOR_PALETTES = {
+            {"#f7f4ef", "#d8cdb8", "#8b7355"},
+            {"#1c1c1e", "#3a3a40", "#c9a24b"},
+            {"#ffffff", "#e8e3da", "#b0563f"},
+            {"#f2ede4", "#c97b4a", "#7c5a3a"},
+            {"#eef1f4", "#7d93a8", "#2f3b4c"},
+            {"#f5f0e8", "#6f7d5c", "#3d4632"},
+            {"#fdf6ec", "#d9a441", "#8a6d2a"},
+            {"#f4ece7", "#7c3a3d", "#4a1f21"}
     };
-
-    /** 分辨率选项 → 导出长边上限像素（原画质以 D3D 4096px 纹理上限封顶，超过会降级） */
-    private int resolutionToMaxEdge(String label) {
-        if (label == null) return 4096;
-        switch (label) {
-            case "4K": return 3840;
-            case "2K": return 2560;
-            case "1080P": return 1920;
-            case "安全模式": return ExportService.EXPORT_SAFE_EDGE;
-            case "原画质":
-            default: return 4096;
-        }
-    }
+    private volatile boolean isExporting = false;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -218,10 +175,8 @@ public class MainController implements Initializable {
 
         cbExportFormat.setItems(FXCollections.observableArrayList("JPEG", "PNG"));
         cbExportFormat.setValue("JPEG");
-        cbExportResolution.setItems(FXCollections.observableArrayList("原画质", "4K", "2K", "1080P", "安全模式"));
-        cbExportResolution.setValue("原画质");
 
-        lvPresets.setItems(FXCollections.observableArrayList(presetService.loadPresetList()));
+        lvPresets.setItems(FXCollections.observableArrayList(loadPresetList()));
 
         cbCanvasRatio.setItems(FXCollections.observableArrayList("original", "1:1", "4:3", "3:4", "16:9", "9:16", "2.35:1"));
         cbCanvasRatio.setValue("original");
@@ -279,7 +234,7 @@ public class MainController implements Initializable {
         cbRecipeFilter.valueProperty().addListener((o,ov,nv) -> {
             if (nv == null) return;
             if ("全部".equals(nv)) {
-                lvPresets.setItems(FXCollections.observableArrayList(presetService.loadPresetList()));
+                lvPresets.setItems(FXCollections.observableArrayList(loadPresetList()));
             } else {
                 lvPresets.getItems().clear();
             }
@@ -436,6 +391,11 @@ public class MainController implements Initializable {
         slGlowBlur.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slGlowOpacity.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slVignetteStrength.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
+        slBgBlurRadius.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
+        slBgBlurIntensity.valueProperty().addListener((o,ov,nv) -> {
+            BorderProcessor.setBlurIntensity((int) nv.doubleValue());
+            onSettingChanged();
+        });
         slTextSize.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slCornerDecorSize.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         setupSliderUndo(slImgScale, slFillOpacity, slStrokeWidth, slStrokeOpacity,
@@ -500,6 +460,8 @@ public class MainController implements Initializable {
         });
         cbLayerVisible.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbCornerLock.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
+        cbBgBlur.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
+        cbBgBlurWhite.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbTearEnable.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbShadow.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbGlow.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
@@ -590,6 +552,9 @@ public class MainController implements Initializable {
             margin.setImgScale(slImgScale.getValue());
             margin.setImgOffsetX(parseInt(tfImgOffsetX.getText(), 0));
             margin.setImgOffsetY(parseInt(tfImgOffsetY.getText(), 0));
+            margin.setBgBlurEnable(cbBgBlur.isSelected() ? 1 : 0);
+            margin.setBgBlurRadius((int) slBgBlurRadius.getValue());
+            margin.setBgBlurWhiteOverlay(cbBgBlurWhite.isSelected() ? 1 : 0);
             int top = parseInt(tfMarginTop.getText(), 80);
             int bot = parseInt(tfMarginBottom.getText(), 120);
             int left = parseInt(tfMarginLeft.getText(), 80);
@@ -742,6 +707,10 @@ public class MainController implements Initializable {
 
         BaseMargin margin = template.getBaseMargin();
         cbMarginLock.setSelected(margin.getMarginLock() == 1);
+        cbBgBlur.setSelected(margin.getBgBlurEnable() == 1);
+        cbBgBlurWhite.setSelected(margin.getBgBlurWhiteOverlay() == 1);
+        slBgBlurRadius.setValue(margin.getBgBlurRadius());
+        slBgBlurIntensity.setValue(BorderProcessor.getBlurIntensity());
         boolean marginLocked = margin.getMarginLock() == 1;
         tfMarginTop.setDisable(marginLocked);
         tfMarginBottom.setDisable(marginLocked);
@@ -1056,11 +1025,11 @@ public class MainController implements Initializable {
         if (selectedIndices.isEmpty()) return;
         javafx.stage.DirectoryChooser dc = new javafx.stage.DirectoryChooser();
         dc.setTitle("选择导出目录");
-        File lastDir = exportService.getLastExportDir();
+        File lastDir = getLastExportDir();
         if (lastDir != null) dc.setInitialDirectory(lastDir);
         File exportDir = dc.showDialog(previewCanvas.getScene().getWindow());
         if (exportDir == null) return;
-        exportService.saveLastExportDir(exportDir);
+        saveLastExportDir(exportDir);
 
         syncModelFromUI();
         isExporting = true;
@@ -1072,13 +1041,125 @@ public class MainController implements Initializable {
         for (int idx : selectedIndices) {
             files.add(imageFiles.get(idx));
         }
+        int total = files.size();
 
         progressBar.setVisible(true);
         progressBar.setProgress(0);
-        exportFailNames.clear();
-        exportDegradedNames.clear();
-        int maxEdge = resolutionToMaxEdge(cbExportResolution.getValue());
-        exportService.exportFiles(files, exportDir, fmt, jpegQuality, cloneTemplate(template), maxEdge, exportListener);
+        exportImagesInParallel(files, exportDir, fmt, jpegQuality);
+    }
+
+    /**
+     * 批量导出：解码与写盘阶段并行（有限线程池），
+     * 渲染因依赖 Canvas snapshot 仍在界面线程串行执行；输出内容与顺序无关，结果与串行版本一致。
+     */
+    private void exportImagesInParallel(List<File> files, File exportDir, String fmt, float jpegQuality) {
+        int threads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors()));
+        ExecutorService pool = Executors.newFixedThreadPool(threads, r -> {
+            Thread t = new Thread(r, "export-worker");
+            t.setDaemon(true);
+            return t;
+        });
+        // 导出开始前固化当前设置，避免导出过程中界面改动影响后续图片
+        TemplateModel exportTemplate = cloneTemplate(template);
+        // 自动编号：从目录已有最大编号 +1 开始，批内原子递增，保证不重复
+        String ext = "png".equalsIgnoreCase(fmt) ? "png" : "jpg";
+        AtomicInteger fileNum = new AtomicInteger(nextExportNumber(exportDir, ext));
+        int total = files.size();
+        AtomicInteger completed = new AtomicInteger(0);
+        AtomicInteger failed = new AtomicInteger(0);
+        CountDownLatch allDone = new CountDownLatch(total);
+        long startTime = System.currentTimeMillis();
+
+        for (File src : files) {
+            final String fileName = src.getName();
+            pool.execute(() -> {
+                try {
+                    WritableImage result = renderFileOnFxThread(src, exportTemplate);
+                    int n = fileNum.getAndIncrement();
+                    String outPath = exportDir.getAbsolutePath() + File.separator +
+                            FileUtil.getFileNameWithoutExt(fileName) + "_bordered_" + String.format("%03d", n) + "." + ext;
+                    ImageExportUtil.export(result, outPath, fmt, jpegQuality);
+                } catch (Exception e) {
+                    failed.incrementAndGet();
+                    e.printStackTrace();
+                    Platform.runLater(() -> showAlert("跳过损坏文件: " + fileName + "\n" + e.getMessage()));
+                }
+                int doneN = completed.incrementAndGet();
+                allDone.countDown();
+                if (doneN % 5 == 0 || doneN == total) {
+                    final double p = (double) doneN / total;
+                    final String label = "正在导出 " + doneN + "/" + total + " - " + fileName;
+                    Platform.runLater(() -> {
+                        progressBar.setProgress(p);
+                        statusLabel.setText(label);
+                    });
+                }
+            });
+        }
+        pool.shutdown();
+
+        new Thread(() -> {
+            try {
+                allDone.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            final int failedFinal = failed.get();
+            final int doneFinal = total - failedFinal;
+            final long elapsed = (System.currentTimeMillis() - startTime + 500) / 1000;
+            Platform.runLater(() -> {
+                isExporting = false;
+                setExportUI(false);
+                progressBar.setVisible(false);
+                String msg = "导出完成 成功" + doneFinal + "张";
+                if (failedFinal > 0) msg += " 跳过" + failedFinal + "张";
+                msg += " 用时" + elapsed + "秒";
+                statusLabel.setText(msg);
+            });
+        }).start();
+    }
+
+    /** 读取上次导出目录（无记录或已失效返回 null） */
+    private File getLastExportDir() {
+        try {
+            String p = java.nio.file.Files.readString(
+                    java.nio.file.Paths.get(EXPORT_SETTINGS_FILE), StandardCharsets.UTF_8).trim();
+            if (!p.isEmpty()) {
+                File f = new File(p);
+                if (f.isDirectory()) return f;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    /** 记住导出目录，供下次导出默认打开 */
+    private void saveLastExportDir(File dir) {
+        if (dir == null) return;
+        try {
+            java.nio.file.Files.writeString(
+                    java.nio.file.Paths.get(EXPORT_SETTINGS_FILE), dir.getAbsolutePath(), StandardCharsets.UTF_8);
+        } catch (Exception ignored) {}
+    }
+
+    /** 扫描目录中 *_bordered_NNN.ext 文件，返回下一个编号（跨会话不重复） */
+    private int nextExportNumber(File dir, String ext) {
+        int max = 0;
+        File[] files = dir.listFiles();
+        if (files != null) {
+            String suffix = "_bordered_";
+            String lowerExt = ext.toLowerCase();
+            for (File f : files) {
+                String name = f.getName().toLowerCase();
+                if (name.endsWith("." + lowerExt) && name.contains(suffix)) {
+                    int idx = name.lastIndexOf(suffix);
+                    String numPart = name.substring(idx + suffix.length(), name.length() - lowerExt.length() - 1);
+                    try {
+                        max = Math.max(max, Integer.parseInt(numPart));
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+        return max + 1;
     }
 
     @FXML
@@ -1158,56 +1239,56 @@ public class MainController implements Initializable {
 
     @FXML
     private void onPresetNoBorder() {
-        template = presetService.createPreset("无边框");
+        template = createPreset("无边框");
         refreshUI();
         renderPreview();
     }
 
     @FXML
     private void onPresetSimpleWhite() {
-        template = presetService.createPreset("简约白边");
+        template = createPreset("简约白边");
         refreshUI();
         renderPreview();
     }
 
     @FXML
     private void onPresetRounded() {
-        template = presetService.createPreset("圆角边框");
+        template = createPreset("圆角边框");
         refreshUI();
         renderPreview();
     }
 
     @FXML
     private void onPresetVintage() {
-        template = presetService.createPreset("复古边框");
+        template = createPreset("复古边框");
         refreshUI();
         renderPreview();
     }
 
     @FXML
     private void onPresetPolaroid() {
-        template = presetService.createPreset("拍立得");
+        template = createPreset("拍立得");
         refreshUI();
         renderPreview();
     }
 
     @FXML
     private void onPresetFilm() {
-        template = presetService.createPreset("胶片框");
+        template = createPreset("胶片框");
         refreshUI();
         renderPreview();
     }
 
     @FXML
     private void onPresetDoubleLine() {
-        template = presetService.createPreset("双线边框");
+        template = createPreset("双线边框");
         refreshUI();
         renderPreview();
     }
 
     @FXML
     private void onPresetShadow() {
-        template = presetService.createPreset("投影边框");
+        template = createPreset("投影边框");
         refreshUI();
         renderPreview();
     }
@@ -1292,6 +1373,16 @@ public class MainController implements Initializable {
         template.setPhotoFrameStyle("CARD_LEICA");
         template.setPhotoFrameBorderSize(60);
         onSettingChanged();
+    }
+
+    /** 浮影白框：平面悬浮卡片（等宽白色衬边 + 柔和弥散投影） */
+    @FXML
+    private void onPresetFloatWhite() {
+        TemplateModel loaded = loadPresetFromJson("浮影白框");
+        template = (loaded != null) ? loaded : createPreset("浮影白框");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 浮影白框（白色衬边 + 柔和悬浮投影）");
     }
 
     @FXML
@@ -1400,18 +1491,18 @@ public class MainController implements Initializable {
         if ("PNG".equals(fmt)) {
             fc.setSelectedExtensionFilter(fc.getExtensionFilters().get(1));
         }
-        File lastDir = exportService.getLastExportDir();
+        File lastDir = getLastExportDir();
         if (lastDir != null) fc.setInitialDirectory(lastDir);
         String ext = "PNG".equals(fmt) ? "png" : "jpg";
         String base = "output";
         if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
             base = FileUtil.getFileNameWithoutExt(imageFiles.get(currentImageIndex).getName());
         }
-        int num = (lastDir != null && lastDir.exists()) ? exportService.nextExportNumber(lastDir, ext) : 1;
+        int num = (lastDir != null && lastDir.exists()) ? nextExportNumber(lastDir, ext) : 1;
         fc.setInitialFileName(base + "_bordered_" + String.format("%03d", num) + "." + ext);
         File file = fc.showSaveDialog(btnSaveImage.getScene().getWindow());
         if (file == null) return;
-        exportService.saveLastExportDir(file.getParentFile());
+        saveLastExportDir(file.getParentFile());
 
         setExportUI(true);
         progressBar.setVisible(true);
@@ -1424,39 +1515,38 @@ public class MainController implements Initializable {
         final float quality = 0.9f;
         final String format = outFile.getName().toLowerCase().endsWith(".png") ? "png" : "jpg";
         final TemplateModel exportTemplate = cloneTemplate(template);
-        final int maxEdge = resolutionToMaxEdge(cbExportResolution.getValue());
 
         // 导出全程后台执行：读图/缩放/写文件不占界面线程，界面线程只做渲染快照（短暂）
         new Thread(() -> {
             try {
-                ExportService.logExport("== 开始导出: " + outFile.getName());
+                logExport("== 开始导出: " + outFile.getName());
                 // 1. 后台读取当前照片
                 BufferedImage awt = null;
                 if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
                     File srcFile = imageFiles.get(currentImageIndex);
-                    ExportService.logExport("照片文件: " + srcFile.getAbsolutePath());
+                    logExport("照片文件: " + srcFile.getAbsolutePath());
                     try {
                         awt = ImageIO.read(srcFile);
                         ExifReader.ExifData exif = ExifReader.parse(srcFile);
                         if (awt != null && exif != null) {
-                            awt = exportService.applyOrientation(awt, exif.orientation);
+                            awt = applyOrientation(awt, exif.orientation);
                         }
-                        ExportService.logExport(awt != null ? ("ImageIO 读取成功: " + awt.getWidth() + "x" + awt.getHeight())
+                        logExport(awt != null ? ("ImageIO 读取成功: " + awt.getWidth() + "x" + awt.getHeight())
                                 : "ImageIO 读取返回 null（将回退到界面图像）");
                     } catch (Exception ex) {
-                        ExportService.logExport("ImageIO 读取异常: " + ex);
+                        logExport("ImageIO 读取异常: " + ex);
                         awt = null;
                     }
                 }
                 if (awt == null) {
                     // 回退：界面线程做一次像素转换
-                    ExportService.logExport("回退：从界面图像转换像素");
+                    logExport("回退：从界面图像转换像素");
                     CountDownLatch latch = new CountDownLatch(1);
                     AtomicReference<BufferedImage> ref = new AtomicReference<>();
                     Platform.runLater(() -> {
                         try {
                             ref.set(SwingFXUtils.fromFXImage(originImage, null));
-                            ExportService.logExport("界面图像转换成功: " + originImage.getWidth() + "x" + originImage.getHeight());
+                            logExport("界面图像转换成功: " + originImage.getWidth() + "x" + originImage.getHeight());
                         } finally {
                             latch.countDown();
                         }
@@ -1466,15 +1556,24 @@ public class MainController implements Initializable {
                 }
                 if (awt == null) throw new IOException("无法读取照片");
 
-                // 2. 渲染（按选择的分辨率上限；显卡渲染失败会自动降级重试，界面线程只做快照）
-                ExportService.RenderResult rr = exportService.renderFromAwt(awt, exportTemplate, maxEdge);
-                WritableImage result = rr.image;
-                ExportService.logExport("渲染成功: " + (int) result.getWidth() + "x" + (int) result.getHeight()
-                        + (rr.usedEdge < rr.requestedEdge ? "（已降级 " + rr.requestedEdge + "→" + rr.usedEdge + "）" : ""));
-                if (rr.usedEdge < rr.requestedEdge) {
-                    final int req = rr.requestedEdge;
-                    final int used = rr.usedEdge;
-                    Platform.runLater(() -> statusLabel.setText("已导出（显卡限制降级 " + req + "→" + used + "）: " + outFile.getName()));
+                // 2. 渲染（超大图自动预降级；失败再分级缩小，界面线程只做快照）
+                WritableImage result = renderAwtWithFallback(awt, exportTemplate);
+                logExport(result != null ? "渲染成功: " + (int) result.getWidth() + "x" + (int) result.getHeight()
+                        : "渲染失败（全部分级均空白）");
+                if (result == null) {
+                    final int pw = awt.getWidth();
+                    final int ph = awt.getHeight();
+                    final String tn = exportTemplate.getTemplateName();
+                    Platform.runLater(() -> {
+                        setExportUI(false);
+                        progressBar.setVisible(false);
+                        showAlert("渲染结果异常（接近全白/透明），且自动缩放后仍失败。\n照片: "
+                                + pw + "x" + ph + "  模板: " + tn
+                                + "\n渲染环境可能已异常，请完全退出软件后重新打开，再导出一次；"
+                                + "若仍失败，请把 C:\\Users\\" + System.getProperty("user.name")
+                                + "\\QingFrameShadow-export.log 内容发给我。");
+                    });
+                    return;
                 }
 
                 // 3. 后台写文件
@@ -1486,7 +1585,7 @@ public class MainController implements Initializable {
                 });
             } catch (Exception e) {
                 e.printStackTrace();
-                ExportService.logExport("导出异常: " + e);
+                logExport("导出异常: " + e);
                 Platform.runLater(() -> {
                     setExportUI(false);
                     progressBar.setVisible(false);
@@ -1620,11 +1719,59 @@ public class MainController implements Initializable {
             onPresetAutoColor();
             return;
         }
-        TemplateModel loaded = presetService.loadPresetFromJson(selected);
-        template = (loaded != null) ? loaded : presetService.createPreset(selected);
+        TemplateModel loaded = loadPresetFromJson(selected);
+        template = (loaded != null) ? loaded : createPreset(selected);
         refreshUI();
         renderPreview();
         statusLabel.setText("已应用预设: " + selected);
+    }
+
+    /** 内置预设 = 代码预设 + classpath 下的 JSON 预设 + 自动取色 */
+    private List<String> loadPresetList() {
+        List<String> list = new ArrayList<>(List.of("极简白框", "复古胶片", "拍立得", "证件照", "电影宽屏"));
+        for (String name : scanResourceDir("com/qingframe/presets")) {
+            if (!list.contains(name)) list.add(name);
+        }
+        list.add("自动取色边框");
+        return list;
+    }
+
+    /** 扫描 classpath 指定目录下的 .json 预设文件名（兼容开发目录与打包后 jar） */
+    private List<String> scanResourceDir(String path) {
+        List<String> names = new ArrayList<>();
+        try {
+            Enumeration<URL> urls = getClass().getClassLoader().getResources(path);
+            while (urls.hasMoreElements()) {
+                URL u = urls.nextElement();
+                if ("file".equals(u.getProtocol())) {
+                    File dir = new File(u.toURI());
+                    File[] files = dir.listFiles();
+                    if (files != null) {
+                        for (File f : files) {
+                            if (f.getName().endsWith(".json")) names.add(f.getName().replace(".json", ""));
+                        }
+                    }
+                } else if ("jar".equals(u.getProtocol())) {
+                    try (java.util.jar.JarFile jar = ((java.net.JarURLConnection) u.openConnection()).getJarFile()) {
+                        jar.stream()
+                                .filter(e -> e.getName().startsWith(path + "/") && e.getName().endsWith(".json"))
+                                .forEach(e -> names.add(e.getName().substring(path.length() + 1).replace(".json", "")));
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        Collections.sort(names);
+        return names;
+    }
+
+    private TemplateModel loadPresetFromJson(String name) {
+        try (InputStream in = getClass().getResourceAsStream("/com/qingframe/presets/" + name + ".json")) {
+            if (in == null) return null;
+            String json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            return JsonUtil.fromJson(json);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 从照片提取主色生成同色系边框 */
@@ -1677,17 +1824,158 @@ public class MainController implements Initializable {
         }
         undoStack.push(cloneTemplate(template));
         redoStack.clear();
-        template = presetService.randomTemplate();
+        template = randomTemplate();
         refreshUI();
         renderPreview();
         statusLabel.setText("已生成随机边框，不满意可继续 🎲 或按 ↩ 撤销");
     }
 
+    private TemplateModel randomTemplate() {
+        Random rnd = new Random();
+        TemplateModel t = new TemplateModel();
+        BaseMargin m = t.getBaseMargin();
+        boolean bottomHeavy = rnd.nextBoolean();
+        int pad = 40 + rnd.nextInt(80);
+        m.setMarginTop(bottomHeavy ? 50 + rnd.nextInt(70) : pad);
+        m.setMarginBottom(bottomHeavy ? 100 + rnd.nextInt(90) : pad);
+        m.setMarginLeft(pad);
+        m.setMarginRight(pad);
+        m.setImgScale(0.86 + rnd.nextDouble() * 0.14);
+        m.setMarginLock(0);
+        if (rnd.nextInt(100) < 15) {
+            m.setBgBlurEnable(1);
+            m.setBgBlurRadius(20 + rnd.nextInt(30));
+        }
+
+        String[] palette = COLOR_PALETTES[rnd.nextInt(COLOR_PALETTES.length)];
+        String bg = palette[rnd.nextInt(palette.length)];
+        String accent = palette[rnd.nextInt(palette.length)];
+
+        // 图层1：填充
+        LayerBorder l1 = t.getLayerList().get(0);
+        FillConfig f1 = l1.getFillConfig();
+        int fillKind = rnd.nextInt(10);
+        if (fillKind < 6) {
+            f1.setFillType("solid");
+            f1.setFillHex(bg);
+            f1.setFillOpacity(100);
+        } else if (fillKind < 8) {
+            f1.setFillType("gradient");
+            f1.setGradientStops(new ArrayList<>(List.of(
+                    new FillConfig.GradientColorStop(0.0, bg),
+                    new FillConfig.GradientColorStop(1.0, accent))));
+            f1.setGradientAngle(rnd.nextInt(3) * 90);
+            f1.setGradientOpacity(100);
+        } else {
+            f1.setFillType("transparent");
+        }
+
+        // 图层1：描边
+        StrokeConfig s1 = l1.getStrokeConfig();
+        if (rnd.nextInt(100) < 70) {
+            s1.setStrokeWidth(1 + rnd.nextInt(7));
+            s1.setStrokeColorHex(accent);
+            s1.setStrokeOpacity(60 + rnd.nextInt(41));
+            if (rnd.nextInt(100) < 25) {
+                s1.setStrokeDashArray(new ArrayList<>(List.of(4.0 + rnd.nextInt(6), 2.0 + rnd.nextInt(4))));
+            }
+        }
+
+        // 图层1：阴影 / 辉光
+        ShadowGlowConfig sg1 = l1.getShadowGlowConfig();
+        if (rnd.nextInt(100) < 45) {
+            sg1.setShadowEnable(1);
+            sg1.setShadowOffsetX(2 + rnd.nextInt(6));
+            sg1.setShadowOffsetY(2 + rnd.nextInt(6));
+            sg1.setShadowBlur(8 + rnd.nextInt(18));
+            sg1.setShadowOpacity(15 + rnd.nextInt(40));
+        }
+        if (rnd.nextInt(100) < 18) {
+            sg1.setGlowEnable(1);
+            sg1.setGlowColorHex(accent);
+            sg1.setGlowBlur(15 + rnd.nextInt(20));
+            sg1.setGlowOpacity(40 + rnd.nextInt(40));
+        }
+
+        // 图层2：内层细线（45% 概率）
+        if (rnd.nextInt(100) < 45) {
+            LayerBorder l2 = new LayerBorder();
+            l2.getFillConfig().setFillType("transparent");
+            int inner = 6 + rnd.nextInt(10);
+            l2.setMarginTop(inner);
+            l2.setMarginBottom(inner);
+            l2.setMarginLeft(inner);
+            l2.setMarginRight(inner);
+            StrokeConfig s2 = l2.getStrokeConfig();
+            s2.setStrokeWidth(1 + rnd.nextInt(3));
+            s2.setStrokeColorHex(accent);
+            s2.setStrokeOpacity(50 + rnd.nextInt(50));
+            t.getLayerList().add(l2);
+        }
+
+        // 圆角
+        CornerConfig c = t.getCornerConfig();
+        double[] radii = {0, 6, 12, 24, 48, 96};
+        double r = radii[rnd.nextInt(radii.length)];
+        c.setCornerRadiusAll(r);
+        c.setCornerRadiusTL(r);
+        c.setCornerRadiusTR(r);
+        c.setCornerRadiusBL(r);
+        c.setCornerRadiusBR(r);
+        c.setCornerLock(1);
+        c.setShapeType("round");
+
+        // 胶片效果
+        FilmTearConfig ft = t.getFilmTearConfig();
+        if (rnd.nextInt(100) < 22) {
+            ft.setTearEnable(1);
+            ft.setTearStrength(8 + rnd.nextInt(20));
+            ft.setTearDensity(30 + rnd.nextInt(50));
+        }
+        if (rnd.nextInt(100) < 25) {
+            ft.setFilmPerforationEnable(1);
+            ft.setFilmPerforationType(rnd.nextBoolean() ? "round" : "square");
+            ft.setFilmPerforationSize(10 + rnd.nextInt(10));
+            ft.setFilmPerforationSpacing(24 + rnd.nextInt(16));
+        }
+        if (rnd.nextInt(100) < 30) {
+            ft.setDustScratchEnable(1);
+            ft.setDustScratchIntensity(8 + rnd.nextInt(20));
+            ft.setYellowingEnable(1);
+            ft.setYellowingStrength(8 + rnd.nextInt(20));
+        }
+
+        // 光效
+        LightEffect le = t.getLightEffect();
+        if (rnd.nextInt(100) < 45) {
+            le.setVignetteEnable(1);
+            le.setVignetteStrength(20 + rnd.nextInt(45));
+        }
+        if (rnd.nextInt(100) < 30) {
+            le.setLightLeakEnable(1);
+            le.setLightLeakType(rnd.nextBoolean() ? "warm" : "cool");
+            le.setLightLeakOpacity(8 + rnd.nextInt(20));
+        }
+        if (rnd.nextInt(100) < 35) {
+            le.setFilmGrainEnable(1);
+            le.setFilmGrainIntensity(6 + rnd.nextInt(18));
+        }
+
+        // 装饰
+        TextStickerConfig dec = t.getDecorConfig();
+        if (rnd.nextInt(100) < 55) dec.setExifAutoText(1);
+        if (rnd.nextInt(100) < 25) {
+            dec.setCornerDecorEnable(1);
+            dec.setCornerDecorType("line");
+            dec.setCornerDecorSize(20 + rnd.nextInt(30));
+        }
+        return t;
+    }
 
     /** 内置纹理选择：从 classpath 的 textures 目录弹出选择框 */
     @FXML
     private void onBuiltinTexture() {
-        List<String> names = presetService.scanResourceDir("com/qingframe/textures");
+        List<String> names = scanResourceDir("com/qingframe/textures");
         if (names.isEmpty()) {
             showAlert("未找到内置纹理");
             return;
@@ -1732,18 +2020,16 @@ public class MainController implements Initializable {
 
         javafx.stage.DirectoryChooser outDir = new javafx.stage.DirectoryChooser();
         outDir.setTitle("选择导出目录");
-        File lastDir = exportService.getLastExportDir();
+        File lastDir = getLastExportDir();
         if (lastDir != null) outDir.setInitialDirectory(lastDir);
         File exportDir = outDir.showDialog(previewCanvas.getScene().getWindow());
         if (exportDir == null) return;
-        exportService.saveLastExportDir(exportDir);
+        saveLastExportDir(exportDir);
 
         isExporting = true;
         setExportUI(true);
         progressBar.setVisible(true);
         progressBar.setProgress(0);
-        exportFailNames.clear();
-        exportDegradedNames.clear();
 
         syncModelFromUI();
 
@@ -1753,8 +2039,7 @@ public class MainController implements Initializable {
         for (String p : images) {
             files.add(new File(p));
         }
-        int maxEdge = resolutionToMaxEdge(cbExportResolution.getValue());
-        exportService.exportFiles(files, exportDir, fmt, jpegQuality, cloneTemplate(template), maxEdge, exportListener);
+        exportImagesInParallel(files, exportDir, fmt, jpegQuality);
     }
 
     @FXML
@@ -1939,6 +2224,178 @@ public class MainController implements Initializable {
         return v < lo ? lo : v > hi ? hi : v;
     }
 
+    private TemplateModel createPreset(String name) {
+        TemplateModel t = new TemplateModel();
+        switch (name) {
+            case "极简白框":
+                t.getBaseMargin().setMarginTop(60);
+                t.getBaseMargin().setMarginBottom(60);
+                t.getBaseMargin().setMarginLeft(60);
+                t.getBaseMargin().setMarginRight(60);
+                t.getBaseMargin().setImgScale(1.0);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#ffffff");
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(2);
+                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#333333");
+                break;
+            case "复古胶片":
+                t.getBaseMargin().setMarginTop(100);
+                t.getBaseMargin().setMarginBottom(140);
+                t.getBaseMargin().setImgScale(0.90);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#f5f0e8");
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(4);
+                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#8b7355");
+                t.getLightEffect().setVignetteEnable(1);
+                t.getLightEffect().setVignetteStrength(50);
+                t.getFilmTearConfig().setFilmPerforationEnable(1);
+                t.getFilmTearConfig().setFilmPerforationType("round");
+                t.getFilmTearConfig().setFilmPerforationSize(15);
+                t.getFilmTearConfig().setFilmPerforationSpacing(30);
+                break;
+            case "拍立得":
+                t.getBaseMargin().setMarginBottom(200);
+                t.getBaseMargin().setMarginTop(80);
+                t.getBaseMargin().setMarginLeft(70);
+                t.getBaseMargin().setMarginRight(70);
+                t.getBaseMargin().setImgScale(0.88);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#f0f0f0");
+                break;
+            case "证件照":
+                t.getBaseMargin().setMarginTop(30);
+                t.getBaseMargin().setMarginBottom(30);
+                t.getBaseMargin().setMarginLeft(30);
+                t.getBaseMargin().setMarginRight(30);
+                t.getBaseMargin().setImgScale(1.0);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#ffffff");
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(1);
+                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#cccccc");
+                break;
+            case "电影宽屏":
+                t.getBaseMargin().setMarginTop(120);
+                t.getBaseMargin().setMarginBottom(120);
+                t.getBaseMargin().setMarginLeft(0);
+                t.getBaseMargin().setMarginRight(0);
+                t.getBaseMargin().setImgScale(1.0);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#000000");
+                break;
+            case "无边框":
+                t.getBaseMargin().setMarginTop(0);
+                t.getBaseMargin().setMarginBottom(0);
+                t.getBaseMargin().setMarginLeft(0);
+                t.getBaseMargin().setMarginRight(0);
+                t.getBaseMargin().setImgScale(1.0);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#ffffff");
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(0);
+                break;
+            case "简约白边":
+                t.getBaseMargin().setMarginTop(60);
+                t.getBaseMargin().setMarginBottom(60);
+                t.getBaseMargin().setMarginLeft(60);
+                t.getBaseMargin().setMarginRight(60);
+                t.getBaseMargin().setImgScale(1.0);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#ffffff");
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(2);
+                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#333333");
+                break;
+            case "复古边框":
+                t.getBaseMargin().setMarginTop(80);
+                t.getBaseMargin().setMarginBottom(80);
+                t.getBaseMargin().setMarginLeft(80);
+                t.getBaseMargin().setMarginRight(80);
+                t.getBaseMargin().setImgScale(0.92);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#f5f0e8");
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(6);
+                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#8b7355");
+                break;
+            case "圆角边框":
+                t.getBaseMargin().setMarginTop(60);
+                t.getBaseMargin().setMarginBottom(60);
+                t.getBaseMargin().setMarginLeft(60);
+                t.getBaseMargin().setMarginRight(60);
+                t.getBaseMargin().setImgScale(0.95);
+                t.getCornerConfig().setCornerRadiusAll(250);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#ffffff");
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(2);
+                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#999999");
+                break;
+            case "双线边框":
+                t.getBaseMargin().setMarginTop(80);
+                t.getBaseMargin().setMarginBottom(80);
+                t.getBaseMargin().setMarginLeft(80);
+                t.getBaseMargin().setMarginRight(80);
+                t.getBaseMargin().setImgScale(0.92);
+                // 图层0 是顶层：默认层改造为内层细线
+                LayerBorder inner = t.getLayerList().get(0);
+                inner.getFillConfig().setFillType("transparent");
+                inner.getStrokeConfig().setStrokeWidth(2);
+                inner.getStrokeConfig().setStrokeColorHex("#222222");
+                inner.setMarginTop(6);
+                inner.setMarginBottom(6);
+                inner.setMarginLeft(6);
+                inner.setMarginRight(6);
+                // 底层：外层白底粗线（先画，被内线覆盖）
+                LayerBorder outer = new LayerBorder();
+                outer.getFillConfig().setFillHex("#ffffff");
+                outer.getStrokeConfig().setStrokeWidth(4);
+                outer.getStrokeConfig().setStrokeColorHex("#222222");
+                t.getLayerList().add(outer);
+                break;
+            case "投影边框":
+                // 悬浮相纸风：深灰背景 + 白色相纸 + 大而柔和的投影
+                t.getBaseMargin().setMarginTop(100);
+                t.getBaseMargin().setMarginBottom(100);
+                t.getBaseMargin().setMarginLeft(100);
+                t.getBaseMargin().setMarginRight(100);
+                t.getBaseMargin().setImgScale(0.85);
+                t.getCornerConfig().setCornerRadiusAll(0);
+                t.getCornerConfig().setCornerRadiusTL(0);
+                t.getCornerConfig().setCornerRadiusTR(0);
+                t.getCornerConfig().setCornerRadiusBL(0);
+                t.getCornerConfig().setCornerRadiusBR(0);
+                // 顶层：白色相纸（后画，带大投影）
+                LayerBorder paper = t.getLayerList().get(0);
+                paper.getFillConfig().setFillHex("#ffffff");
+                paper.getStrokeConfig().setStrokeWidth(0);
+                ShadowGlowConfig psc = paper.getShadowGlowConfig();
+                psc.setShadowEnable(1);
+                psc.setShadowOffsetX(8);
+                psc.setShadowOffsetY(8);
+                psc.setShadowBlur(30);
+                psc.setShadowSpread(0);
+                psc.setShadowColorHex("#000000");
+                psc.setShadowOpacity(55);
+                // 底层：深灰背景铺满全画布（负边距扩展到画布边缘）
+                LayerBorder bg = new LayerBorder();
+                bg.getFillConfig().setFillHex("#2a2a2e");
+                bg.getStrokeConfig().setStrokeWidth(0);
+                bg.setMarginTop(-100);
+                bg.setMarginBottom(-100);
+                bg.setMarginLeft(-100);
+                bg.setMarginRight(-100);
+                t.getLayerList().add(bg);
+                break;
+            case "胶片框":
+                t.getBaseMargin().setMarginTop(100);
+                t.getBaseMargin().setMarginBottom(140);
+                t.getBaseMargin().setMarginLeft(80);
+                t.getBaseMargin().setMarginRight(80);
+                t.getBaseMargin().setImgScale(0.90);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#f0ece4");
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(3);
+                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#8b7355");
+                t.getLightEffect().setVignetteEnable(1);
+                t.getLightEffect().setVignetteStrength(40);
+                t.getFilmTearConfig().setFilmPerforationEnable(1);
+                t.getFilmTearConfig().setFilmPerforationType("round");
+                t.getFilmTearConfig().setFilmPerforationSize(12);
+                t.getDecorConfig().setExifAutoText(1);
+                TextStickerConfig.TextLine fline = new TextStickerConfig.TextLine();
+                fline.setText("FUJI FILM | 35mm f/2.0  1/250s  ISO 400");
+                fline.setAlign("bottom");
+                t.getDecorConfig().getTextLines().add(fline);
+                break;
+        }
+        return t;
+    }
 
     private String toHex(Color c) {
         return String.format("#%02x%02x%02x", (int)(c.getRed()*255), (int)(c.getGreen()*255), (int)(c.getBlue()*255));
@@ -1963,6 +2420,218 @@ public class MainController implements Initializable {
         try { return Integer.parseInt(text.trim()); } catch (Exception e) { return def; }
     }
 
+    private WritableImage renderFileOnFxThread(File src, TemplateModel tmpl) throws Exception {
+        BufferedImage awtImg = ImageIO.read(src);
+        if (awtImg == null) throw new IOException("无法读取图片: " + src.getName());
+        ExifReader.ExifData exif = ExifReader.parse(src);
+        if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
+        WritableImage result = renderAwtWithFallback(awtImg, tmpl);
+        if (result == null) {
+            throw new IOException(String.format("渲染结果异常（接近空白），且自动缩放后仍失败：照片 %dx%d",
+                    awtImg.getWidth(), awtImg.getHeight()));
+        }
+        return result;
+    }
+
+    /** 单张导出：渲染空白时逐级缩小重试，直到成功或全部失败 */
+    /** 批量导出：AWT 版本的分级降级（后台线程调用） */
+    private WritableImage renderAwtWithFallback(BufferedImage awt, TemplateModel tmpl) throws Exception {
+        // 超大图先预降级，避免在界面线程上做注定失败的全尺寸渲染
+        BufferedImage target = awt;
+        TemplateModel renderTmpl = tmpl;
+        logExport("原始尺寸: " + awt.getWidth() + "x" + awt.getHeight());
+        if (Math.max(awt.getWidth(), awt.getHeight()) > EXPORT_SAFE_EDGE) {
+            target = downscaleAwtToMaxEdge(awt, EXPORT_SAFE_EDGE);
+            // 模板参数按同一比例缩放，保证导出边框/文字相对照片大小与预览一致
+            renderTmpl = scaleTemplateForExport(tmpl, (double) target.getWidth() / awt.getWidth());
+            logExport("预降级到 " + target.getWidth() + "x" + target.getHeight() + "，模板参数缩放 x"
+                    + String.format("%.2f", (double) target.getWidth() / awt.getWidth()));
+        }
+        WritableImage r = renderAwtScaled(target, awt, renderTmpl);
+        boolean firstBlank = r == null || ImageExportUtil.looksBlank(r);
+        logExport("首轮渲染 " + target.getWidth() + "x" + target.getHeight() + " 空白=" + firstBlank);
+        if (!firstBlank) return r;
+        BufferedImage cur = target;
+        int[] edges = {1800, 1200};
+        for (int edge : edges) {
+            BufferedImage scaled = downscaleAwtToMaxEdge(cur, edge);
+            if (scaled == cur) break;
+            cur = scaled;
+            r = renderAwtScaled(cur, awt, scaleTemplateForExport(tmpl, (double) cur.getWidth() / awt.getWidth()));
+            boolean blank = r == null || ImageExportUtil.looksBlank(r);
+            logExport("降级长边 " + edge + "(" + cur.getWidth() + "x" + cur.getHeight() + ") 渲染空白=" + blank);
+            if (!blank) return r;
+        }
+        return null;
+    }
+
+    /** 按比例缩放模板的全部像素参数（边距/描边/圆角/阴影/文字/胶片效果），用于降级导出保持视觉一致 */
+    private TemplateModel scaleTemplateForExport(TemplateModel src, double s) {
+        TemplateModel t = cloneTemplate(src);
+        BaseMargin m = t.getBaseMargin();
+        m.setMarginTop((int) Math.round(m.getMarginTop() * s));
+        m.setMarginBottom((int) Math.round(m.getMarginBottom() * s));
+        m.setMarginLeft((int) Math.round(m.getMarginLeft() * s));
+        m.setMarginRight((int) Math.round(m.getMarginRight() * s));
+        m.setImgOffsetX((int) Math.round(m.getImgOffsetX() * s));
+        m.setImgOffsetY((int) Math.round(m.getImgOffsetY() * s));
+        m.setBgBlurRadius((int) Math.round(m.getBgBlurRadius() * s));
+
+        for (LayerBorder layer : t.getLayerList()) {
+            layer.setMarginTop((int) Math.round(layer.getMarginTop() * s));
+            layer.setMarginBottom((int) Math.round(layer.getMarginBottom() * s));
+            layer.setMarginLeft((int) Math.round(layer.getMarginLeft() * s));
+            layer.setMarginRight((int) Math.round(layer.getMarginRight() * s));
+            StrokeConfig st = layer.getStrokeConfig();
+            if (st.getStrokeWidth() > 0) {
+                st.setStrokeWidth(Math.max(1, (int) Math.round(st.getStrokeWidth() * s)));
+            }
+            if (st.getStrokeDashArray() != null && !st.getStrokeDashArray().isEmpty()) {
+                List<Double> scaledDashes = new ArrayList<>();
+                for (double d : st.getStrokeDashArray()) scaledDashes.add(d * s);
+                st.setStrokeDashArray(scaledDashes);
+            }
+            st.setStrokeDashOffset(st.getStrokeDashOffset() * s);
+            ShadowGlowConfig sg = layer.getShadowGlowConfig();
+            // 侧投影模式（如“浮影白框”）的模糊值是相对照片的比例系数，
+            // 导出降级时保持原值，阴影长度随照片尺寸同比缩放，视觉与预览一致
+            boolean sideShadow = sg.getSideShadow() == 1;
+            sg.setShadowOffsetX(sg.getShadowOffsetX() * s);
+            sg.setShadowOffsetY(sg.getShadowOffsetY() * s);
+            if (!sideShadow) {
+                sg.setShadowBlur(sg.getShadowBlur() * s);
+            }
+            sg.setShadowSpread(sg.getShadowSpread() * s);
+            sg.setGlowBlur(sg.getGlowBlur() * s);
+            sg.setGlowSpread(sg.getGlowSpread() * s);
+        }
+
+        CornerConfig c = t.getCornerConfig();
+        c.setCornerRadiusAll(c.getCornerRadiusAll() * s);
+        c.setCornerRadiusTL(c.getCornerRadiusTL() * s);
+        c.setCornerRadiusTR(c.getCornerRadiusTR() * s);
+        c.setCornerRadiusBL(c.getCornerRadiusBL() * s);
+        c.setCornerRadiusBR(c.getCornerRadiusBR() * s);
+
+        FilmTearConfig ft = t.getFilmTearConfig();
+        ft.setTearStrength(ft.getTearStrength() * s);
+        ft.setTearDensity(ft.getTearDensity() * s);
+        ft.setFilmPerforationSize(ft.getFilmPerforationSize() * s);
+        ft.setFilmPerforationSpacing(ft.getFilmPerforationSpacing() * s);
+        ft.setDustScratchIntensity((int) Math.round(ft.getDustScratchIntensity() * s));
+        ft.setYellowingStrength((int) Math.round(ft.getYellowingStrength() * s));
+
+        TextStickerConfig dec = t.getDecorConfig();
+        for (TextStickerConfig.TextLine line : dec.getTextLines()) {
+            line.setFontSize(line.getFontSize() * s);
+            line.setX(line.getX() * s);
+            line.setY(line.getY() * s);
+            line.setLetterSpacing(line.getLetterSpacing() * s);
+        }
+        dec.setCornerDecorSize(dec.getCornerDecorSize() * s);
+        t.setParamFontSize((int) Math.round(t.getParamFontSize() * s));
+        return t;
+    }
+
+    /** 渲染指定尺寸图，并按比例同步图标位置/大小（保证降级导出时 Logo 位置与预览一致） */
+    private WritableImage renderAwtScaled(BufferedImage renderImg, BufferedImage origImg, TemplateModel tmpl) throws Exception {
+        double sx = (double) renderImg.getWidth() / origImg.getWidth();
+        double sy = (double) renderImg.getHeight() / origImg.getHeight();
+        engine.setIconRenderScale(sx, sy);
+        try {
+            WritableImage fx = SwingFXUtils.toFXImage(renderImg, null);
+            return renderOnFx(fx, tmpl);
+        } finally {
+            engine.setIconRenderScale(1.0, 1.0);
+        }
+    }
+
+    /** 导出诊断日志：写入用户目录 QingFrameShadow-export.log，用于定位导出失败原因 */
+    private void logExport(String msg) {
+        try {
+            java.io.FileWriter fw = new java.io.FileWriter(
+                    System.getProperty("user.home") + "/QingFrameShadow-export.log", true);
+            fw.write(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "  " + msg + "\n");
+            fw.close();
+        } catch (Exception ignored) {}
+    }
+
+    private WritableImage renderOnFx(WritableImage fx, TemplateModel tmpl) throws Exception {
+        CountDownLatch latch = new CountDownLatch(1);
+        WritableImage[] result = new WritableImage[1];
+        Exception[] err = new Exception[1];
+        Platform.runLater(() -> {
+            try {
+                result[0] = engine.renderBorder(fx, tmpl);
+            } catch (Exception e) {
+                err[0] = e;
+            } finally {
+                latch.countDown();
+            }
+        });
+        latch.await();
+        if (err[0] != null) throw err[0];
+        return result[0];
+    }
+
+    /** 按长边上限缩小 AWT 图像（不超过上限则原样返回） */
+    private BufferedImage downscaleAwtToMaxEdge(BufferedImage awt, int maxEdge) {
+        int longEdge = Math.max(awt.getWidth(), awt.getHeight());
+        if (longEdge <= maxEdge) return awt;
+        double scale = (double) maxEdge / longEdge;
+        int nw = Math.max(1, (int) (awt.getWidth() * scale));
+        int nh = Math.max(1, (int) (awt.getHeight() * scale));
+        BufferedImage scaled = new BufferedImage(nw, nh, BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D g = scaled.createGraphics();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(awt, 0, 0, nw, nh, null);
+        g.dispose();
+        return scaled;
+    }
+
+    /** 按 EXIF 方向旋转图像（与 JavaFX 预览自动应用方向保持一致） */
+    private BufferedImage applyOrientation(BufferedImage img, int orientation) {
+        if (img == null || orientation == 1 || orientation == 0) return img;
+        int w = img.getWidth(), h = img.getHeight();
+        switch (orientation) {
+            case 3:
+            {
+                BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+                for (int y = 0; y < h; y++) {
+                    int[] row = img.getRGB(0, y, w, 1, null, 0, w);
+                    int[] rev = new int[w];
+                    for (int x = 0; x < w; x++) rev[x] = row[w - 1 - x];
+                    out.setRGB(0, h - 1 - y, w, 1, rev, 0, w);
+                }
+                return out;
+            }
+            case 6: {
+                // 顺时针 90°：源 (x,y) -> 目标 (h-1-y, x)
+                BufferedImage out = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
+                for (int y = 0; y < h; y++) {
+                    int[] row = img.getRGB(0, y, w, 1, null, 0, w);
+                    for (int x = 0; x < w; x++) {
+                        out.setRGB(h - 1 - y, x, row[x]);
+                    }
+                }
+                return out;
+            }
+            case 8: {
+                // 逆时针 90°：源 (x,y) -> 目标 (y, w-1-x)
+                BufferedImage out = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
+                for (int y = 0; y < h; y++) {
+                    int[] row = img.getRGB(0, y, w, 1, null, 0, w);
+                    for (int x = 0; x < w; x++) {
+                        out.setRGB(y, w - 1 - x, row[x]);
+                    }
+                }
+                return out;
+            }
+            default:
+                return img;
+        }
+    }
+
     private BufferedImage downscaleIfNeeded(BufferedImage img) {
         int w = img.getWidth();
         int h = img.getHeight();
@@ -1985,7 +2654,7 @@ public class MainController implements Initializable {
             BufferedImage awtImg = ImageIO.read(file);
             if (awtImg == null) return null;
             ExifReader.ExifData exif = ExifReader.parse(file);
-            if (exif != null) awtImg = exportService.applyOrientation(awtImg, exif.orientation);
+            if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
             awtImg = downscaleIfNeeded(awtImg);
             CountDownLatch latch = new CountDownLatch(1);
             Image[] result = new Image[1];
