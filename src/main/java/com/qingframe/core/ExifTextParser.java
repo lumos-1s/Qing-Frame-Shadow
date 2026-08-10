@@ -45,7 +45,9 @@ public class ExifTextParser {
                 putIf(exifData, ifd0, "镜头", TAG_MODEL, "");
             }
 
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            System.err.println("[ExifTextParser] EXIF 信息解析失败: " + e.getMessage());
+        }
 
         return exifData;
     }

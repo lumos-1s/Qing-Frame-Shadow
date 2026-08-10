@@ -669,7 +669,9 @@ public class BorderEngine {
                 gc.setGlobalAlpha(sticker.getOpacity() / 100.0);
                 gc.drawImage(simg, -simg.getWidth() * sticker.getScale() / 2, -simg.getHeight() * sticker.getScale() / 2);
                 gc.restore();
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                System.err.println("[BorderEngine] 贴纸绘制失败: " + e.getMessage());
+            }
         }
 
         // Corner decorations
@@ -862,7 +864,9 @@ public class BorderEngine {
                     gc.setGlobalAlpha(sticker.getOpacity() / 100.0);
                     gc.drawImage(simg, -simg.getWidth() * sticker.getScale() / 2, -simg.getHeight() * sticker.getScale() / 2);
                     gc.restore();
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    System.err.println("[BorderEngine] 贴纸绘制失败: " + e.getMessage());
+                }
             }
 
             // EXIF auto text at canvas bottom center (no black bar)

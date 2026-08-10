@@ -17,7 +17,9 @@ public class LogoManager {
         if (CACHE_FILE.exists()) {
             try {
                 cachedLogo = ImageIO.read(CACHE_FILE);
-            } catch (IOException ignored) {}
+            } catch (IOException e) {
+                System.err.println("[LogoManager] 读取自定义 Logo 缓存失败: " + e.getMessage());
+            }
         }
         return cachedLogo;
     }
@@ -26,7 +28,9 @@ public class LogoManager {
         cachedLogo = img;
         try {
             ImageIO.write(img, "PNG", CACHE_FILE);
-        } catch (IOException ignored) {}
+        } catch (IOException e) {
+            System.err.println("[LogoManager] 保存自定义 Logo 缓存失败: " + e.getMessage());
+        }
     }
 
     public static synchronized BufferedImage get() {
@@ -37,7 +41,9 @@ public class LogoManager {
         cachedLogo = null;
         try {
             Files.deleteIfExists(CACHE_FILE.toPath());
-        } catch (IOException ignored) {}
+        } catch (IOException e) {
+            System.err.println("[LogoManager] 删除自定义 Logo 缓存失败: " + e.getMessage());
+        }
     }
 
     public static synchronized boolean hasCustom() {

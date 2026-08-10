@@ -89,7 +89,9 @@ public class ExportService {
                 File f = new File(p);
                 if (f.isDirectory()) return f;
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            System.err.println("[ExportService] 读取上次导出目录失败: " + e.getMessage());
+        }
         return null;
     }
 
@@ -98,7 +100,9 @@ public class ExportService {
         if (dir == null) return;
         try {
             Files.writeString(Paths.get(EXPORT_SETTINGS_FILE), dir.getAbsolutePath(), StandardCharsets.UTF_8);
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            System.err.println("[ExportService] 保存导出目录设置失败: " + e.getMessage());
+        }
     }
 
     /** 扫描目录中 *_bordered_NNN.ext 文件，返回下一个编号（跨会话不重复） */
@@ -115,7 +119,9 @@ public class ExportService {
                     String numPart = name.substring(idx + suffix.length(), name.length() - lowerExt.length() - 1);
                     try {
                         max = Math.max(max, Integer.parseInt(numPart));
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                        // 忽略无法解析的编号片段，其余文件仍正常参与编号统计
+                    }
                 }
             }
         }
@@ -406,6 +412,8 @@ public class ExportService {
                     System.getProperty("user.home") + "/QingFrameShadow-export.log", true);
             fw.write(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "  " + msg + "\n");
             fw.close();
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            System.err.println("[ExportService] 写入导出日志失败: " + e.getMessage());
+        }
     }
 }

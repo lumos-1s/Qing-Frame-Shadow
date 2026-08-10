@@ -64,7 +64,9 @@ public class IconManager {
         if (src.startsWith("file:") || src.startsWith("http")) {
             try {
                 img = new Image(src);
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                System.err.println("[IconManager] 图片加载失败: " + src + " - " + e.getMessage());
+            }
         }
         if (img != null) imageCache.put(src, img);
         return img;

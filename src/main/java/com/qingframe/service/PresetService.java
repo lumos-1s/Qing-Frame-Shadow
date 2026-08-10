@@ -73,7 +73,9 @@ public class PresetService {
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            System.err.println("[PresetService] 扫描预设目录失败: " + e.getMessage());
+        }
         Collections.sort(names);
         return names;
     }
