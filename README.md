@@ -2,7 +2,11 @@
 
 一款基于 JavaFX 的桌面照片边框编辑工具：为照片一键添加白边、EXIF 参数水印、相机品牌 Logo、纹理与光影效果，支持批量导出高清原图。
 
-![界面预览占位：放入 images/screenshot.png 后在此展示](images/screenshot.png)
+## 界面预览
+
+| 主界面 | 边框效果 |
+| --- | --- |
+| ![主界面](images/screenshot.png) | ![边框效果](images/screenshot2.png) |
 
 ## ✨ 功能特性
 
