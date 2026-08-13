@@ -419,15 +419,28 @@ public class BorderEngine {
         double size = config.getFilmPerforationSize();
         double spacing = config.getFilmPerforationSpacing();
         boolean isRound = "round".equals(config.getFilmPerforationType());
+        boolean horizontal = "hstrip".equals(config.getFilmPerforationType());
         double m = 15;
         gc.setFill(Color.WHITE);
-        double y = m;
-        while (y + size <= ch - m) {
-            for (double xv : new double[]{m, cw - m - size}) {
-                if (isRound) gc.fillOval(xv, y, size, size);
-                else gc.fillRect(xv, y, size, size);
+        if (horizontal) {
+            // 经典胶片：上下两条轨道上的方形齿孔水平排列
+            double yTop = m;
+            double yBottom = ch - m - size;
+            double x = m;
+            while (x + size <= cw - m) {
+                gc.fillRect(x, yTop, size, size);
+                gc.fillRect(x, yBottom, size, size);
+                x += size + spacing;
             }
-            y += size + spacing;
+        } else {
+            double y = m;
+            while (y + size <= ch - m) {
+                for (double xv : new double[]{m, cw - m - size}) {
+                    if (isRound) gc.fillOval(xv, y, size, size);
+                    else gc.fillRect(xv, y, size, size);
+                }
+                y += size + spacing;
+            }
         }
     }
 
@@ -669,9 +682,7 @@ public class BorderEngine {
                 gc.setGlobalAlpha(sticker.getOpacity() / 100.0);
                 gc.drawImage(simg, -simg.getWidth() * sticker.getScale() / 2, -simg.getHeight() * sticker.getScale() / 2);
                 gc.restore();
-            } catch (Exception e) {
-                System.err.println("[BorderEngine] 贴纸绘制失败: " + e.getMessage());
-            }
+            } catch (Exception ignored) {}
         }
 
         // Corner decorations
@@ -687,11 +698,11 @@ public class BorderEngine {
             }
         }
         
-        // EXIF watermark bar at bottom
-        if (decor.getExifAutoText() == 1 && !decor.getTextLines().isEmpty()) {
+        // EXIF watermark bar at bottom（只取底部对齐的参数行，避免顶部胶片名重复进入黑条）
+        if (decor.getExifAutoText() == 1) {
             String exifText = "";
             for (TextStickerConfig.TextLine l : decor.getTextLines()) {
-                if (l.getText() != null && !l.getText().isEmpty()) {
+                if (l.getText() != null && !l.getText().isEmpty() && "bottom".equals(l.getAlign())) {
                     exifText = l.getText();
                     break;
                 }
@@ -778,34 +789,7 @@ public class BorderEngine {
         double drawY = cardY + (cardH - drawH) / 2;
 
         // Draw image with rounded corners and soft shadow (no white fill layer)
-        // Step 1: render clipped image onto temp canvas, snapshot to WritableImage
-        Canvas tempCanvas = new Canvas(drawW, drawH);
-        GraphicsContext tgc = tempCanvas.getGraphicsContext2D();
-        tgc.save();
-        tgc.beginPath();
-        tgc.moveTo(prTL, 0);
-        tgc.lineTo(drawW - prTR, 0);
-        tgc.quadraticCurveTo(drawW, 0, drawW, prTR);
-        tgc.lineTo(drawW, drawH - prBR);
-        tgc.quadraticCurveTo(drawW, drawH, drawW - prBR, drawH);
-        tgc.lineTo(prBL, drawH);
-        tgc.quadraticCurveTo(0, drawH, 0, drawH - prBL);
-        tgc.lineTo(0, prTL);
-        tgc.quadraticCurveTo(0, 0, prTL, 0);
-        tgc.closePath();
-        tgc.clip();
-        tgc.drawImage(originImg, 0, 0, drawW, drawH);
-        tgc.restore();
-        SnapshotParameters sp = new SnapshotParameters();
-        sp.setFill(Color.TRANSPARENT);
-        WritableImage clippedImg = tempCanvas.snapshot(sp, null);
-
-        // Step 2: draw clipped image on main canvas with DropShadow
-        gc.save();
-        DropShadow imgShadow = new DropShadow();
-        imgShadow.setBlurType(BlurType.GAUSSIAN);
-        // 卡片阴影：优先使用图层中启用的阴影参数（可在“光影”面板调节）；
-        // 未启用时保持默认柔和阴影（背景模糊卡片默认带阴影）
+        // 阴影优先使用图层中启用的阴影参数（可在“光影”面板调节）；未启用时保持默认柔和阴影
         ShadowGlowConfig cardShadow = null;
         if (template != null) {
             for (LayerBorder layer : template.getLayerList()) {
@@ -816,6 +800,8 @@ public class BorderEngine {
                 }
             }
         }
+        DropShadow imgShadow = new DropShadow();
+        imgShadow.setBlurType(BlurType.GAUSSIAN);
         if (cardShadow != null) {
             imgShadow.setRadius(cardShadow.getShadowBlur());
             imgShadow.setOffsetX(cardShadow.getShadowOffsetX());
@@ -829,12 +815,21 @@ public class BorderEngine {
             imgShadow.setSpread(0);
             imgShadow.setColor(Color.rgb(0, 0, 0, 0.30));
         }
+
+        // Step 1: 圆角路径填充 + DropShadow 生成柔和投影（避免超大图 snapshot 失败导致照片层丢失）
+        gc.save();
         gc.setEffect(imgShadow);
-        gc.drawImage(clippedImg, drawX, drawY, drawW, drawH);
+        gc.setFill(Color.WHITE);
+        buildRoundedPath(gc, drawX, drawY, drawW, drawH, prTL, prTR, prBL, prBR);
+        gc.fill();
         gc.restore();
 
-        // Step 3: draw same clipped image on top (no shadow) — covers inner shadow
-        gc.drawImage(clippedImg, drawX, drawY, drawW, drawH);
+        // Step 2: 清晰照片（圆角裁剪 + 直接绘制，大图稳定且内存友好）
+        gc.save();
+        buildRoundedPath(gc, drawX, drawY, drawW, drawH, prTL, prTR, prBL, prBR);
+        gc.clip();
+        gc.drawImage(originImg, drawX, drawY, drawW, drawH);
+        gc.restore();
 
         // 7. Decorations (custom text, stickers, EXIF at bottom)
         TextStickerConfig decor = template.getDecorConfig();
@@ -864,9 +859,7 @@ public class BorderEngine {
                     gc.setGlobalAlpha(sticker.getOpacity() / 100.0);
                     gc.drawImage(simg, -simg.getWidth() * sticker.getScale() / 2, -simg.getHeight() * sticker.getScale() / 2);
                     gc.restore();
-                } catch (Exception e) {
-                    System.err.println("[BorderEngine] 贴纸绘制失败: " + e.getMessage());
-                }
+                } catch (Exception ignored) {}
             }
 
             // EXIF auto text at canvas bottom center (no black bar)

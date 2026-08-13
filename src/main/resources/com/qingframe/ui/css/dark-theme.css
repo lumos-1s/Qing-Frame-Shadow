@@ -1,522 +1,668 @@
-/* ═══════════════════════════════════════════════
-   清框影 - 深色主题 v2.1（对比度与质感优化）
-   背景 #1B1C1F | 面板 #26282C | 主色 #3489E8
-   ═══════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   清框影 - 深色主题 v3.0（高级质感版）
+   设计系统：深邃炭黑 · 柔和高亮蓝 · 统一 8px 圆角
+   优化点：设计令牌化、控件精致化、层次感、统一间距
+   ═══════════════════════════════════════════════════════════════ */
 
 .root {
-    -fx-base: #1B1C1F;
-    -fx-background: #1B1C1F;
-    -fx-control-inner-background: #26282C;
-    -fx-accent: #3489E8;
-    -fx-focus-color: #3489E8;
-    -fx-text-fill: #E5E5E5;
-    -fx-text-background-color: #E5E5E5;
-    -fx-font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-    -fx-font-size: 12px;
+    /* ── 设计令牌 ── */
+    -qfx-bg:            #14161B;              /* 应用背景        */
+    -qfx-surface:       #1D2026;              /* 面板 / 卡片     */
+    -qfx-surface-alt:   #191C22;              /* 次级面板        */
+    -qfx-primary:       #5B8DEF;              /* 主色（高亮蓝）  */
+    -qfx-primary-hover: #6E9CF2;
+    -qfx-primary-press: #4A7DE0;
+    -qfx-primary-soft:  rgba(91, 141, 239, 0.16);
+    -qfx-text:          #E6E9EF;              /* 主文字          */
+    -qfx-text-2:        #A8B0BD;              /* 次级文字        */
+    -qfx-text-3:        #6F7787;              /* 弱化文字        */
+    -qfx-border:        #2A2F39;              /* 边框            */
+    -qfx-border-strong: #3A4150;              /* 强调边框        */
+    -qfx-danger:        #F87171;
+    -qfx-warning:       #F0A24C;
+    -qfx-success:       #34D399;
+    -qfx-radius-s:      6px;
+    -qfx-radius-m:      8px;
+    -qfx-radius-l:      12px;
+
+    -fx-base: -qfx-bg;
+    -fx-background: -qfx-bg;
+    -fx-control-inner-background: -qfx-surface;
+    -fx-accent: -qfx-primary;
+    -fx-focus-color: -qfx-primary;
+    -fx-text-fill: -qfx-text;
+    -fx-text-background-color: -qfx-text;
+    -fx-font-family: "Microsoft YaHei UI", "Segoe UI", "PingFang SC", sans-serif;
+    -fx-font-size: 12.5px;
 }
 
-/* ── SplitPane ── */
-.split-pane {
-    -fx-background-color: #1B1C1F;
-    -fx-border-color: transparent;
-}
-.split-pane > .split-pane-divider {
-    -fx-background-color: #333333;
-    -fx-padding: 0 1px;
-}
-
-/* ── TabPane ── */
-.tab-pane {
-    -fx-background-color: #26282C;
-    -fx-tab-border-color: #333333;
-}
-.tab-pane > .tab-header-area {
-    -fx-padding: 0;
-}
-.tab-pane > .tab-header-area > .tab-header-background {
-    -fx-background-color: #202125;
-    -fx-border-color: transparent transparent #333333 transparent;
-}
-.tab {
-    -fx-background-color: #202125;
-    -fx-text-fill: #A0A0A0;
-    -fx-padding: 8 14 6 14;
-    -fx-background-radius: 0;
-    -fx-border-color: transparent;
-    -fx-font-size: 12px;
+/* ── 全局光标 ── */
+.button, .toggle-button, .combo-box, .check-box, .radio-button,
+.hyperlink, .slider .thumb, .list-cell, .tab {
     -fx-cursor: hand;
 }
+
+/* ═══════════════ SplitPane ═══════════════ */
+.split-pane {
+    -fx-background-color: -qfx-bg;
+    -fx-border-color: transparent;
+    -fx-padding: 0;
+}
+.split-pane > .split-pane-divider {
+    -fx-background-color: transparent;
+    -fx-padding: 0 1px;
+}
+.split-pane > .split-pane-divider:hover {
+    -fx-background-color: -qfx-primary-soft;
+}
+
+/* ═══════════════ TabPane（右侧面板） ═══════════════ */
+.tab-pane {
+    -fx-background-color: -qfx-surface;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.35), 16, 0, -2, 0);
+}
+.tab-pane > .tab-header-area {
+    -fx-padding: 0 8 0 8;
+}
+.tab-pane > .tab-header-area > .tab-header-background {
+    -fx-background-color: -qfx-surface-alt;
+    -fx-border-color: transparent transparent -qfx-border transparent;
+    -fx-border-width: 0 0 1 0;
+}
+.tab {
+    -fx-background-color: transparent;
+    -fx-text-fill: -qfx-text-2;
+    -fx-padding: 9 12 8 12;
+    -fx-background-radius: 8px 8px 0 0;
+    -fx-border-color: transparent;
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+}
 .tab:hover {
-    -fx-background-color: #2A2A2A;
+    -fx-background-color: rgba(91, 141, 239, 0.10);
+    -fx-text-fill: -qfx-text;
 }
 .tab:selected {
-    -fx-background-color: #26282C;
-    -fx-text-fill: #5FA3EE;
-    -fx-border-color: transparent transparent #3489E8 transparent;
+    -fx-background-color: -qfx-surface;
+    -fx-text-fill: -qfx-primary;
+    -fx-font-weight: bold;
+    -fx-border-color: transparent transparent -qfx-primary transparent;
     -fx-border-width: 0 0 2 0;
 }
-.tab .tab-label {
-    -fx-text-fill: inherit;
-    -fx-font-weight: normal;
-}
+.tab .tab-label { -fx-text-fill: inherit; }
 
-/* ── 左侧侧边栏 ── */
+/* ═══════════════ 左侧侧边栏 ═══════════════ */
 .sidebar-scroll {
-    -fx-background-color: #202125;
-    -fx-border-color: transparent #333333 transparent transparent;
+    -fx-background-color: -qfx-surface-alt;
+    -fx-border-color: transparent -qfx-border transparent transparent;
     -fx-border-width: 0 1 0 0;
 }
-.sidebar-scroll > .viewport {
-    -fx-background-color: #202125;
-}
+.sidebar-scroll > .viewport { -fx-background-color: -qfx-surface-alt; }
 .sidebar-panel {
-    -fx-background-color: #202125;
-    -fx-padding: 6 0;
-    -fx-spacing: 1;
+    -fx-background-color: -qfx-surface-alt;
+    -fx-padding: 10 8 16 8;
+    -fx-spacing: 6;
 }
 
-/* TitledPane 折叠分组 */
 .titled-pane {
     -fx-background-color: transparent;
-    -fx-text-fill: #A0A0A0;
-    -fx-font-size: 11px;
-    -fx-font-weight: bold;
+    -fx-text-fill: -qfx-text-2;
+    -fx-font-size: 12px;
 }
 .titled-pane > .title {
     -fx-background-color: transparent;
-    -fx-padding: 8 12 4 12;
-    -fx-cursor: hand;
-    -fx-border-color: transparent transparent #333333 transparent;
-    -fx-border-width: 0 0 1 0;
+    -fx-padding: 8 10 6 10;
+    -fx-background-radius: -qfx-radius-m;
+}
+.titled-pane > .title:hover {
+    -fx-background-color: rgba(91, 141, 239, 0.08);
+}
+.titled-pane > .title > .arrow-button {
+    -fx-padding: 0 4 0 0;
 }
 .titled-pane > .title > .arrow-button .arrow {
-    -fx-background-color: #666666;
+    -fx-background-color: -qfx-text-3;
+    -fx-shape: "M6 9l6 6 6-6";
+    -fx-scale-shape: false;
+    -fx-padding: 0;
+    -fx-pref-width: 10;
+    -fx-pref-height: 10;
 }
+.titled-pane > .title > .text {
+    -fx-font-weight: bold;
+    -fx-fill: -qfx-text-2;
+}
+.titled-pane:expanded > .title > .text { -fx-fill: -qfx-text; }
 .titled-pane > .content {
     -fx-background-color: transparent;
-    -fx-padding: 2 0;
+    -fx-padding: 4 0 6 0;
     -fx-border-color: transparent;
 }
 
-/* 侧边栏按钮组 */
 .sidebar-btn-group {
-    -fx-spacing: 1;
-    -fx-padding: 2 6;
+    -fx-spacing: 2;
+    -fx-padding: 2 4;
 }
 
-/* 侧边栏按钮 */
 .sidebar-btn {
     -fx-background-color: transparent;
-    -fx-text-fill: #CCCCCC;
-    -fx-font-size: 12px;
-    -fx-padding: 6 10 6 28;
-    -fx-background-radius: 6px;
-    -fx-cursor: hand;
+    -fx-text-fill: -qfx-text-2;
+    -fx-font-size: 12.5px;
+    -fx-padding: 7 10 7 10;
+    -fx-background-radius: 8px;
     -fx-alignment: center-left;
     -fx-border-color: transparent;
-    -fx-border-width: 0;
-    -fx-border-radius: 6px;
+    -fx-border-width: 0 0 0 3;
+    -fx-border-radius: 8px;
 }
 .sidebar-btn:hover {
-    -fx-background-color: #333333;
-    -fx-text-fill: #FFFFFF;
+    -fx-background-color: rgba(91, 141, 239, 0.10);
+    -fx-text-fill: -qfx-text;
 }
 .sidebar-btn:selected, .sidebar-btn:pressed {
-    -fx-background-color: rgba(52, 137, 232, 0.18);
-    -fx-text-fill: #7BB4F2;
-    -fx-border-color: transparent;
-    -fx-border-width: 0;
-    -fx-border-radius: 6px;
-    -fx-background-radius: 6px;
+    -fx-background-color: -qfx-primary-soft;
+    -fx-text-fill: #8FB6F5;
+    -fx-font-weight: 600;
+    -fx-border-color: transparent transparent transparent -qfx-primary;
+    -fx-border-width: 0 0 0 3;
 }
-
-/* 图标占位（用伪元素模拟） */
 .sidebar-btn .icon {
     -fx-font-size: 13px;
-    -fx-text-fill: #8C8C8C;
-    -fx-padding: 0 6 0 0;
+    -fx-text-fill: -qfx-text-3;
+    -fx-padding: 0 7 0 0;
 }
+.sidebar-btn:selected .icon { -fx-text-fill: -qfx-primary; }
 
-/* 分组标题 */
+.sb-icon {
+    -fx-fill: transparent;
+    -fx-stroke: -qfx-text-3;
+    -fx-stroke-width: 1.6;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+.titled-pane > .title:hover .sb-icon { -fx-stroke: -qfx-primary; }
+.titled-pane:expanded > .title .sb-icon { -fx-stroke: -qfx-text-2; }
+.sidebar-btn:hover .sb-icon { -fx-stroke: -qfx-primary; }
+.sidebar-btn:selected .sb-icon { -fx-stroke: -qfx-primary; }
+
 .sidebar-section-title {
-    -fx-font-size: 11px;
-    -fx-text-fill: #8C8C8C;
-    -fx-padding: 12 12 3 12;
+    -fx-font-size: 10.5px;
+    -fx-text-fill: -qfx-text-3;
+    -fx-padding: 14 12 4 12;
     -fx-font-weight: bold;
-    -fx-text-transform: uppercase;
+    -fx-letter-spacing: 0.8px;
 }
 
-/* ── 顶部工具栏 ── */
+/* ═══════════════ 顶部工具栏 ═══════════════ */
 .tool-bar {
-    -fx-background-color: #1B1C1F;
-    -fx-border-color: transparent transparent #333333 transparent;
-    -fx-padding: 4 8;
+    -fx-background-color: -qfx-surface;
+    -fx-border-color: transparent transparent -qfx-border transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 6 12;
     -fx-spacing: 0;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25), 10, 0, 0, 1);
 }
 .toolbar-group {
-    -fx-spacing: 4;
-    -fx-padding: 0 8;
+    -fx-spacing: 5;
+    -fx-padding: 0 10;
     -fx-alignment: center-left;
 }
 .toolbar-separator {
-    -fx-background-color: #333333;
+    -fx-background-color: -qfx-border;
     -fx-pref-width: 1;
-    -fx-pref-height: 24;
+    -fx-pref-height: 22;
 }
 
-/* 工具栏按钮 */
 .toolbar-btn {
     -fx-background-color: transparent;
-    -fx-text-fill: #BBBBBB;
-    -fx-font-size: 11px;
-    -fx-padding: 4 10;
-    -fx-background-radius: 6px;
-    -fx-cursor: hand;
+    -fx-text-fill: -qfx-text-2;
+    -fx-font-size: 12px;
+    -fx-padding: 5 10;
+    -fx-background-radius: 8px;
     -fx-border-color: transparent;
 }
 .toolbar-btn:hover {
-    -fx-background-color: #333333;
-    -fx-text-fill: #FFFFFF;
+    -fx-background-color: -qfx-surface-alt;
+    -fx-text-fill: -qfx-text;
+    -fx-border-color: -qfx-border;
+    -fx-border-radius: 8px;
 }
 .toolbar-btn:pressed {
-    -fx-background-color: #404040;
+    -fx-background-color: -qfx-primary-soft;
 }
 
 .toolbar-combo {
-    -fx-font-size: 11px;
-    -fx-background-color: #2A2A2A;
-    -fx-border-color: #444444;
-    -fx-border-radius: 4px;
-    -fx-background-radius: 4px;
-    -fx-text-fill: #BBBBBB;
+    -fx-font-size: 12px;
+    -fx-background-color: -qfx-surface;
+    -fx-border-color: -qfx-border;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
 }
 
-/* 导出按钮（强调） */
 .toolbar-btn-primary {
-    -fx-background-color: #3489E8;
+    -fx-background-color: linear-gradient(to bottom, #6E9CF2, #4A7DE0);
     -fx-text-fill: #FFFFFF;
-    -fx-font-size: 11px;
-    -fx-padding: 4 14;
-    -fx-background-radius: 6px;
-    -fx-cursor: hand;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-padding: 5 16;
+    -fx-background-radius: 8px;
+    -fx-effect: dropshadow(gaussian, rgba(74, 125, 224, 0.40), 12, 0, 0, 3);
 }
 .toolbar-btn-primary:hover {
-    -fx-background-color: #4A9AF0;
+    -fx-background-color: linear-gradient(to bottom, #7EA9F5, #5B8DEF);
+    -fx-effect: dropshadow(gaussian, rgba(74, 125, 224, 0.55), 16, 0, 0, 4);
+}
+.toolbar-btn-primary:pressed {
+    -fx-background-color: linear-gradient(to bottom, #3D6BD6, #3D6BD6);
+    -fx-effect: dropshadow(gaussian, rgba(74, 125, 224, 0.30), 6, 0, 0, 2);
 }
 
-/* 重置按钮（橙色警告色） */
 .toolbar-btn-warning {
     -fx-background-color: transparent;
-    -fx-text-fill: #E8963C;
-    -fx-font-size: 11px;
-    -fx-padding: 4 10;
-    -fx-background-radius: 6px;
-    -fx-cursor: hand;
-    -fx-border-color: #E8963C;
-    -fx-border-radius: 6px;
+    -fx-text-fill: -qfx-warning;
+    -fx-font-size: 12px;
+    -fx-padding: 5 10;
+    -fx-background-radius: 8px;
+    -fx-border-color: rgba(240, 162, 76, 0.40);
+    -fx-border-radius: 8px;
 }
 .toolbar-btn-warning:hover {
-    -fx-background-color: rgba(232, 150, 60, 0.15);
+    -fx-background-color: rgba(240, 162, 76, 0.12);
+    -fx-border-color: -qfx-warning;
 }
 
-/* ── 预览区 ── */
+.toolbar-zoom-input {
+    -fx-pref-width: 52px;
+    -fx-font-size: 11.5px;
+    -fx-background-radius: 8px;
+    -fx-border-radius: 8px;
+}
+
+/* ═══════════════ 预览区 ═══════════════ */
 .preview-pane {
-    -fx-background-color: #1B1C1F;
+    -fx-background-color:
+        linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        #17191E;
+    -fx-background-size: 24px 24px;
+    -fx-background-repeat: repeat;
     -fx-border-color: transparent;
 }
 
-/* 空白占位 */
-.placeholder-container {
-    -fx-alignment: center;
-}
+.placeholder-container { -fx-alignment: center; }
 .placeholder-text {
-    -fx-text-fill: #8C8C8C;
+    -fx-text-fill: -qfx-text-2;
     -fx-font-size: 14px;
 }
 .placeholder-icon {
     -fx-fill: transparent;
-    -fx-stroke: #5A5A5A;
-    -fx-stroke-width: 2;
-    -fx-stroke-line-cap: round;
-    -fx-stroke-line-join: round;
-}
-
-/* ── 统一图标系统（线性 SVG） ── */
-.ui-icon {
-    -fx-fill: transparent;
-    -fx-stroke: #BBBBBB;
+    -fx-stroke: -qfx-text-3;
     -fx-stroke-width: 1.8;
     -fx-stroke-line-cap: round;
     -fx-stroke-line-join: round;
 }
-.toolbar-btn:hover .ui-icon { -fx-stroke: #FFFFFF; }
+
+/* ═══════════════ 统一图标系统（线性 SVG） ═══════════════ */
+.ui-icon {
+    -fx-fill: transparent;
+    -fx-stroke: -qfx-text-2;
+    -fx-stroke-width: 1.7;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+.toolbar-btn:hover .ui-icon { -fx-stroke: -qfx-primary; }
 .toolbar-btn-primary .ui-icon { -fx-stroke: #FFFFFF; }
-.toolbar-btn-warning .ui-icon { -fx-stroke: #E8963C; }
-.toolbar-btn-warning:hover .ui-icon { -fx-stroke: #F0A85A; }
-.tab .ui-icon { -fx-stroke: #A0A0A0; }
-.tab:hover .ui-icon { -fx-stroke: #CCCCCC; }
-.tab:selected .ui-icon { -fx-stroke: #5FA3EE; }
+.toolbar-btn-warning .ui-icon { -fx-stroke: -qfx-warning; }
+.toolbar-btn-warning:hover .ui-icon { -fx-stroke: #F5B96E; }
+.tab .ui-icon { -fx-stroke: -qfx-text-2; }
+.tab:hover .ui-icon { -fx-stroke: -qfx-text; }
+.tab:selected .ui-icon { -fx-stroke: -qfx-primary; }
 .button .ui-icon { -fx-stroke: #FFFFFF; }
-.btn-secondary .ui-icon { -fx-stroke: #BBBBBB; }
-.btn-secondary:hover .ui-icon { -fx-stroke: #FFFFFF; }
-.toggle-button .ui-icon { -fx-stroke: #999999; }
+.btn-secondary .ui-icon { -fx-stroke: -qfx-text-2; }
+.btn-secondary:hover .ui-icon { -fx-stroke: -qfx-primary; }
+.toggle-button .ui-icon { -fx-stroke: -qfx-text-2; }
 .toggle-button:selected .ui-icon { -fx-stroke: #FFFFFF; }
 
-/* ── 右侧面板 ── */
+/* ═══════════════ 右侧参数面板 ═══════════════ */
 .settings-panel {
-    -fx-background-color: #26282C;
-    -fx-padding: 10;
-    -fx-spacing: 6;
+    -fx-background-color: -qfx-surface;
+    -fx-padding: 14;
+    -fx-spacing: 8;
 }
-
 .settings-panel .label {
-    -fx-text-fill: #CCCCCC;
+    -fx-text-fill: -qfx-text-2;
     -fx-font-size: 12px;
 }
 
-/* 参数模块分组标题 */
 .param-group-title {
-    -fx-text-fill: #A0A0A0;
-    -fx-font-size: 12px;
+    -fx-text-fill: -qfx-text;
+    -fx-font-size: 12.5px;
     -fx-font-weight: bold;
-    -fx-padding: 12 0 4 0;
+    -fx-padding: 14 0 6 0;
 }
 .param-group-separator {
-    -fx-background-color: #333333;
+    -fx-background-color: -qfx-border;
     -fx-pref-height: 1;
-    -fx-padding: 4 0;
+    -fx-padding: 3 0;
 }
 
-/* 核心参数加粗 */
 .param-primary .label {
     -fx-font-weight: bold;
-    -fx-text-fill: #E5E5E5;
+    -fx-text-fill: -qfx-text;
 }
-
-/* 次要参数淡化 */
 .param-secondary .label {
-    -fx-text-fill: #9C9C9C;
+    -fx-text-fill: -qfx-text-3;
     -fx-font-size: 11px;
 }
 
-/* ── 控件统一样式 ── */
+/* 参数面板 GridPane 标签统一宽度，保证不同分组间对齐 */
+.settings-panel .grid-pane .label {
+    -fx-min-width: 38px;
+    -fx-alignment: center-left;
+}
+
+/* ═══════════════ 输入控件 ═══════════════ */
 .text-field, .combo-box, .color-picker {
-    -fx-background-color: #333333;
-    -fx-text-fill: #E5E5E5;
-    -fx-border-color: #444444;
-    -fx-border-radius: 4px;
-    -fx-background-radius: 4px;
-    -fx-padding: 4 8;
+    -fx-background-color: -qfx-surface;
+    -fx-text-fill: -qfx-text;
+    -fx-border-color: -qfx-border-strong;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 5 10;
     -fx-font-size: 12px;
 }
-.text-field:focused, .combo-box:focused {
-    -fx-border-color: #3489E8;
+.text-field:hover, .combo-box:hover {
+    -fx-border-color: #4A5264;
+}
+.text-field:focused, .combo-box:focused, .color-picker:focused {
+    -fx-border-color: -qfx-primary;
+    -fx-effect: dropshadow(gaussian, rgba(91, 141, 239, 0.25), 8, 0, 0, 0);
 }
 .combo-box > .list-cell {
-    -fx-background-color: #333333;
-    -fx-text-fill: #E5E5E5;
+    -fx-background-color: transparent;
+    -fx-text-fill: -qfx-text;
+}
+.combo-box > .arrow-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0 6 0 0;
+}
+.combo-box > .arrow-button > .arrow {
+    -fx-background-color: -qfx-text-3;
 }
 .combo-box-popup > .list-view {
-    -fx-background-color: #333333;
-    -fx-border-color: #444444;
+    -fx-background-color: -qfx-surface;
+    -fx-border-color: -qfx-border-strong;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 16, 0, 0, 5);
 }
 .combo-box-popup > .list-view .list-cell {
-    -fx-background-color: #333333;
-    -fx-text-fill: #E5E5E5;
+    -fx-background-color: -qfx-surface;
+    -fx-text-fill: -qfx-text;
+    -fx-padding: 7 12;
 }
 .combo-box-popup > .list-view .list-cell:hover {
-    -fx-background-color: #444444;
+    -fx-background-color: -qfx-primary-soft;
+    -fx-text-fill: -qfx-primary;
 }
 .combo-box-popup > .list-view .list-cell:selected {
-    -fx-background-color: #3489E8;
+    -fx-background-color: -qfx-primary;
+    -fx-text-fill: #FFFFFF;
 }
 
-/* 滑块 */
+/* ── 滑块 ── */
 .slider .track {
-    -fx-background-color: #444444;
+    -fx-background-color: #343A46;
     -fx-background-radius: 3px;
-    -fx-pref-height: 4px;
+    -fx-pref-height: 5px;
 }
 .slider .thumb {
-    -fx-background-color: #3489E8;
-    -fx-background-radius: 10px;
-    -fx-pref-width: 14px;
-    -fx-pref-height: 14px;
-    -fx-effect: dropshadow(gaussian, rgba(52,137,232,0.3), 4, 0, 0, 1);
+    -fx-background-color: -qfx-surface;
+    -fx-background-radius: 50%;
+    -fx-pref-width: 15px;
+    -fx-pref-height: 15px;
+    -fx-border-color: -qfx-primary;
+    -fx-border-width: 2;
+    -fx-border-radius: 50%;
+    -fx-effect: dropshadow(gaussian, rgba(91, 141, 239, 0.40), 6, 0, 0, 1);
 }
 .slider .thumb:hover {
-    -fx-background-color: #4A9AF0;
+    -fx-background-color: -qfx-primary-soft;
 }
 
-/* 复选框 */
+/* ── 复选框 ── */
 .check-box {
-    -fx-text-fill: #CCCCCC;
+    -fx-text-fill: -qfx-text-2;
     -fx-font-size: 12px;
 }
 .check-box .box {
-    -fx-background-color: #333333;
-    -fx-border-color: #555555;
-    -fx-border-radius: 3px;
-    -fx-background-radius: 3px;
+    -fx-background-color: -qfx-surface;
+    -fx-border-color: -qfx-border-strong;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
     -fx-padding: 2;
 }
+.check-box:hover .box { -fx-border-color: -qfx-primary; }
 .check-box:selected .box {
-    -fx-background-color: #3489E8;
-    -fx-border-color: #3489E8;
+    -fx-background-color: -qfx-primary;
+    -fx-border-color: -qfx-primary;
 }
 .check-box:selected .mark {
     -fx-background-color: #FFFFFF;
 }
 
-/* 颜色选择器 */
-.color-picker {
-    -fx-padding: 2 4;
-}
-.color-picker .color-picker-label {
-    -fx-text-fill: #E5E5E5;
+/* ── 颜色选择器 ── */
+.color-picker { -fx-padding: 3 5; }
+.color-picker .color-picker-label { -fx-text-fill: -qfx-text; }
+.color-picker .color-rect {
+    -fx-arc-width: 4;
+    -fx-arc-height: 4;
 }
 
-/* 按钮 */
+/* ═══════════════ 按钮 ═══════════════ */
 .button {
-    -fx-background-color: #3489E8;
+    -fx-background-color: linear-gradient(to bottom, #6E9CF2, #4A7DE0);
     -fx-text-fill: #FFFFFF;
-    -fx-background-radius: 6px;
-    -fx-cursor: hand;
-    -fx-padding: 6 16;
-    -fx-font-size: 12px;
+    -fx-background-radius: 8px;
+    -fx-padding: 7 18;
+    -fx-font-size: 12.5px;
+    -fx-font-weight: 500;
     -fx-border-color: transparent;
+    -fx-effect: dropshadow(gaussian, rgba(74, 125, 224, 0.35), 10, 0, 0, 2);
 }
 .button:hover {
-    -fx-background-color: #4A9AF0;
+    -fx-background-color: linear-gradient(to bottom, #7EA9F5, #5B8DEF);
+    -fx-effect: dropshadow(gaussian, rgba(74, 125, 224, 0.50), 14, 0, 0, 3);
 }
 .button:pressed {
-    -fx-background-color: #2A78D0;
+    -fx-background-color: #3D6BD6;
+    -fx-effect: dropshadow(gaussian, rgba(74, 125, 224, 0.25), 5, 0, 0, 1);
+}
+.button:disabled {
+    -fx-background-color: #39404D;
+    -fx-text-fill: #6F7787;
+    -fx-effect: none;
 }
 
-/* 次要按钮 */
 .btn-secondary {
-    -fx-background-color: transparent;
-    -fx-text-fill: #BBBBBB;
-    -fx-border-color: #444444;
-    -fx-border-radius: 6px;
+    -fx-background-color: -qfx-surface;
+    -fx-text-fill: -qfx-text-2;
+    -fx-border-color: -qfx-border-strong;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-effect: none;
+    -fx-font-weight: normal;
 }
 .btn-secondary:hover {
-    -fx-background-color: #333333;
-    -fx-text-fill: #FFFFFF;
+    -fx-background-color: -qfx-surface-alt;
+    -fx-text-fill: -qfx-primary;
+    -fx-border-color: -qfx-primary;
+}
+.btn-secondary:pressed {
+    -fx-background-color: -qfx-primary-soft;
 }
 
-/* toggle-button */
 .toggle-button {
-    -fx-background-color: #333333;
-    -fx-text-fill: #999999;
-    -fx-background-radius: 6px;
-    -fx-padding: 4 12;
-    -fx-cursor: hand;
-    -fx-border-color: #444444;
-    -fx-border-radius: 6px;
-}
-.toggle-button:selected {
-    -fx-background-color: #3489E8;
-    -fx-text-fill: #FFFFFF;
-    -fx-border-color: #3489E8;
+    -fx-background-color: -qfx-surface-alt;
+    -fx-text-fill: -qfx-text-2;
+    -fx-background-radius: 8px;
+    -fx-padding: 5 14;
+    -fx-border-color: -qfx-border;
+    -fx-border-radius: 8px;
 }
 .toggle-button:hover {
-    -fx-background-color: #404040;
+    -fx-background-color: rgba(91, 141, 239, 0.12);
+    -fx-border-color: -qfx-primary;
+}
+.toggle-button:selected {
+    -fx-background-color: -qfx-primary;
+    -fx-text-fill: #FFFFFF;
+    -fx-border-color: -qfx-primary;
+    -fx-font-weight: 600;
+    -fx-effect: dropshadow(gaussian, rgba(74, 125, 224, 0.45), 10, 0, 0, 2);
 }
 .toggle-button:selected:hover {
-    -fx-background-color: #4A9AF0;
+    -fx-background-color: -qfx-primary-hover;
 }
 
-/* ── 底部状态栏 ── */
+/* ═══════════════ 状态栏 ═══════════════ */
 .status-bar {
-    -fx-background-color: #202125;
-    -fx-border-color: #333333 transparent transparent transparent;
-    -fx-padding: 6 12;
-    -fx-spacing: 12;
+    -fx-background-color: -qfx-surface;
+    -fx-border-color: -qfx-border transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 6 14;
+    -fx-spacing: 14;
     -fx-alignment: center-left;
 }
 .status-bar .label {
-    -fx-text-fill: #A0A0A0;
-    -fx-font-size: 11px;
+    -fx-text-fill: -qfx-text-2;
+    -fx-font-size: 11.5px;
+}
+.status-label {
+    -fx-text-fill: -qfx-text;
+    -fx-font-weight: 600;
 }
 
-/* ── 杂项 ── */
+/* ═══════════════ 滚动容器 ═══════════════ */
 .scroll-pane {
     -fx-background-color: transparent;
     -fx-border-color: transparent;
 }
-.scroll-pane > .viewport {
+.scroll-pane > .viewport { -fx-background-color: transparent; }
+.scroll-bar {
     -fx-background-color: transparent;
+    -fx-pref-width: 10px;
+    -fx-pref-height: 10px;
 }
-.scroll-bar:vertical {
+.scroll-bar .track { -fx-background-color: transparent; }
+.scroll-bar .thumb {
+    -fx-background-color: rgba(111, 119, 135, 0.55);
+    -fx-background-radius: 5px;
+}
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgba(168, 176, 189, 0.70);
+}
+.scroll-bar:vertical { -fx-pref-width: 10px; }
+.scroll-bar:horizontal { -fx-pref-height: 10px; }
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
     -fx-background-color: transparent;
-    -fx-pref-width: 8px;
-}
-.scroll-bar:vertical .track {
-    -fx-background-color: transparent;
-}
-.scroll-bar:vertical .thumb {
-    -fx-background-color: #444444;
-    -fx-background-radius: 4px;
-}
-.scroll-bar:vertical .increment-button,
-.scroll-bar:vertical .decrement-button {
-    -fx-background-color: transparent;
+    -fx-pref-width: 0;
     -fx-pref-height: 0;
 }
-.scroll-bar:vertical .increment-arrow,
-.scroll-bar:vertical .decrement-arrow {
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
     -fx-background-color: transparent;
+    -fx-shape: "";
 }
 
+/* ═══════════════ 列表 ═══════════════ */
 .list-view {
-    -fx-background-color: #333333;
-    -fx-text-fill: #E5E5E5;
-    -fx-border-color: #444444;
-    -fx-border-radius: 4px;
+    -fx-background-color: -qfx-surface;
+    -fx-text-fill: -qfx-text;
+    -fx-border-color: -qfx-border;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
 }
 .list-cell {
-    -fx-background-color: #333333;
-    -fx-text-fill: #CCCCCC;
-    -fx-padding: 4 8;
-}
-.list-cell:filled:selected {
-    -fx-background-color: #3489E8;
-    -fx-text-fill: #FFFFFF;
+    -fx-background-color: -qfx-surface;
+    -fx-text-fill: -qfx-text-2;
+    -fx-padding: 6 10;
 }
 .list-cell:filled:hover {
-    -fx-background-color: #404040;
+    -fx-background-color: -qfx-primary-soft;
+}
+.list-cell:filled:selected {
+    -fx-background-color: -qfx-primary;
+    -fx-text-fill: #FFFFFF;
 }
 
-.progress-bar > .bar {
-    -fx-background-color: #3489E8;
-    -fx-background-radius: 3px;
-}
-.progress-bar > .track {
-    -fx-background-color: #333333;
-    -fx-background-radius: 3px;
-}
-
-.separator {
-    -fx-background-color: #333333;
-}
-
-/* ── 面板外阴影（悬浮质感） ── */
-.tab-pane, .sidebar-scroll {
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 8, 0, 0, 2);
-}
-
-/* ── 底部缩略图条 ── */
-.filmstrip {
-    -fx-background-color: #222222;
-    -fx-border-color: #333333;
-    -fx-border-width: 1 0 0 0;
-    -fx-padding: 4;
-}
-.filmstrip .viewport {
+/* ═══════════════ 进度条 ═══════════════ */
+.progress-bar {
     -fx-background-color: transparent;
 }
+.progress-bar > .track {
+    -fx-background-color: #333A47;
+    -fx-background-radius: 4px;
+}
+.progress-bar > .bar {
+    -fx-background-color: linear-gradient(to right, #6E9CF2, #4A7DE0);
+    -fx-background-radius: 4px;
+    -fx-padding: 1px;
+}
+.progress-indeterminate .bar {
+    -fx-background-color: linear-gradient(to left, transparent, #5B8DEF);
+}
+
+/* ═══════════════ 其他 ═══════════════ */
+.separator {
+    -fx-background-color: -qfx-border;
+}
+
+.tooltip {
+    -fx-background-color: rgba(28, 31, 38, 0.96);
+    -fx-text-fill: #E6E9EF;
+    -fx-font-size: 11.5px;
+    -fx-background-radius: 6px;
+    -fx-padding: 6 10;
+    -fx-border-color: -qfx-border-strong;
+    -fx-border-radius: 6px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 12, 0, 0, 3);
+}
+
+/* 图标选择按钮（Logo/贴纸面板动态创建） */
+.icon-pick-btn {
+    -fx-background-color: -qfx-surface;
+    -fx-text-fill: -qfx-text-2;
+    -fx-background-radius: 8px;
+    -fx-border-color: -qfx-border-strong;
+    -fx-border-radius: 8px;
+    -fx-cursor: hand;
+    -fx-padding: 0;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.30), 5, 0, 0, 1);
+}
+.icon-pick-btn:hover {
+    -fx-background-color: -qfx-primary-soft;
+    -fx-border-color: -qfx-primary;
+    -fx-text-fill: -qfx-primary;
+    -fx-effect: dropshadow(gaussian, rgba(91, 141, 239, 0.35), 10, 0, 0, 2);
+}
+
+/* ═══════════════ 底部缩略图条 ═══════════════ */
+.filmstrip {
+    -fx-background-color: -qfx-surface-alt;
+    -fx-border-color: -qfx-border;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 6;
+}
+.filmstrip .viewport { -fx-background-color: transparent; }
 .filmstrip .scroll-bar:vertical {
     -fx-pref-width: 0;
     -fx-opacity: 0;
+}
+
+/* 键盘焦点可见性 */
+.button:focused, .toggle-button:focused, .combo-box:focused,
+.check-box:focused, .slider:focused, .text-field:focused {
+    -fx-effect: dropshadow(gaussian, rgba(91, 141, 239, 0.45), 10, 0, 0, 0);
 }

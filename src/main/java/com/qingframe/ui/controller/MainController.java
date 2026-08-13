@@ -75,9 +75,6 @@ public class MainController implements Initializable {
     @FXML private TextField tfStrokeDash, tfTemplateName, tfTemplateTag, tfCustomText;
     @FXML private TextField tfExifBrand, tfExifModel, tfExifFocal, tfExifAperture, tfExifIso, tfExifShutter;
     @FXML private CheckBox cbMarginLock, cbLayerVisible, cbCornerLock;
-    @FXML private CheckBox cbBgBlur;
-    @FXML private CheckBox cbBgBlurWhite;
-    @FXML private Slider slBgBlurRadius, slBgBlurIntensity;
     @FXML private CheckBox cbTearEnable, cbShadow, cbGlow;
     @FXML private CheckBox cbVignette, cbLightLeak, cbExifText, cbCornerDecor;
     @FXML private ColorPicker cpFillColor, cpStrokeColor, cpGlowColor, cpTextColor;
@@ -88,9 +85,10 @@ public class MainController implements Initializable {
     @FXML private ComboBox<String> cbTextureBlend;
     @FXML private ListView<String> lvPresets;
     @FXML private ProgressBar progressBar;
-    @FXML private Button btnOpenImage, btnSaveImage, btnBatchExport, btnAddLayer;
+    @FXML private Button btnOpenImage, btnSaveImage, btnAddLayer;
     @FXML private ToggleButton btnThemeToggle;
     @FXML private BorderPane rootPane;
+    @FXML private ScrollPane sidebarScroll;
     @FXML private StackPane dropTarget;
     @FXML private VBox placeholderView;
     @FXML private TextField tfZoomValue;
@@ -125,6 +123,9 @@ public class MainController implements Initializable {
     /** 导出设置文件：记住上次导出目录 */
     private static final String EXPORT_SETTINGS_FILE =
             System.getProperty("user.home") + "/.qingkuangying-export-settings.txt";
+    /** 打开设置文件：记住上次打开图片的目录 */
+    private static final String OPEN_SETTINGS_FILE =
+            System.getProperty("user.home") + "/.qingkuangying-open-settings.txt";
     /** 随机边框使用的协调色板（每组 3 色：主色 / 辅色 / 点缀） */
     private static final String[][] COLOR_PALETTES = {
             {"#f7f4ef", "#d8cdb8", "#8b7355"},
@@ -137,6 +138,8 @@ public class MainController implements Initializable {
             {"#f4ece7", "#7c3a3d", "#4a1f21"}
     };
     private volatile boolean isExporting = false;
+    /** 最近一次从照片读取的 EXIF 参数文本（缓存，供预设切换后恢复显示） */
+    private String cachedExifText = "";
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -158,7 +161,6 @@ public class MainController implements Initializable {
         });
 
         setupScrollBars();
-        setupPanDrag();
 
         setupDragDrop();
 
@@ -303,6 +305,15 @@ public class MainController implements Initializable {
 
         // Amplify right panel scroll wheel speed
         Platform.runLater(() -> {
+            // 左侧边框栏滚轮提速 5 倍（与右侧面板同一机制）
+            if (sidebarScroll != null) {
+                sidebarScroll.addEventFilter(ScrollEvent.SCROLL, e -> {
+                    if (e.getDeltaY() == 0) return;
+                    double newV = sidebarScroll.getVvalue() - e.getDeltaY() * 0.04;
+                    sidebarScroll.setVvalue(Math.max(0, Math.min(1, newV)));
+                    e.consume();
+                });
+            }
             for (Tab tab : rightTabPane.getTabs()) {
                 if (tab.getContent() instanceof ScrollPane) {
                     ScrollPane sp = (ScrollPane) tab.getContent();
@@ -391,11 +402,6 @@ public class MainController implements Initializable {
         slGlowBlur.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slGlowOpacity.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slVignetteStrength.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
-        slBgBlurRadius.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
-        slBgBlurIntensity.valueProperty().addListener((o,ov,nv) -> {
-            BorderProcessor.setBlurIntensity((int) nv.doubleValue());
-            onSettingChanged();
-        });
         slTextSize.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slCornerDecorSize.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         setupSliderUndo(slImgScale, slFillOpacity, slStrokeWidth, slStrokeOpacity,
@@ -460,8 +466,6 @@ public class MainController implements Initializable {
         });
         cbLayerVisible.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbCornerLock.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
-        cbBgBlur.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
-        cbBgBlurWhite.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbTearEnable.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbShadow.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbGlow.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
@@ -469,6 +473,7 @@ public class MainController implements Initializable {
         cbLightLeak.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
         cbExifText.selectedProperty().addListener((o,ov,nv) -> {
             BorderProcessor.setUseExifEnabled(nv);
+            syncExifTextLine();
             onSettingCommit();
         });
         cbCornerDecor.selectedProperty().addListener((o,ov,nv) -> onSettingCommit());
@@ -552,9 +557,6 @@ public class MainController implements Initializable {
             margin.setImgScale(slImgScale.getValue());
             margin.setImgOffsetX(parseInt(tfImgOffsetX.getText(), 0));
             margin.setImgOffsetY(parseInt(tfImgOffsetY.getText(), 0));
-            margin.setBgBlurEnable(cbBgBlur.isSelected() ? 1 : 0);
-            margin.setBgBlurRadius((int) slBgBlurRadius.getValue());
-            margin.setBgBlurWhiteOverlay(cbBgBlurWhite.isSelected() ? 1 : 0);
             int top = parseInt(tfMarginTop.getText(), 80);
             int bot = parseInt(tfMarginBottom.getText(), 120);
             int left = parseInt(tfMarginLeft.getText(), 80);
@@ -563,9 +565,7 @@ public class MainController implements Initializable {
             if (minMargin >= 5) {
                 template.setPhotoFrameBorderSize(minMargin);
             }
-        } catch (Exception e) {
-            System.err.println("[MainController] 解析相框边距失败: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
 
         LayerBorder layer = getCurrentLayer();
         if (layer != null) {
@@ -594,9 +594,7 @@ public class MainController implements Initializable {
                 String[] parts = dashText.split(",");
                 List<Double> dashes = new ArrayList<>();
                 for (String p : parts) {
-                    try { dashes.add(Double.parseDouble(p.trim())); } catch (Exception ignored) {
-                        // 忽略无法解析的数值片段，其余虚线值仍然生效
-                    }
+                    try { dashes.add(Double.parseDouble(p.trim())); } catch (Exception ignored) {}
                 }
                 stroke.setStrokeDashArray(dashes);
             }
@@ -645,6 +643,8 @@ public class MainController implements Initializable {
         decor.setCornerDecorSize(slCornerDecorSize.getValue());
 
         syncManualExif();
+        // 手动修改 EXIF 字段后同步参数行到当前模板
+        syncExifTextLine();
     }
 
     private void syncManualExif() {
@@ -711,10 +711,6 @@ public class MainController implements Initializable {
 
         BaseMargin margin = template.getBaseMargin();
         cbMarginLock.setSelected(margin.getMarginLock() == 1);
-        cbBgBlur.setSelected(margin.getBgBlurEnable() == 1);
-        cbBgBlurWhite.setSelected(margin.getBgBlurWhiteOverlay() == 1);
-        slBgBlurRadius.setValue(margin.getBgBlurRadius());
-        slBgBlurIntensity.setValue(BorderProcessor.getBlurIntensity());
         boolean marginLocked = margin.getMarginLock() == 1;
         tfMarginTop.setDisable(marginLocked);
         tfMarginBottom.setDisable(marginLocked);
@@ -761,11 +757,55 @@ public class MainController implements Initializable {
         cbLeakType.setValue(light.getLightLeakType());
 
         TextStickerConfig decor = template.getDecorConfig();
-        cbExifText.setSelected(decor.getExifAutoText() == 1);
         cbCornerDecor.setSelected(decor.getCornerDecorEnable() == 1);
         slCornerDecorSize.setValue(decor.getCornerDecorSize());
 
+        // 按用户勾选状态把 EXIF 参数行同步进当前模板（预设切换后参数不丢失）
+        syncExifTextLine();
+
         isUpdating = false;
+    }
+
+    /** 把 EXIF 参数（照片读取或手动填写）同步为当前模板底部的参数行 */
+    private void syncExifTextLine() {
+        if (template == null || template.getDecorConfig() == null) return;
+        String text = cachedExifText;
+        if (text.isEmpty()) text = buildManualExifText();
+        final String target = text;
+        List<TextStickerConfig.TextLine> lines = template.getDecorConfig().getTextLines();
+        if (cbExifText != null && cbExifText.isSelected() && !target.isEmpty()) {
+            // 移除旧的同文本参数行，避免重复
+            lines.removeIf(l -> l.getText() != null && l.getText().equals(target));
+            TextStickerConfig.TextLine line = new TextStickerConfig.TextLine();
+            line.setText(target);
+            line.setAlign("bottom");
+            lines.add(line);
+        } else {
+            // 未开启参数显示：移除可能残留的参数行（照片 EXIF 或手动拼装）
+            lines.removeIf(l -> l.getText() != null
+                    && (!cachedExifText.isEmpty() && l.getText().equals(cachedExifText)
+                        || l.getText().equals(buildManualExifText())));
+        }
+    }
+
+    /** 从手动输入的 EXIF 字段拼装参数文本（照片无 EXIF 时的兜底） */
+    private String buildManualExifText() {
+        StringBuilder sb = new StringBuilder();
+        String brand = tfExifBrand.getText() == null ? "" : tfExifBrand.getText().trim();
+        String model = tfExifModel.getText() == null ? "" : tfExifModel.getText().trim();
+        if (!brand.isEmpty() || !model.isEmpty()) sb.append(brand).append(" ").append(model).append("  ");
+        String focal = tfExifFocal.getText() == null ? "" : tfExifFocal.getText().trim();
+        if (!focal.isEmpty()) sb.append(focal).append("  ");
+        String ap = tfExifAperture.getText() == null ? "" : tfExifAperture.getText().trim();
+        if (!ap.isEmpty()) sb.append(ap).append("  ");
+        String iso = tfExifIso.getText() == null ? "" : tfExifIso.getText().trim();
+        if (!iso.isEmpty()) sb.append(iso).append("  ");
+        String sh = tfExifShutter.getText() == null ? "" : tfExifShutter.getText().trim();
+        if (!sh.isEmpty()) {
+            sb.append(sh);
+            if (!sh.endsWith("s") && !sh.endsWith("S")) sb.append("s");
+        }
+        return sb.toString().trim();
     }
 
     private void updateLayerList() {
@@ -787,8 +827,12 @@ public class MainController implements Initializable {
         FileChooser fc = new FileChooser();
         fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("图片文件", "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff", "*.webp"));
         fc.setTitle("选择图片");
+        // 默认定位到上次打开图片的目录
+        File lastOpen = getLastOpenDir();
+        if (lastOpen != null) fc.setInitialDirectory(lastOpen);
         List<File> files = fc.showOpenMultipleDialog(btnOpenImage.getScene().getWindow());
         if (files != null && !files.isEmpty()) {
+            saveLastOpenDir(files.get(0).getParentFile());
             loadImage(files.get(0));
             for (int i = 1; i < files.size(); i++) {
                 imageFiles.add(files.get(i));
@@ -884,17 +928,10 @@ public class MainController implements Initializable {
                 tfExifShutter.setText(exifData.shutter != null ? exifData.shutter : "");
             }
 
-            if (saved == null && cbExifText.isSelected()) {
-                Map<String, String> exif = ExifTextParser.readExif(file.getAbsolutePath());
-                String exifText = ExifTextParser.formatExifText(exif, "");
-                if (!exifText.isEmpty()) {
-                    TextStickerConfig.TextLine line = new TextStickerConfig.TextLine();
-                    line.setText(exifText);
-                    line.setAlign("bottom");
-                    template.getDecorConfig().getTextLines().clear();
-                    template.getDecorConfig().getTextLines().add(line);
-                }
-            }
+            // 总是缓存 EXIF 参数文本（不依赖复选框），供任何边框模式按需显示；
+            // 实际写入 textLines 由 syncExifTextLine 在 refreshUI 时统一处理
+            Map<String, String> exif = ExifTextParser.readExif(file.getAbsolutePath());
+            cachedExifText = ExifTextParser.formatExifText(exif, "");
 
             refreshUI();
 
@@ -1019,37 +1056,8 @@ public class MainController implements Initializable {
     }
 
     private void setExportUI(boolean exporting) {
-        btnBatchExport.setDisable(exporting);
         btnSaveImage.setDisable(exporting);
-        btnBatchExport.setText(exporting ? "📦 导出中..." : "📦 批量导出");
-        btnSaveImage.setText(exporting ? "💾 导出中..." : "💾 导出图片");
-    }
-
-    private void exportSelectedImages() {
-        if (selectedIndices.isEmpty()) return;
-        javafx.stage.DirectoryChooser dc = new javafx.stage.DirectoryChooser();
-        dc.setTitle("选择导出目录");
-        File lastDir = getLastExportDir();
-        if (lastDir != null) dc.setInitialDirectory(lastDir);
-        File exportDir = dc.showDialog(previewCanvas.getScene().getWindow());
-        if (exportDir == null) return;
-        saveLastExportDir(exportDir);
-
-        syncModelFromUI();
-        isExporting = true;
-        setExportUI(true);
-
-        String fmt = cbExportFormat.getValue();
-        float jpegQuality = 0.9f;
-        List<File> files = new ArrayList<>();
-        for (int idx : selectedIndices) {
-            files.add(imageFiles.get(idx));
-        }
-        int total = files.size();
-
-        progressBar.setVisible(true);
-        progressBar.setProgress(0);
-        exportImagesInParallel(files, exportDir, fmt, jpegQuality);
+        btnSaveImage.setText(exporting ? "导出中..." : "导出图片");
     }
 
     /**
@@ -1132,9 +1140,19 @@ public class MainController implements Initializable {
                 File f = new File(p);
                 if (f.isDirectory()) return f;
             }
-        } catch (Exception e) {
-            System.err.println("[MainController] 读取上次导出目录失败: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private File getLastOpenDir() {
+        try {
+            String p = java.nio.file.Files.readString(
+                    java.nio.file.Paths.get(OPEN_SETTINGS_FILE), StandardCharsets.UTF_8).trim();
+            if (!p.isEmpty()) {
+                File f = new File(p);
+                if (f.isDirectory()) return f;
+            }
+        } catch (Exception ignored) {}
         return null;
     }
 
@@ -1144,9 +1162,16 @@ public class MainController implements Initializable {
         try {
             java.nio.file.Files.writeString(
                     java.nio.file.Paths.get(EXPORT_SETTINGS_FILE), dir.getAbsolutePath(), StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            System.err.println("[MainController] 保存导出目录设置失败: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
+    }
+
+    /** 记住上次打开图片的目录，供下次打开默认定位 */
+    private void saveLastOpenDir(File dir) {
+        if (dir == null) return;
+        try {
+            java.nio.file.Files.writeString(
+                    java.nio.file.Paths.get(OPEN_SETTINGS_FILE), dir.getAbsolutePath(), StandardCharsets.UTF_8);
+        } catch (Exception ignored) {}
     }
 
     /** 扫描目录中 *_bordered_NNN.ext 文件，返回下一个编号（跨会话不重复） */
@@ -1163,9 +1188,7 @@ public class MainController implements Initializable {
                     String numPart = name.substring(idx + suffix.length(), name.length() - lowerExt.length() - 1);
                     try {
                         max = Math.max(max, Integer.parseInt(numPart));
-                    } catch (Exception ignored) {
-                        // 忽略无法解析的编号片段，其余文件仍正常参与编号统计
-                    }
+                    } catch (Exception ignored) {}
                 }
             }
         }
@@ -1231,6 +1254,9 @@ public class MainController implements Initializable {
     @FXML
     private void onZoomFit() {
         zoomSlider.setValue(1.0);
+        panX = 0;
+        panY = 0;
+        refreshView();
     }
 
     @FXML
@@ -1305,16 +1331,30 @@ public class MainController implements Initializable {
 
     @FXML
     private void onBlurNormal() {
-        template.setPhotoFrameStyle("BLUR_CLASSIC");
-        template.setPhotoFrameBorderSize(60);
-        onSettingChanged();
+        applyBlurPreset("BLUR_CLASSIC");
     }
 
     @FXML
     private void onBlurWhite() {
-        template.setPhotoFrameStyle("BLUR_DATE");
+        applyBlurPreset("BLUR_DATE");
+    }
+
+    /** 背景模糊按钮：重置模板与共享渲染参数，避免上一个边框（如“浮影白框”）的直角/强度参数泄漏 */
+    private void applyBlurPreset(String style) {
+        template = new TemplateModel();
+        template.setPhotoFrameStyle(style);
         template.setPhotoFrameBorderSize(60);
-        onSettingChanged();
+        // 背景模糊的内部圆角（照片圆角）默认 200
+        template.getCornerConfig().setCornerRadiusAll(200);
+        template.getCornerConfig().setCornerRadiusTL(200);
+        template.getCornerConfig().setCornerRadiusTR(200);
+        template.getCornerConfig().setCornerRadiusBL(200);
+        template.getCornerConfig().setCornerRadiusBR(200);
+        // 恢复共享渲染参数（背景模糊边框期望的圆角与模糊强度）
+        BorderProcessor.setCornerRadius(200);
+        BorderProcessor.setBlurIntensity(50);
+        refreshUI();
+        renderPreview();
     }
 
     @FXML
@@ -1393,6 +1433,66 @@ public class MainController implements Initializable {
         refreshUI();
         renderPreview();
         statusLabel.setText("已应用预设: 浮影白框（白色衬边 + 柔和悬浮投影）");
+    }
+
+    /** 潮流风格：小红书 3:4 竖版封面（白边 + 底部留白文字） */
+    @FXML
+    private void onPresetXhsCover() {
+        TemplateModel loaded = loadPresetFromJson("小红书3比4封面");
+        template = (loaded != null) ? loaded : createPreset("小红书3比4封面");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 小红书 3:4 封面（竖版白边卡）");
+    }
+
+    /** 潮流风格：Instagram 渐变光环（深色底 + 紫粉橙渐变描边 + 白细线） */
+    @FXML
+    private void onPresetIgGradient() {
+        TemplateModel loaded = loadPresetFromJson("IG渐变光环");
+        template = (loaded != null) ? loaded : createPreset("IG渐变光环");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: IG 渐变光环（紫粉橙渐变描边）");
+    }
+
+    /** 潮流风格：醒图奶油风（奶油底色 + 圆角照片 + 暖色柔和投影） */
+    @FXML
+    private void onPresetCream() {
+        TemplateModel loaded = loadPresetFromJson("醒图奶油风");
+        template = (loaded != null) ? loaded : createPreset("醒图奶油风");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 醒图奶油风（奶油底 + 圆角暖影）");
+    }
+
+    /** 潮流风格：Canva 错位拼贴（背景色块 + 照片偏移叠放） */
+    @FXML
+    private void onPresetCanvaCollage() {
+        TemplateModel loaded = loadPresetFromJson("Canva错位拼贴");
+        template = (loaded != null) ? loaded : createPreset("Canva错位拼贴");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: Canva 错位拼贴（色块 + 偏移叠放）");
+    }
+
+    /** 潮流风格：NOMO 复古相机（黑底 + 白色大日期 + 暖漏光） */
+    @FXML
+    private void onPresetNomo() {
+        TemplateModel loaded = loadPresetFromJson("NOMO复古相机");
+        template = (loaded != null) ? loaded : createPreset("NOMO复古相机");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: NOMO 复古相机（黑底白字 + 漏光）");
+    }
+
+    /** 潮流风格：苹果深色圆角卡（纯黑底 + 圆角照片 + 柔和投影） */
+    @FXML
+    private void onPresetAppleDark() {
+        TemplateModel loaded = loadPresetFromJson("苹果深色圆角卡");
+        template = (loaded != null) ? loaded : createPreset("苹果深色圆角卡");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 苹果深色圆角卡（黑底圆角悬浮）");
     }
 
     @FXML
@@ -1488,121 +1588,70 @@ public class MainController implements Initializable {
 
     @FXML
     private void onSaveImage() {
-        if (originImage == null) {
-            showAlert("请先打开一张图片");
+        if (isExporting) return;
+        // 统一导出逻辑：优先导出胶片条中选中的图片，否则导出当前打开的所有图片（一张或多张均可）
+        List<File> files = new ArrayList<>();
+        if (!selectedIndices.isEmpty()) {
+            for (int idx : selectedIndices) {
+                if (idx >= 0 && idx < imageFiles.size()) files.add(imageFiles.get(idx));
+            }
+        } else {
+            files.addAll(imageFiles);
+        }
+        // 没有任何打开图片：回退到原"批量导出"的文件夹批量能力
+        if (files.isEmpty()) {
+            chooseFolderAndExport();
             return;
         }
-        FileChooser fc = new FileChooser();
-        fc.setTitle("保存导出图片");
-        fc.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("JPEG 图片 (*.jpg)", "*.jpg"),
-                new FileChooser.ExtensionFilter("PNG 图片 (*.png)", "*.png"));
-        String fmt = cbExportFormat.getValue();
-        if ("PNG".equals(fmt)) {
-            fc.setSelectedExtensionFilter(fc.getExtensionFilters().get(1));
-        }
+        // 选择导出目录（自动编号，保证不重复；一张或多张走同一逻辑）
+        javafx.stage.DirectoryChooser dc = new javafx.stage.DirectoryChooser();
+        dc.setTitle("选择导出目录");
         File lastDir = getLastExportDir();
-        if (lastDir != null) fc.setInitialDirectory(lastDir);
-        String ext = "PNG".equals(fmt) ? "png" : "jpg";
-        String base = "output";
-        if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
-            base = FileUtil.getFileNameWithoutExt(imageFiles.get(currentImageIndex).getName());
-        }
-        int num = (lastDir != null && lastDir.exists()) ? nextExportNumber(lastDir, ext) : 1;
-        fc.setInitialFileName(base + "_bordered_" + String.format("%03d", num) + "." + ext);
-        File file = fc.showSaveDialog(btnSaveImage.getScene().getWindow());
-        if (file == null) return;
-        saveLastExportDir(file.getParentFile());
-
-        setExportUI(true);
-        progressBar.setVisible(true);
-        progressBar.setProgress(-1);
-        statusLabel.setText("正在渲染导出…");
+        if (lastDir != null) dc.setInitialDirectory(lastDir);
+        File exportDir = dc.showDialog(btnSaveImage.getScene().getWindow());
+        if (exportDir == null) return;
+        saveLastExportDir(exportDir);
 
         syncModelFromUI();
+        isExporting = true;
+        setExportUI(true);
+        progressBar.setVisible(true);
+        progressBar.setProgress(0);
+        statusLabel.setText("准备导出 " + files.size() + " 张图片…");
 
-        final File outFile = file;
-        final float quality = 0.9f;
-        final String format = outFile.getName().toLowerCase().endsWith(".png") ? "png" : "jpg";
-        final TemplateModel exportTemplate = cloneTemplate(template);
+        String fmt = cbExportFormat.getValue();
+        exportImagesInParallel(files, exportDir, fmt, 0.9f);
+    }
 
-        // 导出全程后台执行：读图/缩放/写文件不占界面线程，界面线程只做渲染快照（短暂）
-        new Thread(() -> {
-            try {
-                logExport("== 开始导出: " + outFile.getName());
-                // 1. 后台读取当前照片
-                BufferedImage awt = null;
-                if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
-                    File srcFile = imageFiles.get(currentImageIndex);
-                    logExport("照片文件: " + srcFile.getAbsolutePath());
-                    try {
-                        awt = ImageIO.read(srcFile);
-                        ExifReader.ExifData exif = ExifReader.parse(srcFile);
-                        if (awt != null && exif != null) {
-                            awt = applyOrientation(awt, exif.orientation);
-                        }
-                        logExport(awt != null ? ("ImageIO 读取成功: " + awt.getWidth() + "x" + awt.getHeight())
-                                : "ImageIO 读取返回 null（将回退到界面图像）");
-                    } catch (Exception ex) {
-                        logExport("ImageIO 读取异常: " + ex);
-                        awt = null;
-                    }
-                }
-                if (awt == null) {
-                    // 回退：界面线程做一次像素转换
-                    logExport("回退：从界面图像转换像素");
-                    CountDownLatch latch = new CountDownLatch(1);
-                    AtomicReference<BufferedImage> ref = new AtomicReference<>();
-                    Platform.runLater(() -> {
-                        try {
-                            ref.set(SwingFXUtils.fromFXImage(originImage, null));
-                            logExport("界面图像转换成功: " + originImage.getWidth() + "x" + originImage.getHeight());
-                        } finally {
-                            latch.countDown();
-                        }
-                    });
-                    latch.await();
-                    awt = ref.get();
-                }
-                if (awt == null) throw new IOException("无法读取照片");
+    /** 原"批量导出"的文件夹批量能力：没有打开图片时，选择任意文件夹统一套用当前边框导出 */
+    private void chooseFolderAndExport() {
+        javafx.stage.DirectoryChooser dc = new javafx.stage.DirectoryChooser();
+        dc.setTitle("选择图片文件夹");
+        File dir = dc.showDialog(previewCanvas.getScene().getWindow());
+        if (dir == null) return;
+        List<String> images = FileUtil.listImageFiles(dir.getAbsolutePath());
+        if (images.isEmpty()) {
+            showAlert("文件夹中没有找到图片");
+            return;
+        }
+        javafx.stage.DirectoryChooser outDir = new javafx.stage.DirectoryChooser();
+        outDir.setTitle("选择导出目录");
+        File lastDir = getLastExportDir();
+        if (lastDir != null) outDir.setInitialDirectory(lastDir);
+        File exportDir = outDir.showDialog(previewCanvas.getScene().getWindow());
+        if (exportDir == null) return;
+        saveLastExportDir(exportDir);
 
-                // 2. 渲染（超大图自动预降级；失败再分级缩小，界面线程只做快照）
-                WritableImage result = renderAwtWithFallback(awt, exportTemplate);
-                logExport(result != null ? "渲染成功: " + (int) result.getWidth() + "x" + (int) result.getHeight()
-                        : "渲染失败（全部分级均空白）");
-                if (result == null) {
-                    final int pw = awt.getWidth();
-                    final int ph = awt.getHeight();
-                    final String tn = exportTemplate.getTemplateName();
-                    Platform.runLater(() -> {
-                        setExportUI(false);
-                        progressBar.setVisible(false);
-                        showAlert("渲染结果异常（接近全白/透明），且自动缩放后仍失败。\n照片: "
-                                + pw + "x" + ph + "  模板: " + tn
-                                + "\n渲染环境可能已异常，请完全退出软件后重新打开，再导出一次；"
-                                + "若仍失败，请把 C:\\Users\\" + System.getProperty("user.name")
-                                + "\\QingFrameShadow-export.log 内容发给我。");
-                    });
-                    return;
-                }
+        syncModelFromUI();
+        isExporting = true;
+        setExportUI(true);
+        progressBar.setVisible(true);
+        progressBar.setProgress(0);
 
-                // 3. 后台写文件
-                ImageExportUtil.export(result, outFile.getAbsolutePath(), format, quality);
-                Platform.runLater(() -> {
-                    setExportUI(false);
-                    progressBar.setVisible(false);
-                    statusLabel.setText("已导出: " + outFile.getName());
-                });
-            } catch (Exception e) {
-                e.printStackTrace();
-                logExport("导出异常: " + e);
-                Platform.runLater(() -> {
-                    setExportUI(false);
-                    progressBar.setVisible(false);
-                    showAlert("导出失败: " + e.getMessage());
-                });
-            }
-        }).start();
+        String fmt = cbExportFormat.getValue();
+        List<File> files = new ArrayList<>();
+        for (String p : images) files.add(new File(p));
+        exportImagesInParallel(files, exportDir, fmt, 0.9f);
     }
 
     @FXML
@@ -1769,9 +1818,7 @@ public class MainController implements Initializable {
                     }
                 }
             }
-        } catch (Exception e) {
-            System.err.println("[MainController] 扫描预设目录失败: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
         Collections.sort(names);
         return names;
     }
@@ -1782,6 +1829,7 @@ public class MainController implements Initializable {
             String json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             return JsonUtil.fromJson(json);
         } catch (Exception e) {
+            statusLabel.setText("预设加载失败: " + name + "（JSON 格式错误，已回退默认模板）");
             return null;
         }
     }
@@ -1839,7 +1887,7 @@ public class MainController implements Initializable {
         template = randomTemplate();
         refreshUI();
         renderPreview();
-        statusLabel.setText("已生成随机边框，不满意可继续 🎲 或按 ↩ 撤销");
+        statusLabel.setText("已生成随机边框，可再次点击继续随机，或点撤销返回");
     }
 
     private TemplateModel randomTemplate() {
@@ -2009,64 +2057,30 @@ public class MainController implements Initializable {
     }
 
     @FXML
-    private void onBatchExport() {
-        if (isExporting) return;
-        if (!selectedIndices.isEmpty()) {
-            exportSelectedImages();
-            return;
-        }
-        if (originImage == null) {
-            showAlert("请先打开一张图片作为样式参考，然后选择批量文件夹");
-            return;
-        }
-        javafx.stage.DirectoryChooser dc = new javafx.stage.DirectoryChooser();
-        dc.setTitle("选择图片文件夹");
-        File dir = dc.showDialog(previewCanvas.getScene().getWindow());
-        if (dir == null) return;
-
-        List<String> images = FileUtil.listImageFiles(dir.getAbsolutePath());
-        if (images.isEmpty()) {
-            showAlert("文件夹中没有找到图片");
-            return;
-        }
-
-        javafx.stage.DirectoryChooser outDir = new javafx.stage.DirectoryChooser();
-        outDir.setTitle("选择导出目录");
-        File lastDir = getLastExportDir();
-        if (lastDir != null) outDir.setInitialDirectory(lastDir);
-        File exportDir = outDir.showDialog(previewCanvas.getScene().getWindow());
-        if (exportDir == null) return;
-        saveLastExportDir(exportDir);
-
-        isExporting = true;
-        setExportUI(true);
-        progressBar.setVisible(true);
-        progressBar.setProgress(0);
-
-        syncModelFromUI();
-
-        String fmt = cbExportFormat.getValue();
-        float jpegQuality = 0.9f;
-        List<File> files = new ArrayList<>();
-        for (String p : images) {
-            files.add(new File(p));
-        }
-        exportImagesInParallel(files, exportDir, fmt, jpegQuality);
-    }
-
-    @FXML
     private void onToggleTheme() {
         isDarkTheme = !isDarkTheme;
         String css;
         if (isDarkTheme) {
             css = getClass().getResource("/com/qingframe/ui/css/dark-theme.css").toExternalForm();
-            btnThemeToggle.setText("🌙 深色");
+            btnThemeToggle.setGraphic(createThemeIcon(false));
+            btnThemeToggle.setTooltip(new Tooltip("当前：深色主题（点击切换浅色）"));
         } else {
             css = getClass().getResource("/com/qingframe/ui/css/light-theme.css").toExternalForm();
-            btnThemeToggle.setText("☀️ 浅色");
+            btnThemeToggle.setGraphic(createThemeIcon(true));
+            btnThemeToggle.setTooltip(new Tooltip("当前：浅色主题（点击切换深色）"));
         }
         rootPane.getStylesheets().clear();
         rootPane.getStylesheets().add(css);
+    }
+
+    /** 主题切换按钮图标：浅色模式显示太阳，深色模式显示月亮 */
+    private javafx.scene.shape.SVGPath createThemeIcon(boolean light) {
+        javafx.scene.shape.SVGPath p = new javafx.scene.shape.SVGPath();
+        p.getStyleClass().add("ui-icon");
+        p.setContent(light
+                ? "M12 4V2 M12 22v-2 M5 12H3 M21 12h-2 M6.3 6.3L4.9 4.9 M19.1 19.1l-1.4-1.4 M17.7 6.3l1.4-1.4 M4.9 19.1l1.4-1.4 M12 17m-5 0a5 5 0 1 0 10 0a5 5 0 1 0-10 0"
+                : "M20 13A8 8 0 1 1 11 3a6 6 0 0 0 9 10z");
+        return p;
     }
 
     private void renderPreview() {
@@ -2093,13 +2107,11 @@ public class MainController implements Initializable {
             gc.fillRect(0, 0, cw, ch);
 
             if (panX != 0 || panY != 0) {
-                double prangeX = cw * (zoom - 1) / 2;
-                double prangeY = ch * (zoom - 1) / 2;
-                if (zoom <= 1.0) { panX = 0; panY = 0; }
-                else {
-                    panX = clamp(panX, -prangeX, prangeX);
-                    panY = clamp(panY, -prangeY, prangeY);
-                }
+                // 平移范围：放大后随倍数增大；100% 时保留窗口 25% 的活动空间，方便自由查看
+                double prangeX = cw * (Math.max(1.0, zoom) - 1) / 2 + cw * 0.25;
+                double prangeY = ch * (Math.max(1.0, zoom) - 1) / 2 + ch * 0.25;
+                panX = clamp(panX, -prangeX, prangeX);
+                panY = clamp(panY, -prangeY, prangeY);
             }
 
             if (compare) {
@@ -2181,43 +2193,15 @@ public class MainController implements Initializable {
         vScrollBar.setBlockIncrement(50);
     }
 
-    private void setupPanDrag() {
-        previewCanvas.setOnMousePressed(e -> {
-            if (zoomSlider.getValue() > 1.0 || template.getCompareMode() == 1) {
-                previewCanvas.getScene().setCursor(javafx.scene.Cursor.CLOSED_HAND);
-                dragStartX = e.getSceneX();
-                dragStartY = e.getSceneY();
-            }
-        });
-        previewCanvas.setOnMouseDragged(e -> {
-            if ((zoomSlider.getValue() > 1.0 || template.getCompareMode() == 1) && !Double.isNaN(dragStartX)) {
-                double dx = e.getSceneX() - dragStartX;
-                double dy = e.getSceneY() - dragStartY;
-                dragStartX = e.getSceneX();
-                dragStartY = e.getSceneY();
-                panX += dx;
-                panY += dy;
-                refreshView();
-            }
-        });
-        previewCanvas.setOnMouseReleased(e -> {
-            previewCanvas.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
-            dragStartX = Double.NaN;
-            dragStartY = Double.NaN;
-        });
-        previewCanvas.setOnMouseExited(e -> {
-            previewCanvas.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
-        });
-    }
-
     private void updateScrollBars(double cw, double ch) {
         double zoom = zoomSlider.getValue();
-        boolean visible = zoom > 1.05 || template.getCompareMode() == 1;
+        // 加载照片后滚动条始终可见：100% 时也有少量活动空间，放大后可拖动查看细节
+        boolean visible = originImage != null;
         hScrollBar.setVisible(visible);
         vScrollBar.setVisible(visible);
         if (visible) {
-            double prangeX = cw * (zoom - 1) / 2;
-            double prangeY = ch * (zoom - 1) / 2;
+            double prangeX = cw * (Math.max(1.0, zoom) - 1) / 2 + cw * 0.25;
+            double prangeY = ch * (Math.max(1.0, zoom) - 1) / 2 + ch * 0.25;
             if (template.getCompareMode() == 1) {
                 prangeX = cw / 2 * (zoom - 1) / 2;
             }
@@ -2386,24 +2370,43 @@ public class MainController implements Initializable {
                 t.getLayerList().add(bg);
                 break;
             case "胶片框":
-                t.getBaseMargin().setMarginTop(100);
-                t.getBaseMargin().setMarginBottom(140);
-                t.getBaseMargin().setMarginLeft(80);
-                t.getBaseMargin().setMarginRight(80);
-                t.getBaseMargin().setImgScale(0.90);
-                t.getLayerList().get(0).getFillConfig().setFillHex("#f0ece4");
-                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(3);
-                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#8b7355");
-                t.getLightEffect().setVignetteEnable(1);
-                t.getLightEffect().setVignetteStrength(40);
+                // 经典 135 胶片底片风：宽黑轨道 + 方形齿孔 + 胶片名 + 旧化质感
+                t.getBaseMargin().setMarginTop(300);
+                t.getBaseMargin().setMarginBottom(300);
+                t.getBaseMargin().setMarginLeft(90);
+                t.getBaseMargin().setMarginRight(90);
+                t.getBaseMargin().setImgScale(0.95);
+                t.getLayerList().get(0).getFillConfig().setFillHex("#141414");
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(0);
+                t.getCornerConfig().setCornerRadiusAll(0);
+                t.getCornerConfig().setCornerRadiusTL(0);
+                t.getCornerConfig().setCornerRadiusTR(0);
+                t.getCornerConfig().setCornerRadiusBL(0);
+                t.getCornerConfig().setCornerRadiusBR(0);
                 t.getFilmTearConfig().setFilmPerforationEnable(1);
-                t.getFilmTearConfig().setFilmPerforationType("round");
-                t.getFilmTearConfig().setFilmPerforationSize(12);
+                t.getFilmTearConfig().setFilmPerforationType("hstrip");
+                t.getFilmTearConfig().setFilmPerforationSize(20);
+                t.getFilmTearConfig().setFilmPerforationSpacing(40);
                 t.getDecorConfig().setExifAutoText(1);
-                TextStickerConfig.TextLine fline = new TextStickerConfig.TextLine();
-                fline.setText("FUJI FILM | 35mm f/2.0  1/250s  ISO 400");
-                fline.setAlign("bottom");
-                t.getDecorConfig().getTextLines().add(fline);
+                t.getDecorConfig().getTextLines().clear();
+                // 顶部胶片名：显示在上方轨道齿孔下方（勾选“显示参数水印”后底部会追加真实 EXIF 参数）
+                TextStickerConfig.TextLine filmName = new TextStickerConfig.TextLine();
+                filmName.setText("35MM FILM  ·  36 EXP");
+                filmName.setAlign("top");
+                filmName.setY(60);
+                filmName.setColorHex("#ffffff");
+                filmName.setFontSize(15);
+                filmName.setLetterSpacing(3);
+                t.getDecorConfig().getTextLines().add(filmName);
+                // 旧化质感：泛黄 + 灰尘划痕 + 颗粒 + 暗角
+                t.getFilmTearConfig().setYellowingEnable(1);
+                t.getFilmTearConfig().setYellowingStrength(15);
+                t.getFilmTearConfig().setDustScratchEnable(1);
+                t.getFilmTearConfig().setDustScratchIntensity(8);
+                t.getLightEffect().setFilmGrainEnable(1);
+                t.getLightEffect().setFilmGrainIntensity(12);
+                t.getLightEffect().setVignetteEnable(1);
+                t.getLightEffect().setVignetteStrength(30);
                 break;
         }
         return t;
@@ -2565,9 +2568,7 @@ public class MainController implements Initializable {
                     System.getProperty("user.home") + "/QingFrameShadow-export.log", true);
             fw.write(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "  " + msg + "\n");
             fw.close();
-        } catch (Exception e) {
-            System.err.println("[MainController] 写入导出日志失败: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
     }
 
     private WritableImage renderOnFx(WritableImage fx, TemplateModel tmpl) throws Exception {
@@ -2741,7 +2742,7 @@ public class MainController implements Initializable {
             for (String brand : brands) {
                 javafx.scene.control.Button btn = new javafx.scene.control.Button();
                 btn.setPrefSize(76, 40);
-                btn.setStyle("-fx-background-color:#333; -fx-background-radius:6; -fx-cursor:hand; -fx-padding:0;");
+                btn.getStyleClass().add("icon-pick-btn");
                 String logoUrl = brandLogoUrl(brand);
                 if (logoUrl != null) {
                     ImageView iv = new ImageView(new Image(logoUrl, true));
@@ -2751,7 +2752,7 @@ public class MainController implements Initializable {
                     btn.setGraphic(iv);
                 } else {
                     btn.setText(brand);
-                    btn.setStyle(btn.getStyle() + "-fx-font-size:10;");
+                    btn.setStyle("-fx-font-size:10;");
                 }
                 btn.setOnAction(e -> placeBrandLogo(brand));
                 brandIconBox.getChildren().add(btn);
@@ -2774,7 +2775,7 @@ public class MainController implements Initializable {
         for (IconItem item : IconManager.getBuiltInByCategory(cat)) {
             javafx.scene.control.Button btn = new javafx.scene.control.Button();
             btn.setPrefSize(40, 40);
-            btn.setStyle("-fx-background-color:#444; -fx-background-radius:6; -fx-cursor:hand;");
+            btn.getStyleClass().add("icon-pick-btn");
             Canvas iconCanvas = new Canvas(36, 36);
             GraphicsContext igc = iconCanvas.getGraphicsContext2D();
             IconRenderer.draw(igc, item, 18, 18, 28);
@@ -2790,7 +2791,7 @@ public class MainController implements Initializable {
         for (IconItem item : IconManager.getCustomIcons()) {
             javafx.scene.control.Button btn = new javafx.scene.control.Button();
             btn.setPrefSize(40, 40);
-            btn.setStyle("-fx-background-color:#444; -fx-background-radius:6; -fx-cursor:hand;");
+            btn.getStyleClass().add("icon-pick-btn");
             Image img = IconManager.getIconImage(item);
             if (img != null) {
                 ImageView iv = new ImageView(img);
@@ -2927,6 +2928,10 @@ public class MainController implements Initializable {
                     return;
                 }
                 selectCanvasIcon(null);
+                // 未命中图标：按下即开始视图平移（抓手光标），任意缩放级别均可拖动
+                previewCanvas.getScene().setCursor(javafx.scene.Cursor.CLOSED_HAND);
+                dragStartX = e.getSceneX();
+                dragStartY = e.getSceneY();
                 if (!e.isAltDown() && !e.isControlDown()) {
                     draggingIcon = false;
                 }
@@ -2941,12 +2946,37 @@ public class MainController implements Initializable {
                 selectedIcon.setY(iconOrigY + dy);
                 renderPreview();
                 e.consume();
+            } else if (!Double.isNaN(dragStartX)) {
+                // 视图平移：按场景坐标增量移动观察位置
+                double dx = e.getSceneX() - dragStartX;
+                double dy = e.getSceneY() - dragStartY;
+                dragStartX = e.getSceneX();
+                dragStartY = e.getSceneY();
+                panX += dx;
+                panY += dy;
+                refreshView();
+                e.consume();
             }
         });
         previewCanvas.setOnMouseReleased(e -> {
             if (draggingIcon) {
                 draggingIcon = false;
                 onSettingChanged();
+            }
+            previewCanvas.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
+            dragStartX = Double.NaN;
+            dragStartY = Double.NaN;
+        });
+        previewCanvas.setOnMouseExited(e -> {
+            previewCanvas.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
+        });
+        previewCanvas.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2 && selectedIcon == null) {
+                // 双击空白处：恢复居中显示
+                panX = 0;
+                panY = 0;
+                zoomSlider.setValue(1.0);
+                refreshView();
             }
         });
         previewCanvas.setOnScroll(e -> {
@@ -2955,6 +2985,11 @@ public class MainController implements Initializable {
                 double newScale = Math.max(0.1, Math.min(3.0, selectedIcon.getScale() + delta));
                 selectedIcon.setScale(newScale);
                 renderPreview();
+                e.consume();
+            } else {
+                // 未选中图标：滚轮直接缩放视图（拖动可平移查看细节）
+                double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
+                zoomSlider.setValue(Math.max(0.1, Math.min(3.0, zoomSlider.getValue() + delta)));
                 e.consume();
             }
         });

@@ -19,9 +19,6 @@
                     <graphic><SVGPath styleClass="ui-icon" content="M3 6h6l2 2h10v12H3z" /></graphic>
                 </Button>
                 <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
-                <Button fx:id="btnBatchExport" onAction="#onBatchExport" styleClass="toolbar-btn" text="批量导出">
-                    <graphic><SVGPath styleClass="ui-icon" content="M4 4h12v12H4z M9 9h11v11H9z" /></graphic>
-                </Button>
                 <Button fx:id="btnSaveImage" onAction="#onSaveImage" styleClass="toolbar-btn-primary" text="导出图片">
                     <graphic><SVGPath styleClass="ui-icon" content="M5 3h14v18H5z M5 12h14 M12 3v6" /></graphic>
                 </Button>
@@ -72,74 +69,171 @@
 
     <!-- ═══════════════ 左侧侧边栏（折叠分组） ═══════════════ -->
     <left>
-        <ScrollPane fitToWidth="true" prefWidth="185.0" styleClass="sidebar-scroll">
+        <ScrollPane fx:id="sidebarScroll" fitToWidth="true" prefWidth="185.0" styleClass="sidebar-scroll">
             <VBox styleClass="sidebar-panel">
                 <!-- 基础边框 -->
                 <TitledPane animated="true" expanded="true" text="基础边框">
+                    <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 4h16v16H4z M8 8h8v8H8z" /></graphic>
                     <VBox styleClass="sidebar-btn-group">
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetNoBorder" styleClass="sidebar-btn" text="无边框" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetSimpleWhite" styleClass="sidebar-btn" text="简约白边" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetRounded" styleClass="sidebar-btn" text="圆角边框" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetVintage" styleClass="sidebar-btn" text="复古边框" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetPolaroid" styleClass="sidebar-btn" text="拍立得" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetFilm" styleClass="sidebar-btn" text="胶片框" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetDoubleLine" styleClass="sidebar-btn" text="双线边框" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetShadow" styleClass="sidebar-btn" text="投影边框" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetNoBorder" styleClass="sidebar-btn" text="无边框">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h14v14H5z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetSimpleWhite" styleClass="sidebar-btn" text="简约白边">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h14v14H5z M8 8h8v8H8z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetRounded" styleClass="sidebar-btn" text="圆角边框">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetVintage" styleClass="sidebar-btn" text="复古边框">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h14v14H5z M9 9h6v6H9z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetPolaroid" styleClass="sidebar-btn" text="拍立得">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v11H4z M7 16h10v3H7z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetFilm" styleClass="sidebar-btn" text="胶片框">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v14H4z M8 5v14 M12 5v14 M16 5v14" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetDoubleLine" styleClass="sidebar-btn" text="双线边框">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h14v14H5z M8.5 8.5h7v7h-7z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetShadow" styleClass="sidebar-btn" text="投影边框">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h12v12H5z M11 19h8v-8" /></graphic>
+                        </Button>
                     </VBox>
                 </TitledPane>
                 <!-- 背景模糊 -->
                 <TitledPane animated="true" expanded="false" text="背景模糊">
+                    <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 3a9 9 0 1 0 9 9" /></graphic>
                     <VBox styleClass="sidebar-btn-group">
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onBlurNormal" styleClass="sidebar-btn" text="背景模糊" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onBlurWhite" styleClass="sidebar-btn" text="日期模糊" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onBlurImageBg" styleClass="sidebar-btn" text="图片背景" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onSelectBgImage" styleClass="sidebar-btn" text="导入背景图" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onBlurNormal" styleClass="sidebar-btn" text="背景模糊">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 4a8 8 0 1 0 0 16a8 8 0 0 0 0-16z M12 4v16 M4 12h16" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onBlurWhite" styleClass="sidebar-btn" text="日期模糊">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 7h16v13H4z M4 11h16 M8 3v4 M16 3v4" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onBlurImageBg" styleClass="sidebar-btn" text="图片背景">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v14H4z M4 14l5-4 4 3 3-2 5 4" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onSelectBgImage" styleClass="sidebar-btn" text="导入背景图">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 5v14 M5 12h14" /></graphic>
+                        </Button>
                     </VBox>
                 </TitledPane>
                 <!-- 水印边框 -->
                 <TitledPane animated="true" expanded="false" text="水印边框">
+                    <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 7h16 M4 12h16 M4 17h10" /></graphic>
                     <VBox styleClass="sidebar-btn-group">
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onWatermarkExif" styleClass="sidebar-btn" text="水印边框" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onWatermarkSingle" styleClass="sidebar-btn" text="单行水印" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onWatermarkBrand" styleClass="sidebar-btn" text="品牌水印" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onWatermarkExif" styleClass="sidebar-btn" text="水印边框">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 6h16v12H4z M7 11h10 M7 15h6" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onWatermarkSingle" styleClass="sidebar-btn" text="单行水印">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 12h14" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onWatermarkBrand" styleClass="sidebar-btn" text="品牌水印">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 4l1.6 4.4L18 10l-4.4 1.6L12 16l-1.6-4.4L6 10l4.4-1.6z" /></graphic>
+                        </Button>
                     </VBox>
                 </TitledPane>
                 <!-- 印象风格 -->
                 <TitledPane animated="true" expanded="false" text="印象风格">
+                    <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z" /></graphic>
                     <VBox styleClass="sidebar-btn-group">
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetImpFrosted" styleClass="sidebar-btn" text="磨砂印象" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetImpClassic" styleClass="sidebar-btn" text="经典印象" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetXiaomiImp" styleClass="sidebar-btn" text="小米印象" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetImpFrosted" styleClass="sidebar-btn" text="磨砂印象">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 4v16 M4 12h16 M6.3 6.3l11.4 11.4 M17.7 6.3L6.3 17.7" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetImpClassic" styleClass="sidebar-btn" text="经典印象">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v14H4z M12 5v14" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetXiaomiImp" styleClass="sidebar-btn" text="小米印象">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M6 12h12 M12 6v12" /></graphic>
+                        </Button>
                     </VBox>
                 </TitledPane>
                 <!-- 卡片风格 -->
                 <TitledPane animated="true" expanded="false" text="卡片风格">
+                    <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v12H4z M8 21h8" /></graphic>
                     <VBox styleClass="sidebar-btn-group">
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetFloatWhite" styleClass="sidebar-btn" text="浮影白框" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardLeica" styleClass="sidebar-btn" text="徕卡卡片" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardLogoParam" styleClass="sidebar-btn" text="Logo参数" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardPureLogo" styleClass="sidebar-btn" text="纯Logo" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardSimple" styleClass="sidebar-btn" text="简洁卡片" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardImmersion" styleClass="sidebar-btn" text="沉浸卡片" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetFloatWhite" styleClass="sidebar-btn" text="浮影白框">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 6h16v12H4z M8 10h8v4H8z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardLeica" styleClass="sidebar-btn" text="徕卡卡片">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v14H4z M18 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardLogoParam" styleClass="sidebar-btn" text="Logo参数">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 6h16v12H4z M6 11h8 M6 15h12" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardPureLogo" styleClass="sidebar-btn" text="纯Logo">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 4l1.5 4.5L18 10l-4.5 1.5L12 16l-1.5-4.5L6 10l4.5-1.5z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardSimple" styleClass="sidebar-btn" text="简洁卡片">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v14H4z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCardImmersion" styleClass="sidebar-btn" text="沉浸卡片">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M3 4h18v16H3z M3 8h18" /></graphic>
+                        </Button>
                     </VBox>
                 </TitledPane>
                 <!-- 色彩色卡 -->
                 <TitledPane animated="true" expanded="false" text="色彩色卡">
+                    <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 4h14v16H5z M5 12h14" /></graphic>
                     <VBox styleClass="sidebar-btn-group">
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetColorClassic" styleClass="sidebar-btn" text="经典色卡" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetColorRefined" styleClass="sidebar-btn" text="精致色卡" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetArtCard" styleClass="sidebar-btn" text="艺术卡片" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetColorClassic" styleClass="sidebar-btn" text="经典色卡">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h14v14H5z M5 12h14" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetColorRefined" styleClass="sidebar-btn" text="精致色卡">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h14v14H5z M12 5v14" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetArtCard" styleClass="sidebar-btn" text="艺术卡片">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v14H4z M7 16l3-4 3 3 2-2 3 3" /></graphic>
+                        </Button>
                     </VBox>
                 </TitledPane>
                 <!-- 白边/简约风格 -->
                 <TitledPane animated="true" expanded="false" text="白边 / 简约">
+                    <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h14v14H5z M9 9h6v6H9z" /></graphic>
                     <VBox styleClass="sidebar-btn-group">
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetWhitePlain" styleClass="sidebar-btn" text="白边素净" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetFujiWhite" styleClass="sidebar-btn" text="富士白边" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetParamTopLeft" styleClass="sidebar-btn" text="左上参数" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetParamBottomLeft" styleClass="sidebar-btn" text="左下参数" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetParamBottomSingle" styleClass="sidebar-btn" text="单行参数" />
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetSimpleFilm" styleClass="sidebar-btn" text="胶片简约" />
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetWhitePlain" styleClass="sidebar-btn" text="白边素净">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h14v14H5z M9 9h6v6H9z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetFujiWhite" styleClass="sidebar-btn" text="富士白边">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 4h16v16H4z M12 4v16" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetParamTopLeft" styleClass="sidebar-btn" text="左上参数">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 7h8 M4 11h6 M4 15h9" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetParamBottomLeft" styleClass="sidebar-btn" text="左下参数">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M11 9h9 M13 13h7 M15 17h5" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetParamBottomSingle" styleClass="sidebar-btn" text="单行参数">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 14h14" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetSimpleFilm" styleClass="sidebar-btn" text="胶片简约">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v14H4z M8 5v14 M12 5v14 M16 5v14" /></graphic>
+                        </Button>
+                    </VBox>
+                </TitledPane>
+                <!-- 潮流风格（模仿市面主流 App） -->
+                <TitledPane animated="true" expanded="false" text="潮流风格">
+                    <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 4l1.5 4.5L18 10l-4.5 1.5L12 16l-1.5-4.5L6 10l4.5-1.5z M4 20h16" /></graphic>
+                    <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetXhsCover" styleClass="sidebar-btn" text="小红书封面">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M9 4v16 M9 4h6v16H9z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetIgGradient" styleClass="sidebar-btn" text="IG渐变光环">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 12m-6 0a6 6 0 1 0 12 0a6 6 0 1 0-12 0 M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCream" styleClass="sidebar-btn" text="醒图奶油风">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z M7 19h10" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetCanvaCollage" styleClass="sidebar-btn" text="Canva错位">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h12v12H5z M11 11h8v8h-8z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetNomo" styleClass="sidebar-btn" text="NOMO复古">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M3 8h18v10H3z M7 5h10v3H7z M17 13m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetAppleDark" styleClass="sidebar-btn" text="苹果深色卡">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" /></graphic>
+                        </Button>
                     </VBox>
                 </TitledPane>
             </VBox>
@@ -171,19 +265,6 @@
                     <graphic><SVGPath styleClass="ui-icon" content="M4 7h16 M4 17h16 M9 7m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0 M15 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0" /></graphic>
                     <ScrollPane fitToWidth="true">
                         <VBox spacing="5.0" styleClass="settings-panel">
-                            <!-- 背景模糊 -->
-                            <Label styleClass="param-group-title" text="背景模糊" />
-                            <CheckBox fx:id="cbBgBlur" text="启用背景模糊（毛玻璃卡片）" />
-                            <CheckBox fx:id="cbBgBlurWhite" text="白色提亮（毛玻璃更柔和）" />
-                            <HBox alignment="CENTER_LEFT" spacing="4.0">
-                                <Label text="模糊半径" />
-                                <Slider fx:id="slBgBlurRadius" blockIncrement="5" max="80" min="10" prefWidth="120.0" value="40" />
-                            </HBox>
-                            <HBox alignment="CENTER_LEFT" spacing="4.0">
-                                <Label text="模糊强度" />
-                                <Slider fx:id="slBgBlurIntensity" blockIncrement="5" max="100" min="0" prefWidth="120.0" value="50" />
-                            </HBox>
-                            <Separator styleClass="param-group-separator" />
                             <!-- 画布比例 -->
                             <Label styleClass="param-group-title" text="画布比例" />
                             <ComboBox fx:id="cbCanvasRatio" prefWidth="200.0" />

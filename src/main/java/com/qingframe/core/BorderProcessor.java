@@ -77,6 +77,7 @@ public class BorderProcessor {
                 if (useIndividual && (cornerTl > 0 || cornerTr > 0 || cornerBl > 0 || cornerBr > 0)) {
                     result = applyCornerRadius(result, cornerTl, cornerTr, cornerBl, cornerBr);
                 } else if (cornerRadius > 0) {
+                    // 背景模糊边框保持最初的样式：照片本身圆角，模糊背景不做整图裁角
                     boolean blurStyle = switch (style) {
                         case BLUR_CLASSIC, BLUR_DATE -> true;
                         default -> false;
