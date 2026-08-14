@@ -278,8 +278,18 @@ public class BorderEngine {
     }
 
     private void drawBlurredBackground(GraphicsContext gc, Image originImg, double cw, double ch, BaseMargin margin) {
-        double imgW = originImg.getWidth();
-        double imgH = originImg.getHeight();
+        // 用户选择的背景图优先（cover 铺满画布）；未设置/加载失败则用照片本身模糊
+        Image bg = null;
+        String bgPath = BorderProcessor.getBgImagePath();
+        if (bgPath != null && !bgPath.isEmpty()) {
+            try {
+                bg = new Image(new java.io.File(bgPath).toURI().toString());
+            } catch (Exception ignored) {}
+        }
+        if (bg == null || bg.isError() || bg.getWidth() <= 0) bg = originImg;
+
+        double imgW = bg.getWidth();
+        double imgH = bg.getHeight();
         double scale = Math.max(cw / imgW, ch / imgH);
         double sx = (cw - imgW * scale) / 2;
         double sy = (ch - imgH * scale) / 2;
@@ -288,7 +298,7 @@ public class BorderEngine {
         gc.save();
         javafx.scene.effect.GaussianBlur blur = new javafx.scene.effect.GaussianBlur(blurRadius);
         gc.setEffect(blur);
-        gc.drawImage(originImg, sx, sy, imgW * scale, imgH * scale);
+        gc.drawImage(bg, sx, sy, imgW * scale, imgH * scale);
         gc.restore();
     }
 
@@ -664,7 +674,8 @@ public class BorderEngine {
             gc.setFill(parseColor(textLine.getColorHex(), textLine.getOpacity()));
             double tx = textLine.getX() > 0 ? textLine.getX() : cw / 2;
             double ty = textLine.getY() > 0 ? textLine.getY() : ch - textLine.getFontSize() - 10;
-            if ("bottom".equals(textLine.getAlign())) ty = ch - textLine.getFontSize() - 10;
+            if ("bottom".equals(textLine.getAlign()) || "exif".equals(textLine.getAlign()))
+                ty = ch - textLine.getFontSize() - 10;
             else if ("top".equals(textLine.getAlign())) ty = textLine.getFontSize() + 10;
             gc.fillText(textLine.getText(), tx, ty);
             gc.restore();
@@ -702,7 +713,8 @@ public class BorderEngine {
         if (decor.getExifAutoText() == 1) {
             String exifText = "";
             for (TextStickerConfig.TextLine l : decor.getTextLines()) {
-                if (l.getText() != null && !l.getText().isEmpty() && "bottom".equals(l.getAlign())) {
+                if (l.getText() != null && !l.getText().isEmpty()
+                        && ("bottom".equals(l.getAlign()) || "exif".equals(l.getAlign()))) {
                     exifText = l.getText();
                     break;
                 }
@@ -770,8 +782,9 @@ public class BorderEngine {
         double cardY = margin.getMarginTop();
         double cardW = canvasW - margin.getTotalLeft() - margin.getTotalRight();
         double cardH = canvasH - margin.getTotalTop() - margin.getTotalBottom();
-        double textAreaH = 48;
-        double textY = canvasH - 14;
+        // 文字区高度与位置改为按画布比例计算，保证预览与导出（降级缩放）视觉一致
+        double textAreaH = Math.max(20, canvasH * 0.011);
+        double textY = canvasH - Math.max(10, canvasH * 0.006);
         cardH -= textAreaH;
 
         // 4. Photo with rounded corners and soft shadow
@@ -809,9 +822,9 @@ public class BorderEngine {
             imgShadow.setSpread(cardShadow.getShadowSpread() / 100.0);
             imgShadow.setColor(parseColor(cardShadow.getShadowColorHex(), cardShadow.getShadowOpacity()));
         } else {
-            imgShadow.setRadius(36);
+            imgShadow.setRadius(Math.max(8, canvasW * 0.006));
             imgShadow.setOffsetX(0);
-            imgShadow.setOffsetY(8);
+            imgShadow.setOffsetY(Math.max(2, canvasH * 0.002));
             imgShadow.setSpread(0);
             imgShadow.setColor(Color.rgb(0, 0, 0, 0.30));
         }
@@ -841,9 +854,11 @@ public class BorderEngine {
                 gc.setTextAlign(TextAlignment.CENTER);
                 gc.setFill(parseColor(textLine.getColorHex(), textLine.getOpacity()));
                 double tx = textLine.getX() > 0 ? textLine.getX() : canvasW / 2;
-                double ty = textLine.getY() > 0 ? textLine.getY() : cardY + cardH + 30;
-                if ("bottom".equals(textLine.getAlign())) ty = cardY + cardH + 30;
-                else if ("top".equals(textLine.getAlign())) ty = textLine.getFontSize() + 10;
+                double ty = textLine.getY() > 0 ? textLine.getY()
+                        : cardY + cardH + Math.max(8, canvasH * 0.008);
+                if ("bottom".equals(textLine.getAlign()) || "exif".equals(textLine.getAlign()))
+                    ty = cardY + cardH + Math.max(8, canvasH * 0.008);
+                else if ("top".equals(textLine.getAlign())) ty = textLine.getFontSize() + Math.max(6, canvasH * 0.004);
                 gc.fillText(textLine.getText(), tx, ty);
                 gc.restore();
             }
@@ -866,7 +881,9 @@ public class BorderEngine {
             if (decor.getExifAutoText() == 1) {
                 String exifText = "";
                 for (TextStickerConfig.TextLine l : decor.getTextLines()) {
-                    if (l.getText() != null && !l.getText().isEmpty()) {
+                    if (l.getText() != null && !l.getText().isEmpty()
+                            && (l.getAlign() == null || "bottom".equals(l.getAlign())
+                                || "exif".equals(l.getAlign()))) {
                         exifText = l.getText();
                         break;
                     }
@@ -874,7 +891,7 @@ public class BorderEngine {
                 if (!exifText.isEmpty()) {
                     gc.setTextAlign(TextAlignment.CENTER);
         gc.setFill(Color.WHITE);
-                    gc.setFont(new Font("Microsoft YaHei", 13));
+                    gc.setFont(new Font("Microsoft YaHei", Math.max(6, canvasH * 0.003)));
                     gc.fillText(exifText, canvasW / 2, textY);
                 }
             }

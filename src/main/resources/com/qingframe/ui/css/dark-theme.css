@@ -112,7 +112,7 @@
 .titled-pane > .title {
     -fx-background-color: transparent;
     -fx-padding: 8 10 6 10;
-    -fx-background-radius: -qfx-radius-m;
+    -fx-background-radius: 8px;
 }
 .titled-pane > .title:hover {
     -fx-background-color: rgba(91, 141, 239, 0.08);

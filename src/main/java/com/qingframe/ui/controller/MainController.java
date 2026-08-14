@@ -771,21 +771,31 @@ public class MainController implements Initializable {
         if (template == null || template.getDecorConfig() == null) return;
         String text = cachedExifText;
         if (text.isEmpty()) text = buildManualExifText();
-        final String target = text;
         List<TextStickerConfig.TextLine> lines = template.getDecorConfig().getTextLines();
-        if (cbExifText != null && cbExifText.isSelected() && !target.isEmpty()) {
-            // 移除旧的同文本参数行，避免重复
-            lines.removeIf(l -> l.getText() != null && l.getText().equals(target));
+        if (cbExifText != null && cbExifText.isSelected() && !text.isEmpty()) {
+            // 移除旧的自动参数行（兼容旧版 bottom 标记），避免重复
+            lines.removeIf(l -> l.getText() != null && isAutoExifLine(l));
             TextStickerConfig.TextLine line = new TextStickerConfig.TextLine();
-            line.setText(target);
-            line.setAlign("bottom");
+            line.setText(text);
+            line.setAlign("exif");
+            int fs = template.getParamFontSize();
+            line.setFontSize(fs > 0 ? fs : 16);
             lines.add(line);
         } else {
-            // 未开启参数显示：移除可能残留的参数行（照片 EXIF 或手动拼装）
-            lines.removeIf(l -> l.getText() != null
-                    && (!cachedExifText.isEmpty() && l.getText().equals(cachedExifText)
-                        || l.getText().equals(buildManualExifText())));
+            // 未开启参数显示：移除可能残留的自动参数行
+            lines.removeIf(l -> l.getText() != null && isAutoExifLine(l));
         }
+    }
+
+    /** 判断是否为自动生成的 EXIF 参数行（新标记 exif，兼容旧标记 bottom） */
+    private static boolean isAutoExifLine(TextStickerConfig.TextLine l) {
+        if (l == null || l.getAlign() == null) return false;
+        if ("exif".equals(l.getAlign())) return true;
+        // 兼容旧模板：bottom 行且文本符合 EXIF 参数格式才视为自动参数行，避免误删用户手写文字
+        if (!"bottom".equals(l.getAlign())) return false;
+        String t = l.getText() == null ? "" : l.getText();
+        if (t.isEmpty()) return false;
+        return t.matches("(?s).*(mm|F/|ISO|1/\\d|\\d{4}:\\d{2}:\\d{2}).*");
     }
 
     /** 从手动输入的 EXIF 字段拼装参数文本（照片无 EXIF 时的兜底） */
@@ -998,6 +1008,8 @@ public class MainController implements Initializable {
 
             int idx = i;
             container.setOnMouseClicked(e -> {
+                // 仅左键处理切换/多选；右键只弹菜单，不触发图片切换
+                if (e.getButton() != javafx.scene.input.MouseButton.PRIMARY) return;
                 if (e.isControlDown()) {
                     if (selectedIndices.contains(idx)) {
                         selectedIndices.remove(idx);
@@ -1010,6 +1022,28 @@ public class MainController implements Initializable {
                     switchToImage(idx);
                 }
                 updateFilmStrip();
+            });
+
+            // 右键菜单：同步边框 / 删除
+            ContextMenu menu = new ContextMenu();
+            MenuItem syncItem = new MenuItem("同步边框");
+            syncItem.setOnAction(e -> {
+                if (idx == currentImageIndex) {
+                    statusLabel.setText("当前图片已应用此边框，无需同步");
+                    return;
+                }
+                syncModelFromUI();
+                imageTemplates.put(imageFiles.get(idx), cloneTemplate(template));
+                clearThumbCache();
+                updateFilmStrip();
+                statusLabel.setText("已同步边框到: " + imageFiles.get(idx).getName());
+            });
+            MenuItem delItem = new MenuItem("删除");
+            delItem.setOnAction(e -> removeImageAt(idx));
+            menu.getItems().addAll(syncItem, delItem);
+            container.setOnContextMenuRequested(e -> {
+                e.consume();
+                menu.show(container, e.getScreenX(), e.getScreenY());
             });
 
             container.getChildren().add(iv);
@@ -1045,6 +1079,46 @@ public class MainController implements Initializable {
         loadImage(imageFiles.get(idx));
     }
 
+    /** 从胶片条删除指定图片（仅移出列表，不删除磁盘文件） */
+    private void removeImageAt(int idx) {
+        if (idx < 0 || idx >= imageFiles.size()) return;
+        File removed = imageFiles.remove(idx);
+        imageTemplates.remove(removed);
+        thumbCache.remove(removed);
+
+        // 修正多选下标
+        selectedIndices.removeIf(s -> s == idx);
+        java.util.Set<Integer> shifted = new java.util.HashSet<>();
+        for (int s : selectedIndices) {
+            shifted.add(s > idx ? s - 1 : s);
+        }
+        selectedIndices.clear();
+        selectedIndices.addAll(shifted);
+
+        if (idx < currentImageIndex) {
+            currentImageIndex--;
+        } else if (idx == currentImageIndex) {
+            if (imageFiles.isEmpty()) {
+                currentImageIndex = -1;
+                originImage = null;
+                template = new TemplateModel();
+                placeholderView.setVisible(true);
+                GraphicsContext gc = previewCanvas.getGraphicsContext2D();
+                gc.setFill(Color.rgb(200, 200, 200));
+                gc.fillRect(0, 0, previewCanvas.getWidth(), previewCanvas.getHeight());
+                lblImageInfo.setText("0/0 无图片");
+            } else {
+                int next = Math.min(idx, imageFiles.size() - 1);
+                currentImageIndex = -1; // 避免 loadImage 把已删除文件存回模板表
+                loadImage(imageFiles.get(next));
+            }
+        }
+
+        clearThumbCache();
+        updateFilmStrip();
+        statusLabel.setText("已从列表删除: " + removed.getName());
+    }
+
     private void selectAllImages() {
         if (imageFiles.isEmpty()) return;
         selectedIndices.clear();
@@ -1065,7 +1139,8 @@ public class MainController implements Initializable {
      * 渲染因依赖 Canvas snapshot 仍在界面线程串行执行；输出内容与顺序无关，结果与串行版本一致。
      */
     private void exportImagesInParallel(List<File> files, File exportDir, String fmt, float jpegQuality) {
-        int threads = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors()));
+        // 原画质导出内存占用大：并发控制在 2 线程内，避免多张大图同时渲染导致内存溢出
+        int threads = Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors()));
         ExecutorService pool = Executors.newFixedThreadPool(threads, r -> {
             Thread t = new Thread(r, "export-worker");
             t.setDaemon(true);
@@ -1202,11 +1277,16 @@ public class MainController implements Initializable {
             return;
         }
         syncModelFromUI();
+        // 同步边框只同步边框效果：剥离 EXIF 自动参数行，相机参数由每张图片自己的 EXIF 决定
         int count = 0;
         for (int idx : selectedIndices) {
             if (idx == currentImageIndex) continue;
+            TemplateModel target = cloneTemplate(template);
+            if (target.getDecorConfig() != null && target.getDecorConfig().getTextLines() != null) {
+                target.getDecorConfig().getTextLines().removeIf(MainController::isAutoExifLine);
+            }
             // 真正把当前边框同步到选中的图片：切换预览与导出都使用同一套边框
-            imageTemplates.put(imageFiles.get(idx), cloneTemplate(template));
+            imageTemplates.put(imageFiles.get(idx), target);
             count++;
         }
         clearThumbCache();
@@ -1344,6 +1424,9 @@ public class MainController implements Initializable {
         template = new TemplateModel();
         template.setPhotoFrameStyle(style);
         template.setPhotoFrameBorderSize(60);
+        // 背景模糊/日期模糊默认使用照片自身模糊：清除之前导入的背景图
+        BorderProcessor.setBgImagePath("");
+        template.getBaseMargin().setBgBlurEnable(0);
         // 背景模糊的内部圆角（照片圆角）默认 200
         template.getCornerConfig().setCornerRadiusAll(200);
         template.getCornerConfig().setCornerRadiusTL(200);
@@ -1374,6 +1457,14 @@ public class MainController implements Initializable {
             template.getBaseMargin().setBgBlurEnable(1);
             onSettingChanged();
         }
+    }
+
+    /** 移除已导入的背景图，恢复照片自身模糊背景 */
+    @FXML
+    private void onClearBgImage() {
+        BorderProcessor.setBgImagePath("");
+        template.getBaseMargin().setBgBlurEnable(0);
+        onSettingChanged();
     }
 
     @FXML
@@ -1823,6 +1914,39 @@ public class MainController implements Initializable {
         return names;
     }
 
+    /** 扫描 classpath 指定目录下的图片文件（纹理等，兼容开发目录与打包后 jar） */
+    private List<String> scanImageResourceDir(String path) {
+        List<String> names = new ArrayList<>();
+        try {
+            Enumeration<URL> urls = getClass().getClassLoader().getResources(path);
+            while (urls.hasMoreElements()) {
+                URL u = urls.nextElement();
+                if ("file".equals(u.getProtocol())) {
+                    File dir = new File(u.toURI());
+                    File[] files = dir.listFiles();
+                    if (files != null) {
+                        for (File f : files) {
+                            String n = f.getName().toLowerCase();
+                            if (n.endsWith(".png") || n.endsWith(".jpg") || n.endsWith(".jpeg")) {
+                                names.add(f.getName());
+                            }
+                        }
+                    }
+                } else if ("jar".equals(u.getProtocol())) {
+                    try (java.util.jar.JarFile jar = ((java.net.JarURLConnection) u.openConnection()).getJarFile()) {
+                        jar.stream()
+                                .filter(e -> e.getName().startsWith(path + "/")
+                                        && (e.getName().endsWith(".png") || e.getName().endsWith(".jpg")
+                                            || e.getName().endsWith(".jpeg")))
+                                .forEach(e -> names.add(e.getName().substring(path.length() + 1)));
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        Collections.sort(names);
+        return names;
+    }
+
     private TemplateModel loadPresetFromJson(String name) {
         try (InputStream in = getClass().getResourceAsStream("/com/qingframe/presets/" + name + ".json")) {
             if (in == null) return null;
@@ -2035,7 +2159,7 @@ public class MainController implements Initializable {
     /** 内置纹理选择：从 classpath 的 textures 目录弹出选择框 */
     @FXML
     private void onBuiltinTexture() {
-        List<String> names = scanResourceDir("com/qingframe/textures");
+        List<String> names = scanImageResourceDir("com/qingframe/textures");
         if (names.isEmpty()) {
             showAlert("未找到内置纹理");
             return;
@@ -2440,7 +2564,35 @@ public class MainController implements Initializable {
         if (awtImg == null) throw new IOException("无法读取图片: " + src.getName());
         ExifReader.ExifData exif = ExifReader.parse(src);
         if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
-        WritableImage result = renderAwtWithFallback(awtImg, tmpl);
+        // 基础边框的 EXIF 参数行：同步边框只同步效果，参数行用本图 EXIF 重建
+        TemplateModel renderTmpl = tmpl;
+        if (tmpl.getDecorConfig() != null && tmpl.getDecorConfig().getExifAutoText() == 1) {
+            String exifText = ExifTextParser.formatExifText(
+                    ExifTextParser.readExif(src.getAbsolutePath()), "");
+            if (!exifText.isEmpty()) {
+                renderTmpl = cloneTemplate(tmpl);
+                List<TextStickerConfig.TextLine> lines = renderTmpl.getDecorConfig().getTextLines();
+                lines.removeIf(MainController::isAutoExifLine);
+                TextStickerConfig.TextLine line = new TextStickerConfig.TextLine();
+                line.setText(exifText);
+                line.setAlign("exif");
+                int fs = renderTmpl.getParamFontSize();
+                line.setFontSize(fs > 0 ? fs : 16);
+                lines.add(line);
+            }
+        }
+        WritableImage result;
+        // 相机参数文字必须由每张图片自己的 EXIF 决定；同步边框只同步边框效果。
+        // 加锁保证批量导出并发时 EXIF/渲染参数不互相串扰。
+        synchronized (BorderProcessor.class) {
+            ExifReader.ExifData prevExif = BorderProcessor.getCurrentExif();
+            BorderProcessor.setExifData(exif);
+            try {
+                result = renderAwtWithFallback(awtImg, renderTmpl);
+            } finally {
+                BorderProcessor.setExifData(prevExif);
+            }
+        }
         if (result == null) {
             throw new IOException(String.format("渲染结果异常（接近空白），且自动缩放后仍失败：照片 %dx%d",
                     awtImg.getWidth(), awtImg.getHeight()));
@@ -2448,36 +2600,65 @@ public class MainController implements Initializable {
         return result;
     }
 
-    /** 单张导出：渲染空白时逐级缩小重试，直到成功或全部失败 */
-    /** 批量导出：AWT 版本的分级降级（后台线程调用） */
+    /** 导出渲染：原画质优先（与预览一致），内存不足/空白时自动逐级降级，保证稳定输出 */
     private WritableImage renderAwtWithFallback(BufferedImage awt, TemplateModel tmpl) throws Exception {
-        // 超大图先预降级，避免在界面线程上做注定失败的全尺寸渲染
-        BufferedImage target = awt;
-        TemplateModel renderTmpl = tmpl;
         logExport("原始尺寸: " + awt.getWidth() + "x" + awt.getHeight());
-        if (Math.max(awt.getWidth(), awt.getHeight()) > EXPORT_SAFE_EDGE) {
-            target = downscaleAwtToMaxEdge(awt, EXPORT_SAFE_EDGE);
-            // 模板参数按同一比例缩放，保证导出边框/文字相对照片大小与预览一致
-            renderTmpl = scaleTemplateForExport(tmpl, (double) target.getWidth() / awt.getWidth());
-            logExport("预降级到 " + target.getWidth() + "x" + target.getHeight() + "，模板参数缩放 x"
-                    + String.format("%.2f", (double) target.getWidth() / awt.getWidth()));
-        }
-        WritableImage r = renderAwtScaled(target, awt, renderTmpl);
+        // 原画质优先：直接用原图全尺寸渲染，边框/文字比例与预览完全一致
+        WritableImage r = renderQuietly(awt, awt, tmpl);
         boolean firstBlank = r == null || ImageExportUtil.looksBlank(r);
-        logExport("首轮渲染 " + target.getWidth() + "x" + target.getHeight() + " 空白=" + firstBlank);
+        logExport("原画质渲染 " + awt.getWidth() + "x" + awt.getHeight() + " 空白=" + firstBlank);
         if (!firstBlank) return r;
-        BufferedImage cur = target;
-        int[] edges = {1800, 1200};
+
+        // 原画质失败（内存不足/空白）→ 逐级降级渲染
+        BufferedImage cur = awt;
+        int[] edges = {EXPORT_SAFE_EDGE, 1800, 1200};
         for (int edge : edges) {
+            if (Math.max(cur.getWidth(), cur.getHeight()) <= edge) break;
             BufferedImage scaled = downscaleAwtToMaxEdge(cur, edge);
             if (scaled == cur) break;
             cur = scaled;
-            r = renderAwtScaled(cur, awt, scaleTemplateForExport(tmpl, (double) cur.getWidth() / awt.getWidth()));
+            r = renderQuietly(cur, awt, scaleTemplateForExport(tmpl, (double) cur.getWidth() / awt.getWidth()));
             boolean blank = r == null || ImageExportUtil.looksBlank(r);
             logExport("降级长边 " + edge + "(" + cur.getWidth() + "x" + cur.getHeight() + ") 渲染空白=" + blank);
             if (!blank) return r;
         }
         return null;
+    }
+
+    /** 渲染并吞掉内存不足/异常，返回 null 表示失败（由调用方走降级） */
+    private WritableImage renderQuietly(BufferedImage renderImg, BufferedImage origImg, TemplateModel tmpl) {
+        try {
+            return renderAwtScaledWithStatic(renderImg, origImg, tmpl);
+        } catch (OutOfMemoryError e) {
+            System.gc();
+            logExport("内存不足，自动降级: " + e.getMessage());
+            return null;
+        } catch (Exception e) {
+            logExport("渲染异常，自动降级: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** 渲染前临时缩放 BorderProcessor 静态像素参数（圆角/EXIF 字号），渲染后恢复，保证降级导出与预览比例一致 */
+    private WritableImage renderAwtScaledWithStatic(BufferedImage renderImg, BufferedImage origImg, TemplateModel tmpl)
+            throws Exception {
+        double s = (double) renderImg.getWidth() / origImg.getWidth();
+        int origCorner = BorderProcessor.getCornerRadius();
+        int origExif = BorderProcessor.getExifFontSize();
+        double origBlurScale = BorderProcessor.getBlurScale();
+        if (s != 1.0) {
+            BorderProcessor.setCornerRadius(Math.max(0, (int) Math.round(origCorner * s)));
+            // 字号下限只保留可渲染的最小值：固定 8px 会让小字号在降级导出时相对照片偏大
+            BorderProcessor.setExifFontSize(Math.max(2, (int) Math.round(origExif * s)));
+            BorderProcessor.setBlurScale(s);
+        }
+        try {
+            return renderAwtScaled(renderImg, origImg, tmpl);
+        } finally {
+            BorderProcessor.setCornerRadius(origCorner);
+            BorderProcessor.setExifFontSize(origExif);
+            BorderProcessor.setBlurScale(origBlurScale);
+        }
     }
 
     /** 按比例缩放模板的全部像素参数（边距/描边/圆角/阴影/文字/胶片效果），用于降级导出保持视觉一致 */
@@ -2542,6 +2723,12 @@ public class MainController implements Initializable {
             line.setX(line.getX() * s);
             line.setY(line.getY() * s);
             line.setLetterSpacing(line.getLetterSpacing() * s);
+        }
+        for (TextStickerConfig.Sticker sticker : dec.getStickers()) {
+            sticker.setX(sticker.getX() * s);
+            sticker.setY(sticker.getY() * s);
+            sticker.setScale(sticker.getScale() * s);
+            sticker.setRotation(sticker.getRotation());
         }
         dec.setCornerDecorSize(dec.getCornerDecorSize() * s);
         t.setParamFontSize((int) Math.round(t.getParamFontSize() * s));

@@ -117,6 +117,9 @@
                         <Button maxWidth="1.7976931348623157E308" onAction="#onSelectBgImage" styleClass="sidebar-btn" text="导入背景图">
                             <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 5v14 M5 12h14" /></graphic>
                         </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onClearBgImage" styleClass="sidebar-btn" text="移除背景图">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M6 6l12 12 M18 6L6 18" /></graphic>
+                        </Button>
                     </VBox>
                 </TitledPane>
                 <!-- 水印边框 -->

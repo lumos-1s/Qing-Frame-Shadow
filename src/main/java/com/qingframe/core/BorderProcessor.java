@@ -141,12 +141,41 @@ public class BorderProcessor {
 
     public static void cleanupRenderResources() {}
 
+    /** 像素常量按导出降级比例缩放（blurScale=1 时为原值，预览不受影响） */
+    private static int scaledPx(int px) {
+        return (int) Math.round(px * blurScale);
+    }
+
+    /** 加载用户选择的背景图（带缓存），未设置或加载失败返回 null */
+    private static BufferedImage loadBgImage() {
+        if (bgImagePath == null || bgImagePath.isEmpty()) return null;
+        if (cachedBgImage != null && bgImagePath.equals(cachedBgImagePath)) return cachedBgImage;
+        try {
+            java.io.File f = new java.io.File(bgImagePath);
+            if (!f.exists()) return null;
+            cachedBgImage = javax.imageio.ImageIO.read(f);
+            cachedBgImagePath = bgImagePath;
+            return cachedBgImage;
+        } catch (Exception e) {
+            cachedBgImage = null;
+            cachedBgImagePath = "";
+            return null;
+        }
+    }
+
+    /** 模糊半径随导出比例缩放，保证降级导出时背景模糊强度与预览一致 */
+    private static int scaledBlurRadius() {
+        return Math.max(6, (int) Math.round((50 + blurIntensity / 2.0) * blurScale));
+    }
+
     private static ExifReader.ExifData currentExif;
     private static boolean useExifEnabled = true;
     private static volatile String manualLogoBrand;
     private static volatile int exifFontSize = 35;
     private static volatile int cornerRadius = 30;
     private static volatile int blurIntensity = 50;
+    /** 导出降级缩放系数：让模糊半径/边距/文字间距等像素参数随照片尺寸同比缩放，保证导出与预览一致 */
+    private static volatile double blurScale = 1.0;
     private static volatile int logoSize = 14;
     private static volatile java.awt.Color logoColor = java.awt.Color.WHITE;
     private static volatile int paramType = 0;
@@ -155,11 +184,12 @@ public class BorderProcessor {
     private static volatile java.awt.Color shadowColor = new java.awt.Color(0, 0, 0, 80);
 
     public static void setExifData(ExifReader.ExifData data) { currentExif = data; }
+    public static ExifReader.ExifData getCurrentExif() { return currentExif; }
     public static void setUseExifEnabled(boolean enabled) { useExifEnabled = enabled; }
     public static void clearExifData() { currentExif = null; }
     public static void setManualLogoBrand(String brand) { manualLogoBrand = brand; }
     public static String getManualLogoBrand() { return manualLogoBrand; }
-    public static void setExifFontSize(int size) { exifFontSize = Math.max(8, Math.min(160, size)); }
+    public static void setExifFontSize(int size) { exifFontSize = Math.max(2, Math.min(160, size)); }
     public static int getExifFontSize() { return exifFontSize; }
     public static void setCornerRadius(int v) {
         v = Math.max(0, Math.min(500, v));
@@ -186,6 +216,8 @@ public class BorderProcessor {
     }
     public static void setBlurIntensity(int v) { blurIntensity = Math.max(0, Math.min(100, v)); }
     public static int getBlurIntensity() { return blurIntensity; }
+    public static void setBlurScale(double s) { blurScale = Math.max(0.05, Math.min(1.0, s)); }
+    public static double getBlurScale() { return blurScale; }
     public static void setLogoSize(int v) { logoSize = Math.max(6, Math.min(60, v)); }
     public static int getLogoSize() { return logoSize; }
     public static void setLogoColor(java.awt.Color c) { logoColor = c; }
@@ -205,6 +237,8 @@ public class BorderProcessor {
     private static volatile int cornerDecoSize = 30;
     private static volatile int cornerDecoOpacity = 80;
     private static volatile String bgImagePath = "";
+    private static volatile BufferedImage cachedBgImage;
+    private static volatile String cachedBgImagePath = "";
     private static volatile int bgImageBlur = 30;
     private static volatile int fileSizeLimitMB = 0;
 
@@ -218,7 +252,11 @@ public class BorderProcessor {
     public static int getCornerDecoSize() { return cornerDecoSize; }
     public static void setCornerDecoOpacity(int v) { cornerDecoOpacity = Math.max(0, Math.min(100, v)); }
     public static int getCornerDecoOpacity() { return cornerDecoOpacity; }
-    public static void setBgImagePath(String v) { bgImagePath = v; }
+    public static void setBgImagePath(String v) {
+        bgImagePath = v == null ? "" : v;
+        cachedBgImage = null;
+        cachedBgImagePath = "";
+    }
     public static String getBgImagePath() { return bgImagePath; }
     public static void setBgImageBlur(int v) { bgImageBlur = Math.max(0, Math.min(100, v)); }
     public static int getBgImageBlur() { return bgImageBlur; }
@@ -339,13 +377,22 @@ public class BorderProcessor {
         Graphics2D tg = temp.createGraphics();
         tg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 
-        double sc = 1.2 + blurIntensity * 0.003;
-        int sw = (int) (src.getWidth() * sc);
-        int sh = (int) (src.getHeight() * sc);
-        tg.drawImage(src, (bw - sw) / 2, (bh - sh) / 2, sw, sh, null);
+        // 用户选择的背景图优先（cover 铺满画布）；未设置/加载失败则用照片本身模糊
+        BufferedImage bgSource = loadBgImage();
+        if (bgSource != null) {
+            double sc = Math.max(bw / (double) bgSource.getWidth(), bh / (double) bgSource.getHeight());
+            int sw = (int) Math.ceil(bgSource.getWidth() * sc);
+            int sh = (int) Math.ceil(bgSource.getHeight() * sc);
+            tg.drawImage(bgSource, (bw - sw) / 2, (bh - sh) / 2, sw, sh, null);
+        } else {
+            double sc = 1.2 + blurIntensity * 0.003;
+            int sw = (int) (src.getWidth() * sc);
+            int sh = (int) (src.getHeight() * sc);
+            tg.drawImage(src, (bw - sw) / 2, (bh - sh) / 2, sw, sh, null);
+        }
         tg.dispose();
 
-        int blurRadius = 50 + blurIntensity / 2;
+        int blurRadius = scaledBlurRadius();
         BufferedImage blurred = fastBlur(temp, blurRadius);
 
         BufferedImage result = new BufferedImage(bw, bh, BufferedImage.TYPE_INT_ARGB);
@@ -397,8 +444,8 @@ public class BorderProcessor {
 
     private static BufferedImage addBlurClassic(BufferedImage src, int size) {
         CameraSpec cam = cameraFor(src, Style.BLUR_CLASSIC);
-        int blurRadius = 50 + blurIntensity / 2;
-        int blurMargin = Math.max(Math.max(50, size / 2), blurRadius);
+        int blurRadius = scaledBlurRadius();
+        int blurMargin = Math.max(Math.max(scaledPx(50), size / 2), blurRadius);
 
         BufferedImage backing = createBlurBacking(src, size, blurMargin, blurMargin);
         int cx = blurMargin;
@@ -421,7 +468,7 @@ public class BorderProcessor {
             int centerY = topY + maskH / 2;
 
             boolean showModel = paramType == 0;
-            int modelSz = exifFontSize + 4;
+            int modelSz = exifFontSize + scaledPx(4);
             int paramSz = exifFontSize;
 
             Color bc = ColorSampler.sampleBottomDarkColor(src);
@@ -432,10 +479,10 @@ public class BorderProcessor {
             g.fillRect(0, topY, result.getWidth(), maskH);
 
             WatermarkRender.Position pos = WatermarkRender.getPosition();
-            int padX = Math.max(20, 10 + exifFontSize);
+            int padX = Math.max(scaledPx(20), scaledPx(10) + exifFontSize);
 
             if (showModel) {
-                int gap = Math.min(6, Math.max(0, maskH - modelSz - paramSz));
+                int gap = Math.min(scaledPx(6), Math.max(0, maskH - modelSz - paramSz));
                 int blockH = modelSz + gap + paramSz;
                 int modelY = Math.max(topY + modelSz, centerY - blockH / 2 + modelSz);
                 int paramsY = modelY + paramSz + gap;
@@ -498,8 +545,8 @@ public class BorderProcessor {
 
     private static BufferedImage addBlurDate(BufferedImage src, int size) {
         CameraSpec cam = cameraFor(src, Style.BLUR_DATE);
-        int blurRadius = 50 + blurIntensity / 2;
-        int blurMargin = Math.max(Math.max(50, size / 2), blurRadius);
+        int blurRadius = scaledBlurRadius();
+        int blurMargin = Math.max(Math.max(scaledPx(50), size / 2), blurRadius);
 
         BufferedImage backing = createBlurBacking(src, size, blurMargin, blurMargin);
         int cx = blurMargin;
@@ -521,7 +568,7 @@ public class BorderProcessor {
             int centerY = topY + maskH / 2;
 
             boolean showModel = paramType == 0;
-            int modelSz = exifFontSize + 4;
+            int modelSz = exifFontSize + scaledPx(4);
             int paramSz = exifFontSize;
 
             Color bc = ColorSampler.sampleBottomDarkColor(src);
@@ -532,10 +579,10 @@ public class BorderProcessor {
             g.fillRect(0, topY, result.getWidth(), maskH);
 
             WatermarkRender.Position pos = WatermarkRender.getPosition();
-            int padX = Math.max(20, 10 + exifFontSize);
+            int padX = Math.max(scaledPx(20), scaledPx(10) + exifFontSize);
 
             if (showModel) {
-                int gap = Math.min(6, Math.max(0, maskH - modelSz - paramSz));
+                int gap = Math.min(scaledPx(6), Math.max(0, maskH - modelSz - paramSz));
                 int blockH = modelSz + gap + paramSz;
                 int modelY = Math.max(topY + modelSz, centerY - blockH / 2 + modelSz);
                 int paramsY = modelY + paramSz + gap;
@@ -595,6 +642,8 @@ public class BorderProcessor {
     private static void drawBlurBackground(Graphics2D g, BufferedImage backing, BufferedImage src,
             int cx, int cy, int blurMargin) {
         g.drawImage(backing, 0, 0, null);
+        // 用户选择背景图时，不再叠加照片边缘色渐变，保持背景图自身的模糊效果
+        if (loadBgImage() != null) return;
         Color edgeColor = ColorSampler.sampleEdgeColor(src);
         float imgCX = cx + src.getWidth() / 2f;
         float imgCY = cy + src.getHeight() / 2f;
@@ -612,13 +661,13 @@ public class BorderProcessor {
         g.setClip(rr);
         g.drawImage(src, cx, cy, null);
         g.setColor(new Color(120, 120, 120, 28));
-        g.setStroke(new BasicStroke(2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.setStroke(new BasicStroke(Math.max(1, scaledPx(2)), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(rr);
         g.setColor(new Color(120, 120, 120, 16));
-        g.setStroke(new BasicStroke(5, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.setStroke(new BasicStroke(Math.max(1, scaledPx(5)), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(rr);
         g.setColor(new Color(120, 120, 120, 8));
-        g.setStroke(new BasicStroke(8, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.setStroke(new BasicStroke(Math.max(1, scaledPx(8)), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(rr);
         g.setClip(null);
     }
@@ -637,7 +686,7 @@ public class BorderProcessor {
         if (showParams) {
             if (dateLayout) {
                 int textY = cy + src.getHeight() - overlayH / 2;
-                int padX = Math.max(24, 20 + exifFontSize);
+                int padX = Math.max(scaledPx(24), scaledPx(20) + exifFontSize);
 
                 boolean showModel = paramType == 0;
 
@@ -648,14 +697,14 @@ public class BorderProcessor {
                     g.setColor(new Color(240, 240, 240, 230));
                     g.drawString(date, cx + padX, textY);
 
-                    int ls = logoSize;
+                    int ls = Math.max(4, scaledPx(logoSize));
                     int rightX = cx + src.getWidth() - padX;
                     if (ls > 4 && !cam.brand.isEmpty()) {
                         Font lf = fontSans(Font.BOLD, ls).deriveFont(Map.of(TextAttribute.TRACKING, 0.08));
                         int logoW = LogoResource.width(cam.brand, lf);
                         rightX -= logoW;
                         LogoResource.draw(g, cam.brand, rightX, textY, lf);
-                        rightX -= 8;
+                        rightX -= scaledPx(8);
                     }
                     String params = buildParamString(cam);
                     if (!params.isEmpty()) {
@@ -668,7 +717,7 @@ public class BorderProcessor {
                     }
 
                     String model = cam.brand + " " + cam.model;
-                    Font mf = fontSans(Font.BOLD, exifFontSize + 6).deriveFont(Map.of(TextAttribute.TRACKING, 0.08));
+                    Font mf = fontSans(Font.BOLD, exifFontSize + scaledPx(6)).deriveFont(Map.of(TextAttribute.TRACKING, 0.08));
                     g.setFont(mf);
                     FontMetrics mfm = g.getFontMetrics();
                     g.setColor(new Color(255, 255, 255, 235));
@@ -676,7 +725,7 @@ public class BorderProcessor {
                 } else {
                     String params = buildParamString(cam);
                     if (!params.isEmpty()) {
-                        Font pf = fontMono(Font.PLAIN, exifFontSize + 2).deriveFont(Map.of(TextAttribute.TRACKING, 0.10));
+                        Font pf = fontMono(Font.PLAIN, exifFontSize + scaledPx(2)).deriveFont(Map.of(TextAttribute.TRACKING, 0.10));
                         g.setFont(pf);
                         FontMetrics pfm = g.getFontMetrics();
                         g.setColor(new Color(220, 220, 220, 210));
@@ -685,9 +734,9 @@ public class BorderProcessor {
                 }
             } else {
                 int textY = cy + src.getHeight() - overlayH / 2;
-                int modelSz = exifFontSize + 4;
+                int modelSz = exifFontSize + scaledPx(4);
                 int paramSz = exifFontSize;
-                int blockH = modelSz + 6 + paramSz;
+                int blockH = modelSz + scaledPx(6) + paramSz;
                 int modelY = textY - blockH / 2 + modelSz;
                 int paramsY = textY + blockH / 2;
 
