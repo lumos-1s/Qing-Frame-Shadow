@@ -1910,9 +1910,15 @@ public class MainController implements Initializable {
 
     /** 内置预设 = 代码预设 + classpath 下的 JSON 预设 + 自动取色 */
     private List<String> loadPresetList() {
-        List<String> list = new ArrayList<>(List.of("极简白框", "复古胶片", "拍立得", "证件照", "电影宽屏"));
+        // 与左侧栏边框按钮效果重复的预设，不再列入右侧内置预设列表
+        // （JSON 文件保留，左侧按钮仍可加载；仅从右侧列表移除，避免双入口同效果）
+        Set<String> duplicateWithSidebar = Set.of(
+                "极简白框", "拍立得",
+                "浮影白框", "小红书3比4封面", "IG渐变光环",
+                "醒图奶油风", "Canva错位拼贴", "NOMO复古相机", "苹果深色圆角卡");
+        List<String> list = new ArrayList<>(List.of("复古胶片", "证件照", "电影宽屏"));
         for (String name : scanResourceDir("com/qingframe/presets")) {
-            if (!list.contains(name)) list.add(name);
+            if (!duplicateWithSidebar.contains(name) && !list.contains(name)) list.add(name);
         }
         list.add("自动取色边框");
         return list;
