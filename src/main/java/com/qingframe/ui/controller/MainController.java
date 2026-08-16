@@ -66,7 +66,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class MainController implements Initializable {
 
     @FXML private Canvas previewCanvas;
-    @FXML private Label statusLabel, zoomLabel, lblImageInfo, lblCanvasSize;
+    @FXML private Label statusLabel, lblImageInfo, lblCanvasSize;
     @FXML private Label lblImgScale, lblFillOpacity, lblStrokeWidth, lblGlobalMargin, lblParamFontSize;
     @FXML private Slider zoomSlider, slImgScale, slFillOpacity, slStrokeWidth;
     @FXML private Slider slGradientAngle, slTextureScale, slStrokeOpacity;
@@ -117,6 +117,8 @@ public class MainController implements Initializable {
     private final Stack<TemplateModel> undoStack = new Stack<>();
     private final Stack<TemplateModel> redoStack = new Stack<>();
     private double panX = 0, panY = 0;
+    /** 预览缩放（10%~300%），由顶部数字输入框控制 */
+    private double zoomValue = 1.0;
     private double dragStartX = Double.NaN, dragStartY = Double.NaN;
     private boolean isUpdatingSB = false;
     private final List<File> imageFiles = new ArrayList<>();
@@ -245,15 +247,19 @@ public class MainController implements Initializable {
         tfZoomValue.setOnAction(e -> {
             try {
                 double val = Double.parseDouble(tfZoomValue.getText().replace("%", "")) / 100.0;
-                zoomSlider.setValue(Math.max(0.1, Math.min(3.0, val)));
+                setZoom(val);
             } catch (NumberFormatException ex) {
-                tfZoomValue.setText(String.format("%.0f%%", zoomSlider.getValue() * 100));
+                tfZoomValue.setText(String.format("%.0f%%", getZoom() * 100));
             }
         });
-        zoomSlider.valueProperty().addListener((o,ov,nv) -> {
-            zoomLabel.setText(String.format("%.0f%%", nv.doubleValue() * 100));
-            tfZoomValue.setText(String.format("%.0f%%", nv.doubleValue() * 100));
-            scheduleRender();
+        // 滑杆与数字输入框双向同步
+        zoomSlider.valueProperty().addListener((o, ov, nv) -> {
+            double z = nv.doubleValue();
+            if (Math.abs(z - zoomValue) > 0.0001) {
+                zoomValue = z;
+                tfZoomValue.setText(String.format("%.0f%%", z * 100));
+                scheduleRender();
+            }
         });
 
         cbParamType.valueProperty().addListener((o,ov,nv) -> {
@@ -315,7 +321,7 @@ public class MainController implements Initializable {
         dropTarget.setOnScroll(e -> {
             if (e.isAltDown()) {
                 double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
-                zoomSlider.setValue(Math.max(0.1, Math.min(3.0, zoomSlider.getValue() + delta)));
+                setZoom(getZoom() + delta);
                 e.consume();
             }
         });
@@ -1357,20 +1363,38 @@ public class MainController implements Initializable {
 
     @FXML
     private void onZoomIn() {
-        zoomSlider.setValue(Math.min(3.0, zoomSlider.getValue() + 0.2));
+        setZoom(getZoom() + 0.2);
     }
 
     @FXML
     private void onZoomOut() {
-        zoomSlider.setValue(Math.max(0.1, zoomSlider.getValue() - 0.2));
+        setZoom(getZoom() - 0.2);
     }
 
     @FXML
     private void onZoomFit() {
-        zoomSlider.setValue(1.0);
+        setZoom(1.0);
         panX = 0;
         panY = 0;
         refreshView();
+    }
+
+    /** 读取当前预览缩放（10%~300%） */
+    private double getZoom() {
+        return zoomValue;
+    }
+
+    /** 设置预览缩放并刷新输入框与预览 */
+    private void setZoom(double z) {
+        zoomValue = Math.max(0.1, Math.min(3.0, z));
+        if (tfZoomValue != null) {
+            tfZoomValue.setText(String.format("%.0f%%", zoomValue * 100));
+        }
+        if (zoomSlider != null && Math.abs(zoomSlider.getValue() - zoomValue) > 0.0001) {
+            zoomSlider.setValue(zoomValue);
+        } else {
+            scheduleRender();
+        }
     }
 
     @FXML
@@ -2275,7 +2299,7 @@ public class MainController implements Initializable {
 
         GraphicsContext gc = previewCanvas.getGraphicsContext2D();
         try {
-            double zoom = zoomSlider.getValue();
+            double zoom = getZoom();
             boolean compare = template.getCompareMode() == 1;
 
             gc.setFill(Color.rgb(200, 200, 200));
@@ -2369,7 +2393,7 @@ public class MainController implements Initializable {
     }
 
     private void updateScrollBars(double cw, double ch) {
-        double zoom = zoomSlider.getValue();
+        double zoom = getZoom();
         // 加载照片后滚动条始终可见：100% 时也有少量活动空间，放大后可拖动查看细节
         boolean visible = originImage != null;
         hScrollBar.setVisible(visible);
@@ -3095,7 +3119,7 @@ public class MainController implements Initializable {
     private double[] previewToTemplate(double px, double py) {
         double cw = previewCanvas.getWidth();
         double ch = previewCanvas.getHeight();
-        double zoom = zoomSlider.getValue();
+        double zoom = getZoom();
         double x, y, scale, ox, oy;
         if (template.getCompareMode() == 1) {
             x = (px - (cw * 3 / 4 + panX * 2)) / zoom + cw / 4;
@@ -3219,7 +3243,7 @@ public class MainController implements Initializable {
                 // 双击空白处：恢复居中显示
                 panX = 0;
                 panY = 0;
-                zoomSlider.setValue(1.0);
+                setZoom(1.0);
                 refreshView();
             }
         });
@@ -3233,7 +3257,7 @@ public class MainController implements Initializable {
             } else {
                 // 未选中图标：滚轮直接缩放视图（拖动可平移查看细节）
                 double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
-                zoomSlider.setValue(Math.max(0.1, Math.min(3.0, zoomSlider.getValue() + delta)));
+                setZoom(getZoom() + delta);
                 e.consume();
             }
         });
