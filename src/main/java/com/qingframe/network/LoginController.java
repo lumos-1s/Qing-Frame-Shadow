@@ -70,6 +70,7 @@ public class LoginController implements Initializable {
             } else {
                 TokenStore.clear();
             }
+            cacheProfile();
             if (onLoggedIn != null) {
                 onLoggedIn.run();
             }
@@ -112,6 +113,7 @@ public class LoginController implements Initializable {
                 if (cbRemember.isSelected()) {
                     TokenStore.save(ApiClient.token);
                 }
+                cacheProfile();
                 if (onLoggedIn != null) {
                     onLoggedIn.run();
                 }
@@ -134,5 +136,23 @@ public class LoginController implements Initializable {
     private void close() {
         Stage stage = (Stage) tfUsername.getScene().getWindow();
         stage.close();
+    }
+
+    /** 登录/注册成功后拉取昵称头像并缓存到本地，供主界面/个人资料展示 */
+    private void cacheProfile() {
+        PresetMarketService.me().whenComplete((r, err) -> Platform.runLater(() -> {
+            try {
+                if (r != null && r.isOk() && r.data != null) {
+                    JsonObject d = r.data.getAsJsonObject();
+                    if (d.has("nickname")) {
+                        TokenStore.saveNickname(d.get("nickname").getAsString());
+                    }
+                    if (d.has("avatar") && !d.get("avatar").isJsonNull()) {
+                        TokenStore.saveAvatar(d.get("avatar").getAsString());
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }));
     }
 }

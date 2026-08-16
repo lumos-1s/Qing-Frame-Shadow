@@ -6,6 +6,7 @@ import com.qingframe.model.TemplateModel;
 import com.google.gson.JsonObject;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -29,6 +30,14 @@ public class PresetMarketService {
 
     public static CompletableFuture<ApiResult> me() {
         return ApiClient.get("/api/auth/me");
+    }
+
+    /** 更新个人资料：昵称 / 头像（base64 data URL），null 字段不修改 */
+    public static CompletableFuture<ApiResult> updateProfile(String nickname, String avatar) {
+        Map<String, String> body = new java.util.HashMap<>();
+        if (nickname != null) body.put("nickname", nickname);
+        if (avatar != null) body.put("avatar", avatar);
+        return ApiClient.put("/api/auth/profile", body);
     }
 
     public static void setToken(String token) {

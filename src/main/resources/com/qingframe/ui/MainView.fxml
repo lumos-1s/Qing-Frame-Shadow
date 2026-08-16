@@ -3,6 +3,7 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.canvas.Canvas?>
 <?import javafx.scene.control.*?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.shape.*?>
 <?import javafx.scene.text.Font?>
@@ -55,11 +56,17 @@
                 <Label fx:id="zoomLabel" text="100%" />
             </HBox>
             <Pane HBox.hgrow="ALWAYS" />
-            <!-- 账号区：固定在右侧 -->
-            <HBox alignment="CENTER_RIGHT" spacing="6.0" styleClass="toolbar-group">
-                <Label fx:id="lblLoginStatus" text="未登录" style="-fx-text-fill: -qfx-text-2; -fx-font-size: 12px;" />
-                <Button fx:id="btnLoginToggle" onAction="#onLoginToggle" styleClass="toolbar-btn" text="登录" />
-            </HBox>
+                <!-- 账号区：固定在右侧 -->
+                <HBox alignment="CENTER_RIGHT" spacing="6.0" styleClass="toolbar-group">
+                    <StackPane onMouseClicked="#onOpenProfile" style="-fx-cursor: hand;">
+                        <ImageView fx:id="ivAvatar" fitWidth="24.0" fitHeight="24.0" preserveRatio="true" visible="false">
+                            <clip><Circle radius="12.0" centerX="12.0" centerY="12.0" /></clip>
+                        </ImageView>
+                        <Circle radius="12.0" fill="transparent" style="-fx-stroke: -qfx-primary; -fx-stroke-width: 1.5;" />
+                    </StackPane>
+                    <Label fx:id="lblLoginStatus" onMouseClicked="#onOpenProfile" text="未登录" style="-fx-text-fill: -qfx-text-2; -fx-font-size: 12px; -fx-cursor: hand;" />
+                    <Button fx:id="btnLoginToggle" onAction="#onLoginToggle" styleClass="toolbar-btn" text="登录" />
+                </HBox>
             <ToggleButton fx:id="btnThemeToggle" mnemonicParsing="false" onAction="#onToggleTheme" text="">
                 <graphic><SVGPath styleClass="ui-icon" content="M20 13A8 8 0 1 1 11 3a6 6 0 0 0 9 10z" /></graphic>
             </ToggleButton>

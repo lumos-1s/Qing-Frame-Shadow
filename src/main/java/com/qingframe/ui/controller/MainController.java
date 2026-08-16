@@ -48,6 +48,7 @@ import javafx.stage.Stage;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -94,6 +95,7 @@ public class MainController implements Initializable {
     @FXML private Button btnOpenImage, btnSaveImage, btnAddLayer;
     @FXML private Label lblLoginStatus;
     @FXML private Button btnLoginToggle;
+    @FXML private ImageView ivAvatar;
     @FXML private ToggleButton btnThemeToggle;
     @FXML private BorderPane rootPane;
     @FXML private ScrollPane sidebarScroll;
@@ -3323,13 +3325,38 @@ public class MainController implements Initializable {
             ApiClient.token = TokenStore.load();
         }
         boolean loggedIn = ApiClient.isLoggedIn();
-        String username = TokenStore.loadUsername();
+        String nickname = TokenStore.loadNickname();
         if (lblLoginStatus != null) {
-            lblLoginStatus.setText(loggedIn ? ("已登录: " + (username == null ? "用户" : username)) : "未登录");
+            lblLoginStatus.setText(loggedIn ? ("已登录: " + (nickname == null ? "用户" : nickname)) : "未登录");
         }
         if (btnLoginToggle != null) {
-            btnLoginToggle.setText(loggedIn ? "退出" : "登录");
-            btnLoginToggle.setTooltip(new javafx.scene.control.Tooltip(loggedIn ? "退出当前账号" : "登录以使用模板市场"));
+            btnLoginToggle.setText(loggedIn ? "资料" : "登录");
+            btnLoginToggle.setTooltip(new javafx.scene.control.Tooltip(loggedIn ? "个人资料 / 退出登录" : "登录以使用模板市场"));
+        }
+        updateAvatarUi(loggedIn);
+    }
+
+    /** 主界面右上角圆形头像：已登录且本地有头像则显示，否则隐藏 */
+    private void updateAvatarUi(boolean loggedIn) {
+        if (ivAvatar == null) return;
+        if (!loggedIn) {
+            ivAvatar.setImage(null);
+            ivAvatar.setVisible(false);
+            return;
+        }
+        String avatar = TokenStore.loadAvatar();
+        if (avatar == null) {
+            ivAvatar.setImage(null);
+            ivAvatar.setVisible(false);
+            return;
+        }
+        try {
+            int comma = avatar.indexOf(',');
+            byte[] bytes = java.util.Base64.getDecoder().decode(avatar.substring(comma + 1));
+            ivAvatar.setImage(new Image(new ByteArrayInputStream(bytes)));
+            ivAvatar.setVisible(true);
+        } catch (Exception e) {
+            ivAvatar.setVisible(false);
         }
     }
 
@@ -3337,16 +3364,44 @@ public class MainController implements Initializable {
     @FXML
     private void onLoginToggle() {
         if (ApiClient.isLoggedIn()) {
-            ApiClient.token = null;
-            TokenStore.clear();
-            updateLoginUi();
-            statusLabel.setText("已退出登录");
+            openProfileWindow();
             return;
         }
         openLoginWindow(() -> {
             updateLoginUi();
             statusLabel.setText("登录成功");
         });
+    }
+
+    /** 点击头像/昵称：已登录打开个人资料，未登录打开登录窗口 */
+    @FXML
+    private void onOpenProfile() {
+        if (ApiClient.isLoggedIn()) {
+            openProfileWindow();
+        } else {
+            openLoginWindow(() -> updateLoginUi());
+        }
+    }
+
+    /** 个人资料窗口：头像上传 / 昵称修改 / 退出登录 */
+    public void openProfileWindow() {
+        try {
+            javafx.fxml.FXMLLoader loader = new javafx.fxml.FXMLLoader(
+                    getClass().getResource("/com/qingframe/network/ProfileView.fxml"));
+            BorderPane root = loader.load();
+            com.qingframe.network.ProfileController c = loader.getController();
+            c.init(this);
+            Stage stage = new Stage();
+            stage.setTitle("个人资料");
+            stage.initModality(Modality.APPLICATION_MODAL);
+            Scene scene = new Scene(root);
+            scene.getStylesheets().add(currentThemeCss());
+            stage.setScene(scene);
+            stage.showAndWait();
+            updateLoginUi();
+        } catch (Exception e) {
+            showAlert("打开个人资料失败: " + e.getMessage());
+        }
     }
 
     /** 打开登录/注册窗口（模态），登录成功后回调 */

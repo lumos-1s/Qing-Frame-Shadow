@@ -4,7 +4,7 @@
 <mapper namespace="com.qingframe.server.mapper.UserMapper">
 
     <sql id="baseCols">
-        id, username, password_hash, nickname, role, status, created_at, updated_at
+        id, username, password_hash, nickname, avatar, role, status, created_at, updated_at
     </sql>
 
     <select id="findByUsername" resultType="com.qingframe.server.entity.User">
@@ -25,5 +25,14 @@
         INSERT INTO `user` (username, password_hash, nickname, role, status)
         VALUES (#{username}, #{passwordHash}, #{nickname}, #{role}, #{status})
     </insert>
+
+    <update id="updateProfile">
+        UPDATE `user`
+        <set>
+            <if test="nickname != null">nickname = #{nickname},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
 
 </mapper>

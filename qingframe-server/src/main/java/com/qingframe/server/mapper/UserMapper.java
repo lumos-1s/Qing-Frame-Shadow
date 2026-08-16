@@ -12,4 +12,9 @@ public interface UserMapper {
     User findById(@Param("id") Long id);
 
     int insert(User user);
+
+    /** 更新个人资料（昵称 + 头像），仅更新非 null 字段 */
+    int updateProfile(@Param("id") Long id,
+                      @Param("nickname") String nickname,
+                      @Param("avatar") String avatar);
 }

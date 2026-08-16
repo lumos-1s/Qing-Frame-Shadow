@@ -16,6 +16,12 @@ public final class TokenStore {
     /** 欢迎页"下次不再显示"标记：~/.qingframe/skip-welcome */
     private static final Path SKIP_WELCOME_FILE = Paths.get(
             System.getProperty("user.home"), ".qingframe", "skip-welcome");
+    /** 昵称本地缓存：~/.qingframe/nickname */
+    private static final Path NICKNAME_FILE = Paths.get(
+            System.getProperty("user.home"), ".qingframe", "nickname");
+    /** 头像本地缓存（base64 data URL）：~/.qingframe/avatar */
+    private static final Path AVATAR_FILE = Paths.get(
+            System.getProperty("user.home"), ".qingframe", "avatar");
 
     private TokenStore() {
     }
@@ -33,6 +39,47 @@ public final class TokenStore {
             Files.createDirectories(USER_FILE.getParent());
             Files.writeString(USER_FILE, username == null ? "" : username, StandardCharsets.UTF_8);
         } catch (IOException ignored) {
+        }
+    }
+
+    /** 保存昵称到本地缓存 */
+    public static void saveNickname(String nickname) {
+        try {
+            Files.createDirectories(NICKNAME_FILE.getParent());
+            Files.writeString(NICKNAME_FILE, nickname == null ? "" : nickname, StandardCharsets.UTF_8);
+        } catch (IOException ignored) {
+        }
+    }
+
+    /** 读取本地缓存的昵称，无则回退到用户名 */
+    public static String loadNickname() {
+        try {
+            if (Files.exists(NICKNAME_FILE)) {
+                String n = Files.readString(NICKNAME_FILE, StandardCharsets.UTF_8).trim();
+                if (!n.isEmpty()) return n;
+            }
+        } catch (IOException ignored) {
+        }
+        return loadUsername();
+    }
+
+    /** 保存头像（base64 data URL）到本地缓存 */
+    public static void saveAvatar(String avatar) {
+        try {
+            Files.createDirectories(AVATAR_FILE.getParent());
+            Files.writeString(AVATAR_FILE, avatar == null ? "" : avatar, StandardCharsets.UTF_8);
+        } catch (IOException ignored) {
+        }
+    }
+
+    /** 读取本地缓存的头像（base64 data URL），无则返回 null */
+    public static String loadAvatar() {
+        try {
+            if (!Files.exists(AVATAR_FILE)) return null;
+            String a = Files.readString(AVATAR_FILE, StandardCharsets.UTF_8).trim();
+            return a.isEmpty() ? null : a;
+        } catch (IOException e) {
+            return null;
         }
     }
 
@@ -60,6 +107,8 @@ public final class TokenStore {
         try {
             Files.deleteIfExists(TOKEN_FILE);
             Files.deleteIfExists(USER_FILE);
+            Files.deleteIfExists(NICKNAME_FILE);
+            Files.deleteIfExists(AVATAR_FILE);
         } catch (IOException ignored) {
         }
     }

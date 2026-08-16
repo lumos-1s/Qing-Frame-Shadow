@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS `user` (
   username      VARCHAR(50)  NOT NULL COMMENT '登录名',
   password_hash VARCHAR(100) NOT NULL COMMENT 'BCrypt 哈希',
   nickname      VARCHAR(50)  NOT NULL DEFAULT '' COMMENT '昵称',
+  avatar        MEDIUMTEXT   NULL COMMENT '头像 base64 data URL',
   role          VARCHAR(20)  NOT NULL DEFAULT 'user' COMMENT 'user/admin',
   status        TINYINT      NOT NULL DEFAULT 1 COMMENT '1正常 0禁用',
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -56,3 +57,6 @@ CREATE TABLE IF NOT EXISTS preset_like (
   PRIMARY KEY (id),
   UNIQUE KEY uk_preset_user (preset_id, user_id)
 ) ENGINE = InnoDB COMMENT '点赞表';
+
+-- 存量库升级（已按旧版建过库时执行一次）：
+-- ALTER TABLE `user` ADD COLUMN avatar MEDIUMTEXT NULL COMMENT '头像 base64 data URL' AFTER nickname;

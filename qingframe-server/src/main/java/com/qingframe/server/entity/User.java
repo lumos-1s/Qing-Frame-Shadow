@@ -8,6 +8,8 @@ public class User {
     private String username;
     private String passwordHash;
     private String nickname;
+    /** 头像：base64 data URL（如 data:image/png;base64,...），未设置为空串 */
+    private String avatar;
     private String role;
     private Integer status;
     private LocalDateTime createdAt;
@@ -21,6 +23,8 @@ public class User {
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public String getNickname() { return nickname; }
     public void setNickname(String nickname) { this.nickname = nickname; }
+    public String getAvatar() { return avatar; }
+    public void setAvatar(String avatar) { this.avatar = avatar; }
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
     public Integer getStatus() { return status; }

@@ -3,30 +3,42 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.shape.Circle?>
 
-<BorderPane prefWidth="360.0" prefHeight="320.0" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.qingframe.network.LoginController">
+<BorderPane prefWidth="380.0" prefHeight="470.0" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.qingframe.network.LoginController">
 
     <center>
-        <VBox alignment="CENTER" spacing="14.0" styleClass="login-panel">
-            <padding><Insets top="24.0" right="32.0" bottom="24.0" left="32.0" /></padding>
+        <VBox alignment="CENTER" spacing="13.0">
+            <padding><Insets top="34.0" right="42.0" bottom="30.0" left="42.0" /></padding>
 
-            <Label styleClass="login-title" text="清框影账号" />
+            <!-- App Logo -->
+            <StackPane>
+                <Circle radius="34.0" style="-fx-fill: linear-gradient(to bottom right, #6E9CF2, #4A7DE0);" />
+                <Label text="清" style="-fx-font-size: 30px; -fx-font-weight: bold; -fx-text-fill: #FFFFFF;" />
+            </StackPane>
 
-            <TextField fx:id="tfUsername" promptText="用户名" />
-            <PasswordField fx:id="tfPassword" promptText="密码" onAction="#onLogin" />
+            <Label text="清框影 QingFrameShadow" style="-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: -qfx-text;" />
+            <Label text="照片加框 · 模板云市场" style="-fx-font-size: 12.5px; -fx-text-fill: -qfx-text-3;" />
+
+            <TextField fx:id="tfUsername" promptText="用户名" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-padding: 8 12;" />
+            <PasswordField fx:id="tfPassword" promptText="密码" onAction="#onLogin" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-padding: 8 12;" />
+
             <HBox alignment="CENTER" spacing="8.0">
-                <Label text="记住登录" />
+                <Label text="记住登录" style="-fx-text-fill: -qfx-text-2; -fx-font-size: 12px;" />
                 <CheckBox fx:id="cbRemember" selected="true" />
             </HBox>
 
-            <Label fx:id="lblError" styleClass="login-error" text="" visible="false" />
+            <Label fx:id="lblError" style="-fx-text-fill: -qfx-danger; -fx-font-size: 12px;" text="" visible="false" />
 
             <HBox alignment="CENTER" spacing="12.0">
-                <Button fx:id="btnLogin" onAction="#onLogin" prefWidth="110.0" styleClass="btn-primary" text="登录" />
-                <Button fx:id="btnRegister" onAction="#onRegister" prefWidth="110.0" text="注册" />
+                <padding><Insets top="4.0" /></padding>
+                <Button fx:id="btnLogin" onAction="#onLogin" prefWidth="135.0" prefHeight="36.0" text="登录"
+                        style="-fx-background-color: linear-gradient(to bottom, #6E9CF2, #4A7DE0); -fx-text-fill: #FFFFFF; -fx-font-size: 14px; -fx-font-weight: bold; -fx-background-radius: 8;" />
+                <Button fx:id="btnRegister" onAction="#onRegister" prefWidth="135.0" prefHeight="36.0" text="注册"
+                        style="-fx-background-color: transparent; -fx-border-color: -qfx-primary; -fx-border-radius: 8; -fx-text-fill: -qfx-primary; -fx-font-size: 14px;" />
             </HBox>
 
-            <Label styleClass="login-hint" text="没有账号？点【注册】创建（密码至少 6 位）" />
+            <Label text="没有账号？点【注册】创建（密码至少 6 位）" style="-fx-font-size: 11.5px; -fx-text-fill: -qfx-text-3;" />
         </VBox>
     </center>
 </BorderPane>
