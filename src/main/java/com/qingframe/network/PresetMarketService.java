@@ -28,6 +28,12 @@ public class PresetMarketService {
         return ApiClient.post("/api/auth/login", new LoginBody(username, password));
     }
 
+    /** 忘记密码：重置为新密码 */
+    public static CompletableFuture<ApiResult> resetPassword(String username, String newPassword) {
+        return ApiClient.post("/api/auth/reset-password",
+                java.util.Map.of("username", username, "newPassword", newPassword));
+    }
+
     public static CompletableFuture<ApiResult> me() {
         return ApiClient.get("/api/auth/me");
     }

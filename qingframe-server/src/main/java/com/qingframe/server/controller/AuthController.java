@@ -3,6 +3,7 @@ package com.qingframe.server.controller;
 import com.qingframe.server.dto.LoginRequest;
 import com.qingframe.server.dto.ProfileRequest;
 import com.qingframe.server.dto.RegisterRequest;
+import com.qingframe.server.dto.ResetPasswordRequest;
 import com.qingframe.server.entity.User;
 import com.qingframe.server.interceptor.BizException;
 import com.qingframe.server.interceptor.JwtInterceptor;
@@ -64,5 +65,12 @@ public class AuthController {
             throw new BizException(401, "未登录");
         }
         return Result.ok(authService.updateProfile(userId, req));
+    }
+
+    /** 忘记密码：用户名 + 新密码直接重置（免登录） */
+    @PostMapping("/reset-password")
+    public Result resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
+        authService.resetPassword(req);
+        return Result.ok();
     }
 }

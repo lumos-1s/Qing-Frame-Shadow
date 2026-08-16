@@ -22,6 +22,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/api/auth/login",
                         "/api/auth/register",
+                        "/api/auth/reset-password",
                         "/api/health",
                         "/api/tags");
         // 注意：/api/presets 系列不走路径排除，由拦截器内按 HTTP 方法判断公开接口，

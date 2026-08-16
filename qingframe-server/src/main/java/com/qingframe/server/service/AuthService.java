@@ -3,6 +3,7 @@ package com.qingframe.server.service;
 import com.qingframe.server.dto.LoginRequest;
 import com.qingframe.server.dto.ProfileRequest;
 import com.qingframe.server.dto.RegisterRequest;
+import com.qingframe.server.dto.ResetPasswordRequest;
 import com.qingframe.server.entity.User;
 import com.qingframe.server.interceptor.BizException;
 import com.qingframe.server.mapper.UserMapper;
@@ -113,5 +114,22 @@ public class AuthService {
         } catch (IllegalArgumentException e) {
             throw new BizException("头像 base64 数据非法");
         }
+    }
+
+    /** 忘记密码：校验用户存在后直接重置密码（学习项目简化版，无邮箱验证） */
+    public void resetPassword(ResetPasswordRequest req) {
+        String username = req.getUsername().trim();
+        User u = userMapper.findByUsername(username);
+        if (u == null) {
+            throw new BizException("用户名不存在");
+        }
+        if (u.getStatus() == null || u.getStatus() != 1) {
+            throw new BizException("账号已被禁用");
+        }
+        String newPwd = req.getNewPassword();
+        if (newPwd == null || newPwd.length() < 6 || newPwd.length() > 64) {
+            throw new BizException("新密码长度需在 6-64 之间");
+        }
+        userMapper.updatePassword(u.getId(), passwordEncoder.encode(newPwd));
     }
 }

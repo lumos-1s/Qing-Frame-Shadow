@@ -17,4 +17,8 @@ public interface UserMapper {
     int updateProfile(@Param("id") Long id,
                       @Param("nickname") String nickname,
                       @Param("avatar") String avatar);
+
+    /** 更新密码（BCrypt 哈希） */
+    int updatePassword(@Param("id") Long id,
+                       @Param("passwordHash") String passwordHash);
 }

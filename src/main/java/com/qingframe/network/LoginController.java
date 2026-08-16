@@ -5,11 +5,14 @@ import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.BorderPane;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import java.net.URL;
@@ -120,6 +123,25 @@ public class LoginController implements Initializable {
                 close();
             }));
         }));
+    }
+
+    /** 忘记密码：打开重置密码窗口 */
+    @FXML
+    private void onForgotPassword() {
+        try {
+            javafx.fxml.FXMLLoader loader = new javafx.fxml.FXMLLoader(
+                    getClass().getResource("/com/qingframe/network/ResetPasswordView.fxml"));
+            BorderPane root = loader.load();
+            Stage stage = new Stage();
+            stage.setTitle("忘记密码");
+            stage.initModality(Modality.APPLICATION_MODAL);
+            Scene scene = new Scene(root);
+            scene.getStylesheets().add(getClass().getResource("/com/qingframe/ui/css/dark-theme.css").toExternalForm());
+            stage.setScene(scene);
+            stage.show();
+        } catch (Exception ex) {
+            showError("打开重置窗口失败: " + ex.getMessage());
+        }
     }
 
     private void setBusy(boolean busy, String text) {

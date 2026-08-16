@@ -26,6 +26,9 @@
             <HBox alignment="CENTER" spacing="8.0">
                 <Label text="记住登录" style="-fx-text-fill: -qfx-text-2; -fx-font-size: 12px;" />
                 <CheckBox fx:id="cbRemember" selected="true" />
+                <Pane HBox.hgrow="ALWAYS" />
+                <Label onMouseClicked="#onForgotPassword" text="忘记密码？"
+                       style="-fx-text-fill: -qfx-primary; -fx-font-size: 12px; -fx-cursor: hand; -fx-underline: true;" />
             </HBox>
 
             <Label fx:id="lblError" style="-fx-text-fill: -qfx-danger; -fx-font-size: 12px;" text="" visible="false" />
