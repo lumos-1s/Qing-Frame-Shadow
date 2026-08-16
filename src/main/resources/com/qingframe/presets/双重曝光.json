@@ -1,14 +1,15 @@
 {
-  "templateName": "参数横条",
-  "templateTag": "水印",
+  "templateName": "双重曝光",
+  "templateTag": "创意",
   "exportDpi": 300,
+  "canvasRatio": "original",
   "baseMargin": {
     "marginLock": 0,
     "marginTop": 90,
-    "marginBottom": 150,
-    "marginLeft": 80,
-    "marginRight": 80,
-    "imgScale": 0.93,
+    "marginBottom": 110,
+    "marginLeft": 90,
+    "marginRight": 90,
+    "imgScale": 0.95,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -18,12 +19,12 @@
   "layerList": [
     {
       "visible": true,
-      "marginTop": 0,
-      "marginBottom": 0,
-      "marginLeft": 0,
-      "marginRight": 0,
+      "marginTop": 18,
+      "marginBottom": 18,
+      "marginLeft": 18,
+      "marginRight": 18,
       "fillConfig": {
-        "fillType": "solid",
+        "fillType": "transparent",
         "fillHex": "#ffffff",
         "fillOpacity": 100,
         "gradientType": "linear",
@@ -47,10 +48,10 @@
         "textureBlend": "normal"
       },
       "strokeConfig": {
-        "strokeWidth": 0,
+        "strokeWidth": 2,
         "strokePos": "inside",
-        "strokeColorHex": "#dddddd",
-        "strokeOpacity": 100,
+        "strokeColorHex": "#5b8def",
+        "strokeOpacity": 90,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
         "strokeFillType": "solid",
@@ -66,6 +67,64 @@
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
         "shadowOpacity": 40,
+        "glowEnable": 0,
+        "glowColorHex": "#ffffff",
+        "glowBlur": 15,
+        "glowSpread": 0,
+        "glowOpacity": 60,
+        "glowType": "outer"
+      }
+    },
+    {
+      "visible": true,
+      "marginTop": 0,
+      "marginBottom": 0,
+      "marginLeft": 0,
+      "marginRight": 0,
+      "fillConfig": {
+        "fillType": "solid",
+        "fillHex": "#f7f7f5",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 0,
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1.0,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 1,
+        "strokePos": "inside",
+        "strokeColorHex": "#cccccc",
+        "strokeOpacity": 90,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0,
+        "strokeFillType": "solid",
+        "strokeGradientType": "linear",
+        "strokeGradientAngle": 0,
+        "strokeGradientStops": []
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 1,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 12,
+        "shadowSpread": 0,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 22,
         "glowEnable": 0,
         "glowColorHex": "#ffffff",
         "glowBlur": 15,
@@ -110,11 +169,25 @@
     "filmGrainIntensity": 10
   },
   "decorConfig": {
-    "textLines": [],
+    "textLines": [
+      {
+        "text": "LAYERED",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 12,
+        "fontWeight": 400,
+        "letterSpacing": 3,
+        "colorHex": "#8a8a8a",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
     "stickers": [],
     "cornerDecorEnable": 0,
     "cornerDecorType": "none",
     "cornerDecorSize": 30,
-    "exifAutoText": 1
+    "exifAutoText": 0
   }
 }

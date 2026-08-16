@@ -1,14 +1,15 @@
 {
-  "templateName": "参数横条",
-  "templateTag": "水印",
+  "templateName": "复古胶片撕裂",
+  "templateTag": "复古",
   "exportDpi": 300,
+  "canvasRatio": "original",
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 90,
-    "marginBottom": 150,
-    "marginLeft": 80,
-    "marginRight": 80,
-    "imgScale": 0.93,
+    "marginTop": 100,
+    "marginBottom": 100,
+    "marginLeft": 100,
+    "marginRight": 100,
+    "imgScale": 0.95,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -24,7 +25,7 @@
       "marginRight": 0,
       "fillConfig": {
         "fillType": "solid",
-        "fillHex": "#ffffff",
+        "fillHex": "#e8e2d2",
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
@@ -47,9 +48,9 @@
         "textureBlend": "normal"
       },
       "strokeConfig": {
-        "strokeWidth": 0,
+        "strokeWidth": 1,
         "strokePos": "inside",
-        "strokeColorHex": "#dddddd",
+        "strokeColorHex": "#b8ac92",
         "strokeOpacity": 100,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
@@ -59,13 +60,13 @@
         "strokeGradientStops": []
       },
       "shadowGlowConfig": {
-        "shadowEnable": 0,
+        "shadowEnable": 1,
         "shadowOffsetX": 3,
         "shadowOffsetY": 3,
-        "shadowBlur": 10,
+        "shadowBlur": 16,
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
-        "shadowOpacity": 40,
+        "shadowOpacity": 25,
         "glowEnable": 0,
         "glowColorHex": "#ffffff",
         "glowBlur": 15,
@@ -86,35 +87,49 @@
     "customShapeSvg": ""
   },
   "filmTearConfig": {
-    "tearEnable": 0,
-    "tearStrength": 10,
-    "tearDensity": 50,
-    "filmPerforationEnable": 0,
+    "tearEnable": 1,
+    "tearStrength": 35,
+    "tearDensity": 40,
+    "filmPerforationEnable": 1,
     "filmPerforationType": "round",
-    "filmPerforationSize": 15,
-    "filmPerforationSpacing": 30,
-    "dustScratchEnable": 0,
-    "dustScratchIntensity": 20,
-    "yellowingEnable": 0,
-    "yellowingStrength": 15
+    "filmPerforationSize": 16,
+    "filmPerforationSpacing": 32,
+    "dustScratchEnable": 1,
+    "dustScratchIntensity": 22,
+    "yellowingEnable": 1,
+    "yellowingStrength": 25
   },
   "lightEffect": {
-    "vignetteEnable": 0,
-    "vignetteStrength": 35,
+    "vignetteEnable": 1,
+    "vignetteStrength": 40,
     "vignetteFeather": 50,
-    "lightLeakEnable": 0,
+    "lightLeakEnable": 1,
     "lightLeakType": "warm",
-    "lightLeakOpacity": 20,
-    "lightLeakAngle": 45,
-    "filmGrainEnable": 0,
-    "filmGrainIntensity": 10
+    "lightLeakOpacity": 28,
+    "lightLeakAngle": 25,
+    "filmGrainEnable": 1,
+    "filmGrainIntensity": 16
   },
   "decorConfig": {
-    "textLines": [],
+    "textLines": [
+      {
+        "text": "EST. 1998",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 12,
+        "fontWeight": 400,
+        "letterSpacing": 3,
+        "colorHex": "#8a7f6a",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
     "stickers": [],
     "cornerDecorEnable": 0,
     "cornerDecorType": "none",
     "cornerDecorSize": 30,
-    "exifAutoText": 1
+    "exifAutoText": 0
   }
 }

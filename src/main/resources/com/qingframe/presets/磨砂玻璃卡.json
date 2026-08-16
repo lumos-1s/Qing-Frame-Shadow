@@ -1,19 +1,20 @@
 {
-  "templateName": "参数横条",
-  "templateTag": "水印",
+  "templateName": "磨砂玻璃卡",
+  "templateTag": "质感",
   "exportDpi": 300,
+  "canvasRatio": "original",
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 90,
-    "marginBottom": 150,
-    "marginLeft": 80,
-    "marginRight": 80,
+    "marginTop": 70,
+    "marginBottom": 100,
+    "marginLeft": 70,
+    "marginRight": 70,
     "imgScale": 0.93,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
-    "bgBlurEnable": 0,
+    "bgBlurEnable": 1,
     "bgBlurRadius": 30,
-    "bgBlurWhiteOverlay": 0
+    "bgBlurWhiteOverlay": 30
   },
   "layerList": [
     {
@@ -25,7 +26,7 @@
       "fillConfig": {
         "fillType": "solid",
         "fillHex": "#ffffff",
-        "fillOpacity": 100,
+        "fillOpacity": 40,
         "gradientType": "linear",
         "gradientAngle": 0,
         "gradientStops": [
@@ -39,18 +40,18 @@
           }
         ],
         "gradientOpacity": 100,
-        "textureSrc": "",
-        "textureScale": 1.0,
+        "textureSrc": "frost",
+        "textureScale": 1.8,
         "textureOffsetX": 0,
         "textureOffsetY": 0,
-        "textureOpacity": 100,
+        "textureOpacity": 50,
         "textureBlend": "normal"
       },
       "strokeConfig": {
-        "strokeWidth": 0,
+        "strokeWidth": 1,
         "strokePos": "inside",
-        "strokeColorHex": "#dddddd",
-        "strokeOpacity": 100,
+        "strokeColorHex": "#ffffff",
+        "strokeOpacity": 70,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
         "strokeFillType": "solid",
@@ -59,13 +60,13 @@
         "strokeGradientStops": []
       },
       "shadowGlowConfig": {
-        "shadowEnable": 0,
+        "shadowEnable": 1,
         "shadowOffsetX": 3,
         "shadowOffsetY": 3,
-        "shadowBlur": 10,
+        "shadowBlur": 24,
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
-        "shadowOpacity": 40,
+        "shadowOpacity": 30,
         "glowEnable": 0,
         "glowColorHex": "#ffffff",
         "glowBlur": 15,
@@ -77,12 +78,12 @@
   ],
   "cornerConfig": {
     "cornerLock": 1,
-    "cornerRadiusAll": 0,
-    "cornerRadiusTL": 0,
-    "cornerRadiusTR": 0,
-    "cornerRadiusBL": 0,
-    "cornerRadiusBR": 0,
-    "shapeType": "rect",
+    "cornerRadiusAll": 28,
+    "cornerRadiusTL": 28,
+    "cornerRadiusTR": 28,
+    "cornerRadiusBL": 28,
+    "cornerRadiusBR": 28,
+    "shapeType": "round",
     "customShapeSvg": ""
   },
   "filmTearConfig": {
@@ -110,11 +111,25 @@
     "filmGrainIntensity": 10
   },
   "decorConfig": {
-    "textLines": [],
+    "textLines": [
+      {
+        "text": "FROSTED",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 13,
+        "fontWeight": 300,
+        "letterSpacing": 4,
+        "colorHex": "#ffffff",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 1
+      }
+    ],
     "stickers": [],
     "cornerDecorEnable": 0,
     "cornerDecorType": "none",
     "cornerDecorSize": 30,
-    "exifAutoText": 1
+    "exifAutoText": 0
   }
 }

@@ -1,14 +1,15 @@
 {
-  "templateName": "参数横条",
-  "templateTag": "水印",
+  "templateName": "电影宽银幕",
+  "templateTag": "影院",
   "exportDpi": 300,
+  "canvasRatio": "16:9",
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 90,
-    "marginBottom": 150,
-    "marginLeft": 80,
-    "marginRight": 80,
-    "imgScale": 0.93,
+    "marginTop": 320,
+    "marginBottom": 200,
+    "marginLeft": 20,
+    "marginRight": 20,
+    "imgScale": 0.99,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -24,7 +25,7 @@
       "marginRight": 0,
       "fillConfig": {
         "fillType": "solid",
-        "fillHex": "#ffffff",
+        "fillHex": "#000000",
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
@@ -49,7 +50,7 @@
       "strokeConfig": {
         "strokeWidth": 0,
         "strokePos": "inside",
-        "strokeColorHex": "#dddddd",
+        "strokeColorHex": "#ffffff",
         "strokeOpacity": 100,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
@@ -99,22 +100,36 @@
     "yellowingStrength": 15
   },
   "lightEffect": {
-    "vignetteEnable": 0,
-    "vignetteStrength": 35,
-    "vignetteFeather": 50,
+    "vignetteEnable": 1,
+    "vignetteStrength": 50,
+    "vignetteFeather": 60,
     "lightLeakEnable": 0,
     "lightLeakType": "warm",
     "lightLeakOpacity": 20,
     "lightLeakAngle": 45,
-    "filmGrainEnable": 0,
-    "filmGrainIntensity": 10
+    "filmGrainEnable": 1,
+    "filmGrainIntensity": 12
   },
   "decorConfig": {
-    "textLines": [],
+    "textLines": [
+      {
+        "text": "CINEMASCOPE",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 14,
+        "fontWeight": 300,
+        "letterSpacing": 5,
+        "colorHex": "#f2f2f2",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
     "stickers": [],
     "cornerDecorEnable": 0,
     "cornerDecorType": "none",
     "cornerDecorSize": 30,
-    "exifAutoText": 1
+    "exifAutoText": 0
   }
 }

@@ -9,7 +9,7 @@
     "marginBottom": 150,
     "marginLeft": 150,
     "marginRight": 150,
-    "imgScale": 0.85,
+    "imgScale": 0.9,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -29,7 +29,16 @@
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -39,7 +48,7 @@
         "textureBlend": "normal"
       },
       "strokeConfig": {
-        "strokeWidth": 0,
+        "strokeWidth": 2,
         "strokePos": "inside",
         "strokeColorHex": "#ffffff",
         "strokeOpacity": 100,
@@ -48,7 +57,16 @@
         "strokeFillType": "solid",
         "strokeGradientType": "linear",
         "strokeGradientAngle": 0,
-        "strokeGradientStops": []
+        "strokeGradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#3b82f6"
+          }
+        ]
       },
       "shadowGlowConfig": {
         "shadowEnable": 1,
@@ -58,22 +76,22 @@
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
         "shadowOpacity": 55,
-        "glowEnable": 0,
-        "glowColorHex": "#ffffff",
-        "glowBlur": 15,
+        "glowEnable": 1,
+        "glowColorHex": "#3b82f6",
+        "glowBlur": 28,
         "glowSpread": 0,
-        "glowOpacity": 60,
+        "glowOpacity": 35,
         "glowType": "outer"
       }
     }
   ],
   "cornerConfig": {
     "cornerLock": 1,
-    "cornerRadiusAll": 56,
-    "cornerRadiusTL": 56,
-    "cornerRadiusTR": 56,
-    "cornerRadiusBL": 56,
-    "cornerRadiusBR": 56,
+    "cornerRadiusAll": 60,
+    "cornerRadiusTL": 60,
+    "cornerRadiusTR": 60,
+    "cornerRadiusBL": 60,
+    "cornerRadiusBR": 60,
     "shapeType": "round",
     "customShapeSvg": ""
   },

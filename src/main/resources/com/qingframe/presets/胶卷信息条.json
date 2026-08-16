@@ -5,7 +5,7 @@
   "baseMargin": {
     "marginLock": 0,
     "marginTop": 90,
-    "marginBottom": 130,
+    "marginBottom": 150,
     "marginLeft": 80,
     "marginRight": 80,
     "imgScale": 0.92,
@@ -28,7 +28,16 @@
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -80,10 +89,10 @@
     "tearEnable": 0,
     "tearStrength": 10,
     "tearDensity": 50,
-    "filmPerforationEnable": 0,
+    "filmPerforationEnable": 1,
     "filmPerforationType": "round",
-    "filmPerforationSize": 15,
-    "filmPerforationSpacing": 30,
+    "filmPerforationSize": 12,
+    "filmPerforationSpacing": 26,
     "dustScratchEnable": 1,
     "dustScratchIntensity": 10,
     "yellowingEnable": 1,
@@ -98,7 +107,7 @@
     "lightLeakOpacity": 20,
     "lightLeakAngle": 45,
     "filmGrainEnable": 1,
-    "filmGrainIntensity": 12
+    "filmGrainIntensity": 8
   },
   "decorConfig": {
     "textLines": [

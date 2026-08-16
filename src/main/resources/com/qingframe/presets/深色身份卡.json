@@ -8,7 +8,7 @@
     "marginBottom": 100,
     "marginLeft": 100,
     "marginRight": 100,
-    "imgScale": 0.95,
+    "imgScale": 0.9,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -23,12 +23,21 @@
       "marginLeft": 0,
       "marginRight": 0,
       "fillConfig": {
-        "fillType": "solid",
+        "fillType": "gradient",
         "fillHex": "#1b1b1f",
         "fillOpacity": 100,
         "gradientType": "linear",
-        "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientAngle": 135,
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#23232a"
+          },
+          {
+            "position": 1.0,
+            "color": "#0d0d12"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -41,7 +50,7 @@
         "strokeWidth": 2,
         "strokePos": "inside",
         "strokeColorHex": "#c9a24b",
-        "strokeOpacity": 90,
+        "strokeOpacity": 95,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
         "strokeFillType": "solid",
@@ -57,11 +66,11 @@
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
         "shadowOpacity": 45,
-        "glowEnable": 0,
-        "glowColorHex": "#ffffff",
-        "glowBlur": 15,
+        "glowEnable": 1,
+        "glowColorHex": "#c9a24b",
+        "glowBlur": 18,
         "glowSpread": 0,
-        "glowOpacity": 60,
+        "glowOpacity": 25,
         "glowType": "outer"
       }
     }

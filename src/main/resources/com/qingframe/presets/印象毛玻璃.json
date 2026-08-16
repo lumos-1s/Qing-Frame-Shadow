@@ -8,12 +8,12 @@
     "marginBottom": 70,
     "marginLeft": 70,
     "marginRight": 70,
-    "imgScale": 1.0,
+    "imgScale": 0.95,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 1,
-    "bgBlurRadius": 40,
-    "bgBlurWhiteOverlay": 1
+    "bgBlurRadius": 35,
+    "bgBlurWhiteOverlay": 25
   },
   "layerList": [
     {
@@ -25,16 +25,25 @@
       "fillConfig": {
         "fillType": "solid",
         "fillHex": "#ffffff",
-        "fillOpacity": 100,
+        "fillOpacity": 45,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
-        "textureSrc": "",
-        "textureScale": 1.0,
+        "textureSrc": "frost",
+        "textureScale": 1.6,
         "textureOffsetX": 0,
         "textureOffsetY": 0,
-        "textureOpacity": 100,
+        "textureOpacity": 55,
         "textureBlend": "normal"
       },
       "strokeConfig": {
@@ -50,13 +59,13 @@
         "strokeGradientStops": []
       },
       "shadowGlowConfig": {
-        "shadowEnable": 0,
+        "shadowEnable": 1,
         "shadowOffsetX": 3,
         "shadowOffsetY": 3,
-        "shadowBlur": 10,
+        "shadowBlur": 22,
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
-        "shadowOpacity": 40,
+        "shadowOpacity": 25,
         "glowEnable": 0,
         "glowColorHex": "#ffffff",
         "glowBlur": 15,
@@ -68,7 +77,7 @@
   ],
   "cornerConfig": {
     "cornerLock": 1,
-    "cornerRadiusAll": 24,
+    "cornerRadiusAll": 26,
     "cornerRadiusTL": 24,
     "cornerRadiusTR": 24,
     "cornerRadiusBL": 24,

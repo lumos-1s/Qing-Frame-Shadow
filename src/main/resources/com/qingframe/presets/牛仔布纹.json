@@ -1,14 +1,15 @@
 {
-  "templateName": "参数横条",
-  "templateTag": "水印",
+  "templateName": "牛仔布纹",
+  "templateTag": "质感",
   "exportDpi": 300,
+  "canvasRatio": "original",
   "baseMargin": {
     "marginLock": 0,
     "marginTop": 90,
-    "marginBottom": 150,
-    "marginLeft": 80,
-    "marginRight": 80,
-    "imgScale": 0.93,
+    "marginBottom": 90,
+    "marginLeft": 90,
+    "marginRight": 90,
+    "imgScale": 0.95,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -23,7 +24,7 @@
       "marginLeft": 0,
       "marginRight": 0,
       "fillConfig": {
-        "fillType": "solid",
+        "fillType": "texture",
         "fillHex": "#ffffff",
         "fillOpacity": 100,
         "gradientType": "linear",
@@ -39,17 +40,17 @@
           }
         ],
         "gradientOpacity": 100,
-        "textureSrc": "",
-        "textureScale": 1.0,
+        "textureSrc": "denim",
+        "textureScale": 1.5,
         "textureOffsetX": 0,
         "textureOffsetY": 0,
-        "textureOpacity": 100,
+        "textureOpacity": 70,
         "textureBlend": "normal"
       },
       "strokeConfig": {
-        "strokeWidth": 0,
+        "strokeWidth": 2,
         "strokePos": "inside",
-        "strokeColorHex": "#dddddd",
+        "strokeColorHex": "#b08968",
         "strokeOpacity": 100,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
@@ -59,13 +60,13 @@
         "strokeGradientStops": []
       },
       "shadowGlowConfig": {
-        "shadowEnable": 0,
+        "shadowEnable": 1,
         "shadowOffsetX": 3,
         "shadowOffsetY": 3,
-        "shadowBlur": 10,
+        "shadowBlur": 12,
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
-        "shadowOpacity": 40,
+        "shadowOpacity": 22,
         "glowEnable": 0,
         "glowColorHex": "#ffffff",
         "glowBlur": 15,
@@ -110,11 +111,25 @@
     "filmGrainIntensity": 10
   },
   "decorConfig": {
-    "textLines": [],
+    "textLines": [
+      {
+        "text": "DENIM",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 13,
+        "fontWeight": 500,
+        "letterSpacing": 4,
+        "colorHex": "#8a735a",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
     "stickers": [],
     "cornerDecorEnable": 0,
     "cornerDecorType": "none",
     "cornerDecorSize": 30,
-    "exifAutoText": 1
+    "exifAutoText": 0
   }
 }

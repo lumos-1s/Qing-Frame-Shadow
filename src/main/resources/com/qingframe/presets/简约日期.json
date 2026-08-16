@@ -4,11 +4,11 @@
   "exportDpi": 300,
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 70,
-    "marginBottom": 70,
-    "marginLeft": 70,
-    "marginRight": 70,
-    "imgScale": 0.96,
+    "marginTop": 90,
+    "marginBottom": 140,
+    "marginLeft": 90,
+    "marginRight": 90,
+    "imgScale": 0.94,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -28,7 +28,16 @@
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -40,7 +49,7 @@
       "strokeConfig": {
         "strokeWidth": 1,
         "strokePos": "inside",
-        "strokeColorHex": "#e5e5e5",
+        "strokeColorHex": "#d9d9d9",
         "strokeOpacity": 100,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
@@ -103,12 +112,12 @@
   "decorConfig": {
     "textLines": [
       {
-        "text": "2026.08.04",
+        "text": "2026.08.16",
         "fontFamily": "Microsoft YaHei",
-        "fontSize": 13,
-        "fontWeight": 400,
-        "letterSpacing": 2,
-        "colorHex": "#999999",
+        "fontSize": 14,
+        "fontWeight": 300,
+        "letterSpacing": 3,
+        "colorHex": "#8a8a8a",
         "opacity": 100,
         "x": 0,
         "y": 0,

@@ -4,11 +4,11 @@
   "exportDpi": 300,
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 70,
-    "marginBottom": 170,
+    "marginTop": 60,
+    "marginBottom": 200,
     "marginLeft": 70,
     "marginRight": 70,
-    "imgScale": 0.85,
+    "imgScale": 0.94,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -28,7 +28,16 @@
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -53,7 +62,7 @@
         "shadowEnable": 1,
         "shadowOffsetX": 4,
         "shadowOffsetY": 4,
-        "shadowBlur": 14,
+        "shadowBlur": 18,
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
         "shadowOpacity": 30,
@@ -103,12 +112,12 @@
   "decorConfig": {
     "textLines": [
       {
-        "text": "2026.08.04   ✍  signature",
+        "text": "SIGN HERE",
         "fontFamily": "Microsoft YaHei",
-        "fontSize": 14,
+        "fontSize": 13,
         "fontWeight": 400,
-        "letterSpacing": 1,
-        "colorHex": "#6b6154",
+        "letterSpacing": 2,
+        "colorHex": "#b8b0a0",
         "opacity": 100,
         "x": 0,
         "y": 0,

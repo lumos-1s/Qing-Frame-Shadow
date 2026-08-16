@@ -8,7 +8,7 @@
     "marginBottom": 90,
     "marginLeft": 90,
     "marginRight": 90,
-    "imgScale": 0.95,
+    "imgScale": 0.9,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -28,7 +28,16 @@
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -38,7 +47,7 @@
         "textureBlend": "normal"
       },
       "strokeConfig": {
-        "strokeWidth": 2,
+        "strokeWidth": 3,
         "strokePos": "inside",
         "strokeColorHex": "#22d3ee",
         "strokeOpacity": 100,
@@ -47,7 +56,16 @@
         "strokeFillType": "solid",
         "strokeGradientType": "linear",
         "strokeGradientAngle": 0,
-        "strokeGradientStops": []
+        "strokeGradientStops": [
+          {
+            "position": 0.0,
+            "color": "#22d3ee"
+          },
+          {
+            "position": 1.0,
+            "color": "#a855f7"
+          }
+        ]
       },
       "shadowGlowConfig": {
         "shadowEnable": 0,
@@ -58,17 +76,17 @@
         "shadowColorHex": "#000000",
         "shadowOpacity": 40,
         "glowEnable": 1,
-        "glowColorHex": "#22d3ee",
-        "glowBlur": 26,
+        "glowColorHex": "#a855f7",
+        "glowBlur": 34,
         "glowSpread": 0,
-        "glowOpacity": 75,
+        "glowOpacity": 70,
         "glowType": "outer"
       }
     }
   ],
   "cornerConfig": {
     "cornerLock": 1,
-    "cornerRadiusAll": 18,
+    "cornerRadiusAll": 22,
     "cornerRadiusTL": 18,
     "cornerRadiusTR": 18,
     "cornerRadiusBL": 18,
@@ -108,7 +126,7 @@
         "fontSize": 15,
         "fontWeight": 600,
         "letterSpacing": 3,
-        "colorHex": "#22d3ee",
+        "colorHex": "#a855f7",
         "opacity": 100,
         "x": 0,
         "y": 0,

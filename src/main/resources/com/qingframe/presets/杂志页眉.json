@@ -4,11 +4,11 @@
   "exportDpi": 300,
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 170,
-    "marginBottom": 80,
+    "marginTop": 200,
+    "marginBottom": 70,
     "marginLeft": 70,
     "marginRight": 70,
-    "imgScale": 0.94,
+    "imgScale": 0.9,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -28,7 +28,16 @@
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -103,12 +112,12 @@
   "decorConfig": {
     "textLines": [
       {
-        "text": "MOMENTS",
+        "text": "MAGAZINE",
         "fontFamily": "Microsoft YaHei",
-        "fontSize": 28,
+        "fontSize": 34,
         "fontWeight": 700,
-        "letterSpacing": 6,
-        "colorHex": "#111111",
+        "letterSpacing": 4,
+        "colorHex": "#1a1a1a",
         "opacity": 100,
         "x": 0,
         "y": 0,
@@ -116,12 +125,12 @@
         "enableShadow": 0
       },
       {
-        "text": "VOL.01 · DAILY ARCHIVE",
+        "text": "VOL.16 · 2026",
         "fontFamily": "Microsoft YaHei",
         "fontSize": 12,
         "fontWeight": 400,
         "letterSpacing": 2,
-        "colorHex": "#888888",
+        "colorHex": "#777777",
         "opacity": 100,
         "x": 0,
         "y": 0,

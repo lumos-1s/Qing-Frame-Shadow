@@ -4,11 +4,11 @@
   "exportDpi": 300,
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 140,
-    "marginBottom": 150,
+    "marginTop": 260,
+    "marginBottom": 180,
     "marginLeft": 30,
     "marginRight": 30,
-    "imgScale": 1.0,
+    "imgScale": 0.98,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -24,11 +24,20 @@
       "marginRight": 0,
       "fillConfig": {
         "fillType": "solid",
-        "fillHex": "#000000",
+        "fillHex": "#050505",
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -90,25 +99,25 @@
     "yellowingStrength": 15
   },
   "lightEffect": {
-    "vignetteEnable": 0,
-    "vignetteStrength": 35,
-    "vignetteFeather": 50,
+    "vignetteEnable": 1,
+    "vignetteStrength": 45,
+    "vignetteFeather": 55,
     "lightLeakEnable": 0,
     "lightLeakType": "warm",
     "lightLeakOpacity": 20,
     "lightLeakAngle": 45,
-    "filmGrainEnable": 0,
-    "filmGrainIntensity": 10
+    "filmGrainEnable": 1,
+    "filmGrainIntensity": 12
   },
   "decorConfig": {
     "textLines": [
       {
-        "text": "CINEMATIC MOMENT",
+        "text": "SOME FILM QUOTE",
         "fontFamily": "Microsoft YaHei",
-        "fontSize": 24,
-        "fontWeight": 700,
+        "fontSize": 16,
+        "fontWeight": 300,
         "letterSpacing": 4,
-        "colorHex": "#ffffff",
+        "colorHex": "#f0f0f0",
         "opacity": 100,
         "x": 0,
         "y": 0,

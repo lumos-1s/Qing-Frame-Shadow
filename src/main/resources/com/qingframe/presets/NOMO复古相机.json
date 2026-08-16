@@ -9,7 +9,7 @@
     "marginBottom": 100,
     "marginLeft": 100,
     "marginRight": 100,
-    "imgScale": 0.92,
+    "imgScale": 0.93,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -29,7 +29,16 @@
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -81,22 +90,22 @@
     "tearEnable": 0,
     "tearStrength": 10,
     "tearDensity": 50,
-    "filmPerforationEnable": 0,
+    "filmPerforationEnable": 1,
     "filmPerforationType": "round",
-    "filmPerforationSize": 15,
+    "filmPerforationSize": 14,
     "filmPerforationSpacing": 30,
-    "dustScratchEnable": 0,
-    "dustScratchIntensity": 20,
-    "yellowingEnable": 0,
-    "yellowingStrength": 15
+    "dustScratchEnable": 1,
+    "dustScratchIntensity": 18,
+    "yellowingEnable": 1,
+    "yellowingStrength": 20
   },
   "lightEffect": {
-    "vignetteEnable": 0,
+    "vignetteEnable": 1,
     "vignetteStrength": 35,
     "vignetteFeather": 50,
     "lightLeakEnable": 1,
     "lightLeakType": "warm",
-    "lightLeakOpacity": 25,
+    "lightLeakOpacity": 30,
     "lightLeakAngle": 30,
     "filmGrainEnable": 1,
     "filmGrainIntensity": 15

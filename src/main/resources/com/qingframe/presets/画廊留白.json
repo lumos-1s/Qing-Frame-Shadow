@@ -4,11 +4,11 @@
   "exportDpi": 300,
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 150,
-    "marginBottom": 160,
-    "marginLeft": 150,
-    "marginRight": 150,
-    "imgScale": 0.85,
+    "marginTop": 200,
+    "marginBottom": 220,
+    "marginLeft": 200,
+    "marginRight": 200,
+    "imgScale": 0.88,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -24,11 +24,20 @@
       "marginRight": 0,
       "fillConfig": {
         "fillType": "solid",
-        "fillHex": "#faf8f4",
+        "fillHex": "#fbfaf7",
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -40,7 +49,7 @@
       "strokeConfig": {
         "strokeWidth": 1,
         "strokePos": "inside",
-        "strokeColorHex": "#e0dcd2",
+        "strokeColorHex": "#ddd8cc",
         "strokeOpacity": 100,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
@@ -50,13 +59,13 @@
         "strokeGradientStops": []
       },
       "shadowGlowConfig": {
-        "shadowEnable": 0,
+        "shadowEnable": 1,
         "shadowOffsetX": 3,
         "shadowOffsetY": 3,
         "shadowBlur": 10,
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
-        "shadowOpacity": 40,
+        "shadowOpacity": 22,
         "glowEnable": 0,
         "glowColorHex": "#ffffff",
         "glowBlur": 15,

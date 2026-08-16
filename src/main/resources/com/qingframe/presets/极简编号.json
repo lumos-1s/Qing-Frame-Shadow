@@ -4,11 +4,11 @@
   "exportDpi": 300,
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 80,
-    "marginBottom": 80,
-    "marginLeft": 80,
-    "marginRight": 80,
-    "imgScale": 0.95,
+    "marginTop": 120,
+    "marginBottom": 120,
+    "marginLeft": 120,
+    "marginRight": 120,
+    "imgScale": 0.92,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -24,11 +24,20 @@
       "marginRight": 0,
       "fillConfig": {
         "fillType": "solid",
-        "fillHex": "#f7f5f0",
+        "fillHex": "#fafaf7",
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
-        "gradientStops": [{"position": 0.0, "color": "#ffffff"}, {"position": 1.0, "color": "#cccccc"}],
+        "gradientStops": [
+          {
+            "position": 0.0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1.0,
+            "color": "#cccccc"
+          }
+        ],
         "gradientOpacity": 100,
         "textureSrc": "",
         "textureScale": 1.0,
@@ -40,7 +49,7 @@
       "strokeConfig": {
         "strokeWidth": 1,
         "strokePos": "inside",
-        "strokeColorHex": "#cccccc",
+        "strokeColorHex": "#cfcfc8",
         "strokeOpacity": 100,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
@@ -50,13 +59,13 @@
         "strokeGradientStops": []
       },
       "shadowGlowConfig": {
-        "shadowEnable": 0,
+        "shadowEnable": 1,
         "shadowOffsetX": 3,
         "shadowOffsetY": 3,
         "shadowBlur": 10,
         "shadowSpread": 0,
         "shadowColorHex": "#000000",
-        "shadowOpacity": 40,
+        "shadowOpacity": 25,
         "glowEnable": 0,
         "glowColorHex": "#ffffff",
         "glowBlur": 15,
@@ -103,16 +112,16 @@
   "decorConfig": {
     "textLines": [
       {
-        "text": "NO.001",
+        "text": "01",
         "fontFamily": "Microsoft YaHei",
-        "fontSize": 11,
-        "fontWeight": 400,
+        "fontSize": 64,
+        "fontWeight": 100,
         "letterSpacing": 2,
-        "colorHex": "#888888",
+        "colorHex": "#2b2b2b",
         "opacity": 100,
-        "x": 30,
+        "x": 0,
         "y": 0,
-        "align": "",
+        "align": "center",
         "enableShadow": 0
       }
     ],
