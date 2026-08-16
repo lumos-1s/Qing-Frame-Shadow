@@ -54,4 +54,27 @@ class JsonUtilTest {
         assertNotNull(map);
         assertTrue(map.containsKey("brands"));
     }
+
+    @Test
+    void fromJsonWithEmptyLayerListGetsDefaultLayer() {
+        TemplateModel restored = JsonUtil.fromJson("{\"baseMargin\":{}}");
+
+        assertNotNull(restored);
+        assertNotNull(restored.getLayerList());
+        assertEquals(1, restored.getLayerList().size());
+        assertEquals("#ffffff", restored.getLayerList().get(0).getFillConfig().getFillHex());
+    }
+
+    @Test
+    void fromJsonWithNullSectionsGetsDefaults() {
+        TemplateModel restored = JsonUtil.fromJson("{\"baseMargin\":{},\"layerList\":null}");
+
+        assertNotNull(restored);
+        assertNotNull(restored.getLayerList());
+        assertEquals(1, restored.getLayerList().size());
+        assertNotNull(restored.getCornerConfig());
+        assertNotNull(restored.getFilmTearConfig());
+        assertNotNull(restored.getLightEffect());
+        assertNotNull(restored.getDecorConfig());
+    }
 }

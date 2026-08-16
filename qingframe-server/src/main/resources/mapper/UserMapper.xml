@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qingframe.server.mapper.UserMapper">
+
+    <sql id="baseCols">
+        id, username, password_hash, nickname, role, status, created_at, updated_at
+    </sql>
+
+    <select id="findByUsername" resultType="com.qingframe.server.entity.User">
+        SELECT <include refid="baseCols"/>
+        FROM `user`
+        WHERE username = #{username}
+        LIMIT 1
+    </select>
+
+    <select id="findById" resultType="com.qingframe.server.entity.User">
+        SELECT <include refid="baseCols"/>
+        FROM `user`
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `user` (username, password_hash, nickname, role, status)
+        VALUES (#{username}, #{passwordHash}, #{nickname}, #{role}, #{status})
+    </insert>
+
+</mapper>

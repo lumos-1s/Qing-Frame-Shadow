@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane prefWidth="480.0" prefHeight="400.0" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.qingframe.network.WelcomeController">
+
+    <center>
+        <VBox alignment="CENTER" spacing="16.0">
+            <padding><Insets top="36.0" right="48.0" bottom="36.0" left="48.0" /></padding>
+
+            <Label text="清框影" style="-fx-font-size: 38px; -fx-font-weight: bold; -fx-text-fill: -qfx-primary;" />
+            <Label text="照片加框 · 模板云市场" style="-fx-font-size: 15px; -fx-text-fill: -qfx-text-2;" />
+
+            <Label text="登录后可上传、下载和收藏云端模板；不登录也能直接使用本地照片编辑功能。" wrapText="true"
+                   style="-fx-font-size: 13px; -fx-text-fill: -qfx-text-2; -fx-alignment: center;" />
+
+            <HBox alignment="CENTER" spacing="16.0">
+                <padding><Insets top="12.0" /></padding>
+                <Button fx:id="btnLogin" onAction="#onLogin" prefWidth="160.0" prefHeight="38.0" text="登录 / 注册"
+                        style="-fx-background-color: linear-gradient(to bottom, #6E9CF2, #4A7DE0); -fx-text-fill: #FFFFFF; -fx-font-size: 14px; -fx-font-weight: bold; -fx-background-radius: 6;" />
+                <Button fx:id="btnSkip" onAction="#onSkip" prefWidth="160.0" prefHeight="38.0" text="先逛逛（跳过）"
+                        style="-fx-background-color: transparent; -fx-border-color: -qfx-text-2; -fx-border-radius: 6; -fx-text-fill: -qfx-text; -fx-font-size: 14px;" />
+            </HBox>
+
+            <CheckBox fx:id="cbNoMore" text="下次启动不再显示" style="-fx-text-fill: -qfx-text-2;" />
+        </VBox>
+    </center>
+</BorderPane>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane prefWidth="760.0" prefHeight="560.0" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.qingframe.network.MarketController">
+
+    <top>
+        <VBox spacing="6.0" styleClass="market-header">
+            <padding><Insets top="10.0" right="12.0" bottom="6.0" left="12.0" /></padding>
+            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                <Label styleClass="login-title" text="模板市场" />
+                <Label fx:id="lblServer" styleClass="market-hint" text="http://localhost:8080" />
+                <Pane HBox.hgrow="ALWAYS" />
+                <Label fx:id="lblUser" styleClass="market-user" text="未登录" />
+                <Button fx:id="btnLogin" onAction="#onOpenLogin" text="登录/注册" />
+                <Button fx:id="btnLogout" onAction="#onLogout" text="退出登录" visible="false" />
+            </HBox>
+            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                <Label text="服务器" />
+                <TextField fx:id="tfServer" prefWidth="220.0" />
+                <Button onAction="#onSaveServer" styleClass="btn-secondary" text="保存并连接" />
+            </HBox>
+            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                <TextField fx:id="tfSearch" prefWidth="220.0" promptText="搜索模板名 / 描述" onAction="#onSearch" />
+                <Label text="标签" />
+                <ComboBox fx:id="cbTag" prefWidth="140.0" onAction="#onSearch" />
+                <Button onAction="#onSearch" styleClass="btn-secondary" text="搜索" />
+                <Button fx:id="btnRefresh" onAction="#onRefresh" styleClass="btn-secondary" text="刷新" />
+                <Pane HBox.hgrow="ALWAYS" />
+                <Label fx:id="lblTotal" styleClass="market-hint" text="" />
+            </HBox>
+        </VBox>
+    </top>
+
+    <center>
+        <ListView fx:id="lvPresets" prefHeight="380.0" styleClass="market-list">
+            <placeholder><Label text="暂无模板，点击【上传当前模板】发布第一个" /></placeholder>
+        </ListView>
+    </center>
+
+    <bottom>
+        <HBox alignment="CENTER_LEFT" spacing="10.0">
+            <padding><Insets top="8.0" right="12.0" bottom="10.0" left="12.0" /></padding>
+            <Button fx:id="btnDownload" onAction="#onDownload" prefWidth="140.0" styleClass="btn-primary" text="下载所选模板" />
+            <Button fx:id="btnUpload" onAction="#onUploadCurrent" prefWidth="160.0" text="上传当前模板" />
+            <Button fx:id="btnLike" onAction="#onToggleLike" text="点赞" />
+            <Button fx:id="btnDelete" onAction="#onDelete" text="删除" visible="false" />
+            <Pane HBox.hgrow="ALWAYS" />
+            <Label fx:id="lblHint" styleClass="market-hint" text="" />
+        </HBox>
+    </bottom>
+</BorderPane>

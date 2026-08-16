@@ -8,6 +8,10 @@ import com.qingframe.core.IconManager;
 import com.qingframe.core.IconRenderer;
 import com.qingframe.core.WatermarkRender;
 import com.qingframe.model.*;
+import com.qingframe.network.ApiClient;
+import com.qingframe.network.LoginController;
+import com.qingframe.network.TokenStore;
+import com.qingframe.network.WelcomeController;
 import com.qingframe.util.FileUtil;
 import com.qingframe.util.ImageExportUtil;
 import com.qingframe.util.JsonUtil;
@@ -26,6 +30,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.WritableImage;
 import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.ScrollEvent;
@@ -37,6 +42,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.util.Duration;
 import javafx.stage.FileChooser;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import javax.imageio.ImageIO;
@@ -86,6 +92,8 @@ public class MainController implements Initializable {
     @FXML private ListView<String> lvPresets;
     @FXML private ProgressBar progressBar;
     @FXML private Button btnOpenImage, btnSaveImage, btnAddLayer;
+    @FXML private Label lblLoginStatus;
+    @FXML private Button btnLoginToggle;
     @FXML private ToggleButton btnThemeToggle;
     @FXML private BorderPane rootPane;
     @FXML private ScrollPane sidebarScroll;
@@ -179,6 +187,25 @@ public class MainController implements Initializable {
         cbExportFormat.setValue("JPEG");
 
         lvPresets.setItems(FXCollections.observableArrayList(loadPresetList()));
+        updatePresetListHeight();
+        // 内置预设列表滚轮转发给外层 ScrollPane：ListView 即使内容全显示也会拦截滚轮，
+        // 转发后鼠标停在列表上滚轮即可滚动整个右侧面板
+        lvPresets.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, e -> {
+            javafx.scene.Node n = lvPresets;
+            javafx.scene.control.ScrollPane sp = null;
+            while (n != null) {
+                n = n.getParent();
+                if (n instanceof javafx.scene.control.ScrollPane) {
+                    sp = (javafx.scene.control.ScrollPane) n;
+                    break;
+                }
+            }
+            if (sp != null) {
+                double delta = e.getDeltaY();
+                sp.setVvalue(Math.max(0, Math.min(sp.getVmax(), sp.getVvalue() - delta / 300.0)));
+                e.consume();
+            }
+        });
 
         cbCanvasRatio.setItems(FXCollections.observableArrayList("original", "1:1", "4:3", "3:4", "16:9", "9:16", "2.35:1"));
         cbCanvasRatio.setValue("original");
@@ -237,8 +264,10 @@ public class MainController implements Initializable {
             if (nv == null) return;
             if ("全部".equals(nv)) {
                 lvPresets.setItems(FXCollections.observableArrayList(loadPresetList()));
+                updatePresetListHeight();
             } else {
                 lvPresets.getItems().clear();
+                updatePresetListHeight();
             }
         });
         
@@ -337,6 +366,9 @@ public class MainController implements Initializable {
         });
 
         refreshUI();
+
+        // 启动时恢复登录态并刷新主界面登录状态
+        updateLoginUi();
     }
 
     private void bindSliders() {
@@ -1949,13 +1981,24 @@ public class MainController implements Initializable {
 
     private TemplateModel loadPresetFromJson(String name) {
         try (InputStream in = getClass().getResourceAsStream("/com/qingframe/presets/" + name + ".json")) {
-            if (in == null) return null;
-            String json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            return JsonUtil.fromJson(json);
-        } catch (Exception e) {
-            statusLabel.setText("预设加载失败: " + name + "（JSON 格式错误，已回退默认模板）");
-            return null;
+            if (in != null) {
+                String json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                return JsonUtil.fromJson(json);
+            }
+        } catch (Exception ignored) {
         }
+        // 市场下载的模板：查 ~/.qingframe/market-presets 目录
+        try {
+            java.io.File f = new java.io.File(
+                    System.getProperty("user.home"),
+                    ".qingframe/market-presets/" + name + ".json");
+            if (f.isFile()) {
+                return JsonUtil.loadFromFile(f.getAbsolutePath());
+            }
+        } catch (Exception ignored) {
+        }
+        statusLabel.setText("预设加载失败: " + name + "（JSON 格式错误，已回退默认模板）");
+        return null;
     }
 
     /** 从照片提取主色生成同色系边框 */
@@ -2748,11 +2791,17 @@ public class MainController implements Initializable {
         }
     }
 
-    /** 导出诊断日志：写入用户目录 QingFrameShadow-export.log，用于定位导出失败原因 */
+    /** 导出诊断日志：写入用户目录 QingFrameShadow-export.log，用于定位导出失败原因；超过上限自动清空防止无限增长 */
+    private static final int EXPORT_LOG_MAX_BYTES = 2 * 1024 * 1024;
+
     private void logExport(String msg) {
         try {
-            java.io.FileWriter fw = new java.io.FileWriter(
-                    System.getProperty("user.home") + "/QingFrameShadow-export.log", true);
+            java.io.File logFile = new java.io.File(
+                    System.getProperty("user.home") + "/QingFrameShadow-export.log");
+            if (logFile.length() > EXPORT_LOG_MAX_BYTES) {
+                logFile.delete();
+            }
+            java.io.FileWriter fw = new java.io.FileWriter(logFile, true);
             fw.write(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "  " + msg + "\n");
             fw.close();
         } catch (Exception ignored) {}
@@ -3200,5 +3249,142 @@ public class MainController implements Initializable {
             }
         }
         return null;
+    }
+
+    // ═══════════════ 模板市场（云） ═══════════════
+
+    /** 供市场窗口获取当前编辑中的模板（用于上传） */
+    public TemplateModel getCurrentTemplate() {
+        return template;
+    }
+
+    /** 供市场窗口通知：云端模板已下载到本地，刷新本地预设列表 */
+    public void notifyMarketPresetChanged() {
+        Platform.runLater(() -> {
+            List<String> base = loadPresetList();
+            // 追加市场下载目录中的模板
+            java.io.File dir = new java.io.File(
+                    System.getProperty("user.home"), ".qingframe/market-presets");
+            java.io.File[] files = dir.listFiles((d, name) -> name.endsWith(".json"));
+            if (files != null) {
+                for (java.io.File f : files) {
+                    String name = f.getName().replace(".json", "");
+                    if (!base.contains(name)) base.add(name);
+                }
+            }
+            lvPresets.setItems(FXCollections.observableArrayList(base));
+            updatePresetListHeight();
+            statusLabel.setText("已刷新模板列表（含市场下载）");
+        });
+    }
+
+    /** 内置预设列表自适应内容高度，交由外层 ScrollPane 统一滚动，避免嵌套滚动导致滚轮失效 */
+    private void updatePresetListHeight() {
+        lvPresets.setFixedCellSize(28);
+        int count = lvPresets.getItems() == null ? 0 : lvPresets.getItems().size();
+        lvPresets.setPrefHeight(Math.max(120, count * 28 + 6));
+    }
+
+    /** 打开模板市场窗口 */
+    @FXML
+    private void onOpenMarket() {
+        try {
+            javafx.fxml.FXMLLoader loader = new javafx.fxml.FXMLLoader(
+                    getClass().getResource("/com/qingframe/network/MarketView.fxml"));
+            javafx.scene.layout.BorderPane root = loader.load();
+            com.qingframe.network.MarketController c = loader.getController();
+            c.setMainController(this);
+            Stage stage = new Stage();
+            stage.setTitle("清框影 · 模板市场");
+            stage.setScene(new javafx.scene.Scene(root));
+            stage.show();
+        } catch (Exception e) {
+            showAlert("打开模板市场失败: " + e.getMessage());
+        }
+    }
+
+    // ═══════════════ 账号体系（方案 B + C：启动恢复登录态 / 主界面入口 / 欢迎页） ═══════════════
+
+    /** 当前主题的 CSS 路径（供登录/欢迎等子窗口复用，保证视觉一致） */
+    public String currentThemeCss() {
+        String theme = isDarkTheme ? "dark-theme.css" : "light-theme.css";
+        return getClass().getResource("/com/qingframe/ui/css/" + theme).toExternalForm();
+    }
+
+    /** 刷新主界面登录状态显示：恢复本地 token，更新"已登录: xxx / 未登录" */
+    public void updateLoginUi() {
+        if (ApiClient.token == null) {
+            ApiClient.token = TokenStore.load();
+        }
+        boolean loggedIn = ApiClient.isLoggedIn();
+        String username = TokenStore.loadUsername();
+        if (lblLoginStatus != null) {
+            lblLoginStatus.setText(loggedIn ? ("已登录: " + (username == null ? "用户" : username)) : "未登录");
+        }
+        if (btnLoginToggle != null) {
+            btnLoginToggle.setText(loggedIn ? "退出" : "登录");
+            btnLoginToggle.setTooltip(new javafx.scene.control.Tooltip(loggedIn ? "退出当前账号" : "登录以使用模板市场"));
+        }
+    }
+
+    /** 主界面登录/退出按钮 */
+    @FXML
+    private void onLoginToggle() {
+        if (ApiClient.isLoggedIn()) {
+            ApiClient.token = null;
+            TokenStore.clear();
+            updateLoginUi();
+            statusLabel.setText("已退出登录");
+            return;
+        }
+        openLoginWindow(() -> {
+            updateLoginUi();
+            statusLabel.setText("登录成功");
+        });
+    }
+
+    /** 打开登录/注册窗口（模态），登录成功后回调 */
+    public void openLoginWindow(Runnable afterLogin) {
+        try {
+            javafx.fxml.FXMLLoader loader = new javafx.fxml.FXMLLoader(
+                    getClass().getResource("/com/qingframe/network/LoginView.fxml"));
+            BorderPane root = loader.load();
+            LoginController c = loader.getController();
+            c.setOnLoggedIn(afterLogin);
+            Stage stage = new Stage();
+            stage.setTitle("登录清框影");
+            stage.initModality(Modality.APPLICATION_MODAL);
+            Scene scene = new Scene(root);
+            scene.getStylesheets().add(currentThemeCss());
+            stage.setScene(scene);
+            stage.showAndWait();
+        } catch (Exception e) {
+            showAlert("打开登录窗口失败: " + e.getMessage());
+        }
+    }
+
+    /** 启动后弹出欢迎页：仅未登录且未勾选"不再提示"时显示，可登录或跳过 */
+    public void maybeShowWelcome() {
+        if (ApiClient.isLoggedIn() || TokenStore.loadSkipWelcome()) {
+            return;
+        }
+        try {
+            javafx.fxml.FXMLLoader loader = new javafx.fxml.FXMLLoader(
+                    getClass().getResource("/com/qingframe/network/WelcomeView.fxml"));
+            BorderPane root = loader.load();
+            WelcomeController c = loader.getController();
+            c.init(this);
+            Stage stage = new Stage();
+            stage.setTitle("欢迎使用清框影");
+            stage.initModality(Modality.APPLICATION_MODAL);
+            Scene scene = new Scene(root);
+            scene.getStylesheets().add(currentThemeCss());
+            stage.setScene(scene);
+            stage.showAndWait();
+            updateLoginUi();
+        } catch (Exception e) {
+            // 欢迎页异常不阻塞主界面
+            showAlert("欢迎页加载失败: " + e.getMessage());
+        }
     }
 }

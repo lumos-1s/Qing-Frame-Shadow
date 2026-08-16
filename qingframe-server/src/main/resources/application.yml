@@ -1,0 +1,20 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/qingframe?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: ${MYSQL_PASSWORD:你的MySQL密码}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.qingframe.server.entity
+  configuration:
+    map-underscore-to-camel-case: true
+
+qingframe:
+  jwt:
+    secret: ${JWT_SECRET:qingframe-change-me-at-least-32-bytes-secret-key-2026}
+    expire-hours: 24

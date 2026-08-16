@@ -10,26 +10,27 @@
 
 <BorderPane fx:id="rootPane" prefHeight="900" prefWidth="1400" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.qingframe.ui.controller.MainController">
 
-    <!-- ═══════════════ 顶部工具栏（三组分区） ═══════════════ -->
+    <!-- ═══════════════ 顶部工具栏（单行平铺，无溢出折叠） ═══════════════ -->
     <top>
-        <ToolBar prefHeight="38.0">
-            <!-- 第1组：文件操作 -->
+        <HBox alignment="CENTER_LEFT" spacing="4.0" style="-fx-background-color: -qfx-surface; -fx-border-color: transparent transparent -qfx-border transparent; -fx-border-width: 0 0 1 0; -fx-padding: 4 10;">
+            <!-- 文件操作组 -->
             <HBox styleClass="toolbar-group">
                 <Button fx:id="btnOpenImage" onAction="#onOpenImage" styleClass="toolbar-btn" text="打开图片">
                     <graphic><SVGPath styleClass="ui-icon" content="M3 6h6l2 2h10v12H3z" /></graphic>
                 </Button>
-                <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
                 <Button fx:id="btnSaveImage" onAction="#onSaveImage" styleClass="toolbar-btn-primary" text="导出图片">
                     <graphic><SVGPath styleClass="ui-icon" content="M5 3h14v18H5z M5 12h14 M12 3v6" /></graphic>
                 </Button>
-                <ComboBox fx:id="cbExportFormat" prefWidth="80.0" styleClass="toolbar-combo" />
-                <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
+                <ComboBox fx:id="cbExportFormat" prefWidth="64.0" promptText="导出格式" styleClass="toolbar-combo">
+                    <tooltip>
+                        <Tooltip text="导出图片格式：JPEG（有损压缩，体积小） / PNG（无损，画质最佳）" />
+                    </tooltip>
+                </ComboBox>
                 <Button onAction="#onSyncToSelected" styleClass="toolbar-btn" text="同步到选中">
                     <graphic><SVGPath styleClass="ui-icon" content="M4 9a8 8 0 0 1 13.5-3.5 M20 15a8 8 0 0 1-13.5 3.5 M18 2v4h-4 M6 22v-4h4" /></graphic>
                 </Button>
             </HBox>
-            <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
-            <!-- 第2组：编辑操作 -->
+            <!-- 编辑操作组 -->
             <HBox styleClass="toolbar-group">
                 <Button onAction="#onUndo" styleClass="toolbar-btn" text="撤销">
                     <graphic><SVGPath styleClass="ui-icon" content="M9 14L4 9l5-5 M4 9h9a6 6 0 0 1 0 12h-5" /></graphic>
@@ -44,27 +45,25 @@
                     <graphic><SVGPath styleClass="ui-icon" content="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z" /></graphic>
                 </Button>
             </HBox>
-            <Separator orientation="VERTICAL" styleClass="toolbar-separator" />
-            <!-- 第3组：预览控制 -->
+            <!-- 缩放控制组（滑杆+输入框已覆盖缩放，去掉冗余 +/- 按钮） -->
             <HBox styleClass="toolbar-group">
-                <Button onAction="#onZoomOut" styleClass="toolbar-btn" text="">
-                    <graphic><SVGPath styleClass="ui-icon" content="M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0 M21 21l-4.5-4.5 M8 11h6" /></graphic>
-                </Button>
-                <Button onAction="#onZoomIn" styleClass="toolbar-btn" text="">
-                    <graphic><SVGPath styleClass="ui-icon" content="M11 11m-7 0a7 7 0 1 0 14 0a7 7 0 1 0-14 0 M21 21l-4.5-4.5 M11 8v6 M8 11h6" /></graphic>
-                </Button>
                 <Button onAction="#onZoomFit" styleClass="toolbar-btn" text="适应">
                     <graphic><SVGPath styleClass="ui-icon" content="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5" /></graphic>
                 </Button>
-                <TextField fx:id="tfZoomValue" prefWidth="50.0" styleClass="toolbar-zoom-input" />
-                <Slider fx:id="zoomSlider" blockIncrement="0.1" max="3.0" min="0.1" prefWidth="80.0" value="1.0" />
+                <TextField fx:id="tfZoomValue" prefWidth="48.0" styleClass="toolbar-zoom-input" />
+                <Slider fx:id="zoomSlider" HBox.hgrow="ALWAYS" blockIncrement="0.1" max="3.0" min="0.1" prefWidth="120.0" value="1.0" />
                 <Label fx:id="zoomLabel" text="100%" />
             </HBox>
             <Pane HBox.hgrow="ALWAYS" />
+            <!-- 账号区：固定在右侧 -->
+            <HBox alignment="CENTER_RIGHT" spacing="6.0" styleClass="toolbar-group">
+                <Label fx:id="lblLoginStatus" text="未登录" style="-fx-text-fill: -qfx-text-2; -fx-font-size: 12px;" />
+                <Button fx:id="btnLoginToggle" onAction="#onLoginToggle" styleClass="toolbar-btn" text="登录" />
+            </HBox>
             <ToggleButton fx:id="btnThemeToggle" mnemonicParsing="false" onAction="#onToggleTheme" text="">
                 <graphic><SVGPath styleClass="ui-icon" content="M20 13A8 8 0 1 1 11 3a6 6 0 0 0 9 10z" /></graphic>
             </ToggleButton>
-        </ToolBar>
+        </HBox>
     </top>
 
     <!-- ═══════════════ 左侧侧边栏（折叠分组） ═══════════════ -->
@@ -606,6 +605,11 @@
                             <ListView fx:id="lvPresets" prefHeight="100.0" />
                 <Button maxWidth="1.7976931348623157E308" onAction="#onLoadPreset" text="应用预设">
                     <graphic><SVGPath styleClass="ui-icon" content="M9 18l6-6-6-6" /></graphic>
+                </Button>
+                <Separator styleClass="param-group-separator" />
+                <Label styleClass="param-group-title" text="模板市场（云）" />
+                <Button maxWidth="1.7976931348623157E308" onAction="#onOpenMarket" styleClass="btn-primary" text="打开模板市场">
+                    <graphic><SVGPath styleClass="ui-icon" content="M12 3l2.5 5.5L20 9l-4.5 3.5L17 18l-5-3-5 3 1.5-5.5L4 9l5.5-.5z" /></graphic>
                 </Button>
                         </VBox>
                     </ScrollPane>

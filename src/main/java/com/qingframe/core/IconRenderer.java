@@ -1,6 +1,7 @@
 package com.qingframe.core;
 
 import com.qingframe.model.IconItem;
+import com.qingframe.util.ImageCache;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.BlurType;
@@ -12,12 +13,7 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
 import javafx.geometry.VPos;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class IconRenderer {
-
-    private static final Map<String, Image> customImageCache = new HashMap<>();
 
     public static void draw(GraphicsContext gc, IconItem item, double x, double y, double size) {
         gc.save();
@@ -25,16 +21,8 @@ public class IconRenderer {
         gc.setGlobalAlpha(item.getOpacity() / 100.0);
 
         String id = item.getId();
-        if (item.getSrc() != null && (item.getSrc().startsWith("file:") || item.getSrc().startsWith("http"))) {
-            Image img = customImageCache.get(item.getSrc());
-            if (img == null) {
-                try {
-                    img = new Image(item.getSrc());
-                    customImageCache.put(item.getSrc(), img);
-                } catch (Exception e) {
-                    img = null;
-                }
-            }
+        if (item.getSrc() != null && !item.getSrc().isEmpty()) {
+            Image img = ImageCache.get(item.getSrc());
             if (img != null) {
                 gc.drawImage(img, -size / 2, -size / 2, size, size);
             }

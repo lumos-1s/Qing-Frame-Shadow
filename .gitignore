@@ -1,4 +1,6 @@
 target/
+build/
+dist/
 *.class
 .idea/
 *.iml

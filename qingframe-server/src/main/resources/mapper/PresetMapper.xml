@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qingframe.server.mapper.PresetMapper">
+
+    <sql id="listCols">
+        p.id, p.user_id, p.name, p.tag, p.description,
+        p.download_count, p.like_count, p.status, p.created_at, p.updated_at,
+        u.nickname AS author
+    </sql>
+
+    <!-- 列表：不返回 content_json（大字段），分页 + 标签/关键字过滤 -->
+    <select id="findPage" resultType="com.qingframe.server.entity.Preset">
+        SELECT <include refid="listCols"/>
+        FROM preset p
+        LEFT JOIN `user` u ON u.id = p.user_id
+        WHERE p.status = 1
+        <if test="tag != null and tag != ''">
+            AND p.tag = #{tag}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (p.name LIKE CONCAT('%', #{keyword}, '%')
+                 OR p.description LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY p.download_count DESC, p.id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countPage" resultType="long">
+        SELECT COUNT(*)
+        FROM preset p
+        WHERE p.status = 1
+        <if test="tag != null and tag != ''">
+            AND p.tag = #{tag}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (p.name LIKE CONCAT('%', #{keyword}, '%')
+                 OR p.description LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </select>
+
+    <select id="findById" resultType="com.qingframe.server.entity.Preset">
+        SELECT <include refid="listCols"/>, p.content_json
+        FROM preset p
+        LEFT JOIN `user` u ON u.id = p.user_id
+        WHERE p.id = #{id}
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO preset (user_id, name, tag, description, content_json)
+        VALUES (#{userId}, #{name}, #{tag}, #{description}, #{contentJson})
+    </insert>
+
+    <update id="update">
+        UPDATE preset
+        SET name = #{name}, tag = #{tag}, description = #{description}, content_json = #{contentJson}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM preset WHERE id = #{id}
+    </delete>
+
+    <update id="incDownloadCount">
+        UPDATE preset SET download_count = download_count + 1 WHERE id = #{id}
+    </update>
+
+    <insert id="insertDownloadLog">
+        INSERT INTO preset_download_log (preset_id, user_id, ip)
+        VALUES (#{presetId}, #{userId}, #{ip})
+    </insert>
+
+    <select id="findTags" resultType="string">
+        SELECT DISTINCT tag FROM preset WHERE status = 1 ORDER BY tag
+    </select>
+
+    <insert id="insertLike">
+        INSERT IGNORE INTO preset_like (preset_id, user_id) VALUES (#{presetId}, #{userId})
+    </insert>
+
+    <delete id="deleteLike">
+        DELETE FROM preset_like WHERE preset_id = #{presetId} AND user_id = #{userId}
+    </delete>
+
+    <select id="countLike" resultType="int">
+        SELECT COUNT(*) FROM preset_like WHERE preset_id = #{presetId} AND user_id = #{userId}
+    </select>
+
+    <update id="incLikeCount">
+        UPDATE preset SET like_count = like_count + 1 WHERE id = #{id}
+    </update>
+
+    <update id="decLikeCount">
+        UPDATE preset SET like_count = GREATEST(0, like_count - 1) WHERE id = #{id}
+    </update>
+
+</mapper>
