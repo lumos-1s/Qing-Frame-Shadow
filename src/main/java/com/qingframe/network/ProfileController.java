@@ -25,6 +25,7 @@ public class ProfileController implements Initializable {
 
     @FXML private ImageView ivAvatar;
     @FXML private TextField tfNickname;
+    @FXML private TextField tfEmail;
     @FXML private Label lblUsername, lblHint;
 
     private MainController mainController;
@@ -39,6 +40,10 @@ public class ProfileController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         lblUsername.setText(ApiClient.isLoggedIn() ? TokenStore.loadUsername() : "");
         tfNickname.setText(TokenStore.loadNickname());
+        String email = TokenStore.loadEmail();
+        if (email != null) {
+            tfEmail.setText(email);
+        }
         avatarDataUrl = TokenStore.loadAvatar();
         loadAvatarImage();
     }
@@ -80,12 +85,17 @@ public class ProfileController implements Initializable {
     @FXML
     private void onSave() {
         String nick = tfNickname.getText().trim();
+        String email = tfEmail.getText().trim();
         if (nick.isEmpty()) {
             showHint("昵称不能为空");
             return;
         }
+        if (!email.isEmpty() && !email.matches("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$")) {
+            showHint("邮箱格式不正确");
+            return;
+        }
         lblHint.setVisible(false);
-        PresetMarketService.updateProfile(nick, avatarDataUrl)
+        PresetMarketService.updateProfile(nick, avatarDataUrl, email.isEmpty() ? null : email)
                 .whenComplete((r, err) -> Platform.runLater(() -> {
                     if (err != null || r == null || !r.isOk()) {
                         showHint(r == null ? "无法连接服务器" : r.errorMessage());
@@ -94,6 +104,9 @@ public class ProfileController implements Initializable {
                     TokenStore.saveNickname(nick);
                     if (avatarDataUrl != null) {
                         TokenStore.saveAvatar(avatarDataUrl);
+                    }
+                    if (!email.isEmpty()) {
+                        TokenStore.saveEmail(email);
                     }
                     if (mainController != null) {
                         mainController.updateLoginUi();

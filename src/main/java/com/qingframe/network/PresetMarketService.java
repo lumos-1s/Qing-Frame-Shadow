@@ -20,29 +20,35 @@ public class PresetMarketService {
 
     // ────────────── 认证 ──────────────
 
-    public static CompletableFuture<ApiResult> register(String username, String password) {
-        return ApiClient.post("/api/auth/register", new LoginBody(username, password));
+    public static CompletableFuture<ApiResult> register(String username, String password, String email) {
+        return ApiClient.post("/api/auth/register", new RegisterBody(username, password, email));
     }
 
     public static CompletableFuture<ApiResult> login(String username, String password) {
         return ApiClient.post("/api/auth/login", new LoginBody(username, password));
     }
 
-    /** 忘记密码：重置为新密码 */
-    public static CompletableFuture<ApiResult> resetPassword(String username, String newPassword) {
+    /** 忘记密码第一步：发送验证码到邮箱 */
+    public static CompletableFuture<ApiResult> forgotPassword(String email) {
+        return ApiClient.post("/api/auth/forgot-password", java.util.Map.of("email", email));
+    }
+
+    /** 忘记密码第二步：邮箱 + 验证码 + 新密码重置 */
+    public static CompletableFuture<ApiResult> resetPassword(String email, String code, String newPassword) {
         return ApiClient.post("/api/auth/reset-password",
-                java.util.Map.of("username", username, "newPassword", newPassword));
+                java.util.Map.of("email", email, "code", code, "newPassword", newPassword));
     }
 
     public static CompletableFuture<ApiResult> me() {
         return ApiClient.get("/api/auth/me");
     }
 
-    /** 更新个人资料：昵称 / 头像（base64 data URL），null 字段不修改 */
-    public static CompletableFuture<ApiResult> updateProfile(String nickname, String avatar) {
+    /** 更新个人资料：昵称 / 头像（base64 data URL）/ 邮箱，null 字段不修改 */
+    public static CompletableFuture<ApiResult> updateProfile(String nickname, String avatar, String email) {
         Map<String, String> body = new java.util.HashMap<>();
         if (nickname != null) body.put("nickname", nickname);
         if (avatar != null) body.put("avatar", avatar);
+        if (email != null) body.put("email", email);
         return ApiClient.put("/api/auth/profile", body);
     }
 
@@ -122,6 +128,18 @@ public class PresetMarketService {
         LoginBody(String username, String password) {
             this.username = username;
             this.password = password;
+        }
+    }
+
+    private static class RegisterBody {
+        private final String username;
+        private final String password;
+        private final String email;
+
+        RegisterBody(String username, String password, String email) {
+            this.username = username;
+            this.password = password;
+            this.email = email;
         }
     }
 

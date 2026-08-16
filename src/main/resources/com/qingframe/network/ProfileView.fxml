@@ -30,6 +30,10 @@
                 <TextField fx:id="tfNickname" prefWidth="200.0" promptText="输入昵称（最长 50 字）" />
             </HBox>
             <HBox alignment="CENTER_LEFT" spacing="8.0">
+                <Label prefWidth="52.0" text="邮箱" style="-fx-text-fill: -qfx-text-2;" />
+                <TextField fx:id="tfEmail" prefWidth="200.0" promptText="用于找回密码" />
+            </HBox>
+            <HBox alignment="CENTER_LEFT" spacing="8.0">
                 <Label prefWidth="52.0" text="用户名" style="-fx-text-fill: -qfx-text-2;" />
                 <Label fx:id="lblUsername" style="-fx-text-fill: -qfx-text-3; -fx-font-size: 12px;" />
             </HBox>

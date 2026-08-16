@@ -22,6 +22,7 @@ import java.util.ResourceBundle;
 public class LoginController implements Initializable {
 
     @FXML private TextField tfUsername;
+    @FXML private TextField tfEmail;
     @FXML private PasswordField tfPassword;
     @FXML private CheckBox cbRemember;
     @FXML private Label lblError;
@@ -85,6 +86,7 @@ public class LoginController implements Initializable {
     private void onRegister(ActionEvent e) {
         String username = tfUsername.getText().trim();
         String password = tfPassword.getText();
+        String email = tfEmail.getText().trim();
         if (username.isEmpty() || password.isEmpty()) {
             showError("请输入用户名和密码");
             return;
@@ -93,8 +95,12 @@ public class LoginController implements Initializable {
             showError("密码至少 6 位");
             return;
         }
+        if (email.isEmpty() || !email.matches("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$")) {
+            showError("请输入正确的邮箱（用于找回密码）");
+            return;
+        }
         setBusy(true, "注册中...");
-        PresetMarketService.register(username, password).whenComplete((r, err) -> Platform.runLater(() -> {
+        PresetMarketService.register(username, password, email).whenComplete((r, err) -> Platform.runLater(() -> {
             setBusy(false, "登录");
             if (err != null || r == null) {
                 showError("无法连接服务器，请检查服务是否已启动");
@@ -168,6 +174,9 @@ public class LoginController implements Initializable {
                     JsonObject d = r.data.getAsJsonObject();
                     if (d.has("nickname")) {
                         TokenStore.saveNickname(d.get("nickname").getAsString());
+                    }
+                    if (d.has("email")) {
+                        TokenStore.saveEmail(d.get("email").getAsString());
                     }
                     if (d.has("avatar") && !d.get("avatar").isJsonNull()) {
                         TokenStore.saveAvatar(d.get("avatar").getAsString());

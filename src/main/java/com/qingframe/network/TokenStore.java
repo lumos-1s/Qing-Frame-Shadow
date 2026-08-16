@@ -22,6 +22,9 @@ public final class TokenStore {
     /** 头像本地缓存（base64 data URL）：~/.qingframe/avatar */
     private static final Path AVATAR_FILE = Paths.get(
             System.getProperty("user.home"), ".qingframe", "avatar");
+    /** 邮箱本地缓存：~/.qingframe/email */
+    private static final Path EMAIL_FILE = Paths.get(
+            System.getProperty("user.home"), ".qingframe", "email");
 
     private TokenStore() {
     }
@@ -83,6 +86,26 @@ public final class TokenStore {
         }
     }
 
+    /** 保存邮箱到本地缓存 */
+    public static void saveEmail(String email) {
+        try {
+            Files.createDirectories(EMAIL_FILE.getParent());
+            Files.writeString(EMAIL_FILE, email == null ? "" : email, StandardCharsets.UTF_8);
+        } catch (IOException ignored) {
+        }
+    }
+
+    /** 读取本地缓存的邮箱，无则返回 null */
+    public static String loadEmail() {
+        try {
+            if (!Files.exists(EMAIL_FILE)) return null;
+            String e = Files.readString(EMAIL_FILE, StandardCharsets.UTF_8).trim();
+            return e.isEmpty() ? null : e;
+        } catch (IOException ex) {
+            return null;
+        }
+    }
+
     public static String loadUsername() {
         try {
             if (!Files.exists(USER_FILE)) return null;
@@ -109,6 +132,7 @@ public final class TokenStore {
             Files.deleteIfExists(USER_FILE);
             Files.deleteIfExists(NICKNAME_FILE);
             Files.deleteIfExists(AVATAR_FILE);
+            Files.deleteIfExists(EMAIL_FILE);
         } catch (IOException ignored) {
         }
     }

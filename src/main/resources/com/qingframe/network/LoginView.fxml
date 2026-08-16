@@ -21,6 +21,7 @@
             <Label text="照片加框 · 模板云市场" style="-fx-font-size: 12.5px; -fx-text-fill: -qfx-text-3;" />
 
             <TextField fx:id="tfUsername" promptText="用户名" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-padding: 8 12;" />
+            <TextField fx:id="tfEmail" promptText="邮箱（注册时必填，用于找回密码）" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-padding: 8 12;" />
             <PasswordField fx:id="tfPassword" promptText="密码" onAction="#onLogin" style="-fx-background-radius: 8; -fx-border-radius: 8; -fx-padding: 8 12;" />
 
             <HBox alignment="CENTER" spacing="8.0">

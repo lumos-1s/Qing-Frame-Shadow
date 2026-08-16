@@ -7,6 +7,15 @@ spring:
     username: root
     password: ${MYSQL_PASSWORD:你的MySQL密码}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  mail:
+    # 忘记密码验证码邮件（QQ 邮箱示例：https://mail.qq.com 设置→账户→开启 SMTP 并生成授权码）
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.ssl.enable: true
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml

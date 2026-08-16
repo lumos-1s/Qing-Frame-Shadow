@@ -1,6 +1,7 @@
 package com.qingframe.server.controller;
 
 import com.qingframe.server.dto.LoginRequest;
+import com.qingframe.server.dto.ForgotPasswordRequest;
 import com.qingframe.server.dto.ProfileRequest;
 import com.qingframe.server.dto.RegisterRequest;
 import com.qingframe.server.dto.ResetPasswordRequest;
@@ -67,10 +68,16 @@ public class AuthController {
         return Result.ok(authService.updateProfile(userId, req));
     }
 
-    /** 忘记密码：用户名 + 新密码直接重置（免登录） */
+    /** 忘记密码第二步：邮箱 + 验证码 + 新密码重置（免登录） */
     @PostMapping("/reset-password")
     public Result resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
         authService.resetPassword(req);
         return Result.ok();
+    }
+
+    /** 忘记密码第一步：发送验证码到邮箱（免登录） */
+    @PostMapping("/forgot-password")
+    public Result forgotPassword(@Valid @RequestBody ForgotPasswordRequest req) {
+        return Result.ok(authService.sendResetCode(req));
     }
 }

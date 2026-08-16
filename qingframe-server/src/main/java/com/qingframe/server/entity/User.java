@@ -7,6 +7,7 @@ public class User {
     private Long id;
     private String username;
     private String passwordHash;
+    private String email;
     private String nickname;
     /** 头像：base64 data URL（如 data:image/png;base64,...），未设置为空串 */
     private String avatar;
@@ -21,6 +22,8 @@ public class User {
     public void setUsername(String username) { this.username = username; }
     public String getPasswordHash() { return passwordHash; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
     public String getNickname() { return nickname; }
     public void setNickname(String nickname) { this.nickname = nickname; }
     public String getAvatar() { return avatar; }
