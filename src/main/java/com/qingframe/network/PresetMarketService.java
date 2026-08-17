@@ -73,7 +73,7 @@ public class PresetMarketService {
     public static CompletableFuture<String> downloadContent(Long id) {
         return ApiClient.post("/api/presets/" + id + "/download", null)
                 .thenApply(r -> {
-                    if (!r.isOk()) return null;
+                    if (!r.isOk() || r.data == null || !r.data.isJsonObject()) return null;
                     JsonObject obj = r.data.getAsJsonObject();
                     return obj.has("contentJson") ? obj.get("contentJson").getAsString() : null;
                 });

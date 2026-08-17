@@ -430,6 +430,9 @@ public class BorderEngine {
         double spacing = config.getFilmPerforationSpacing();
         boolean isRound = "round".equals(config.getFilmPerforationType());
         boolean horizontal = "hstrip".equals(config.getFilmPerforationType());
+        // 步长守卫：size/spacing 为 0 或负数时保证循环推进，避免渲染线程死循环卡死界面
+        double stepX = Math.max(1, size + spacing);
+        double stepY = Math.max(1, size + spacing);
         double m = 15;
         gc.setFill(Color.WHITE);
         if (horizontal) {
@@ -440,7 +443,7 @@ public class BorderEngine {
             while (x + size <= cw - m) {
                 gc.fillRect(x, yTop, size, size);
                 gc.fillRect(x, yBottom, size, size);
-                x += size + spacing;
+                x += stepX;
             }
         } else {
             double y = m;
@@ -449,7 +452,7 @@ public class BorderEngine {
                     if (isRound) gc.fillOval(xv, y, size, size);
                     else gc.fillRect(xv, y, size, size);
                 }
-                y += size + spacing;
+                y += stepY;
             }
         }
     }
@@ -669,7 +672,8 @@ public class BorderEngine {
         for (TextStickerConfig.TextLine textLine : decor.getTextLines()) {
             if (textLine.getText() == null || textLine.getText().isEmpty()) continue;
             gc.save();
-            gc.setFont(new Font(textLine.getFontFamily(), textLine.getFontSize()));
+            // 字号钳制：缺失/非法的 0 或负值会导致 new Font 抛异常（预览报错/导出失败）
+            gc.setFont(new Font(textLine.getFontFamily(), Math.max(1, textLine.getFontSize())));
             gc.setTextAlign(TextAlignment.CENTER);
             gc.setFill(parseColor(textLine.getColorHex(), textLine.getOpacity()));
             double tx = textLine.getX() > 0 ? textLine.getX() : cw / 2;
@@ -850,7 +854,7 @@ public class BorderEngine {
             for (TextStickerConfig.TextLine textLine : decor.getTextLines()) {
                 if (textLine.getText() == null || textLine.getText().isEmpty()) continue;
                 gc.save();
-                gc.setFont(new Font(textLine.getFontFamily(), textLine.getFontSize()));
+                gc.setFont(new Font(textLine.getFontFamily(), Math.max(1, textLine.getFontSize())));
                 gc.setTextAlign(TextAlignment.CENTER);
                 gc.setFill(parseColor(textLine.getColorHex(), textLine.getOpacity()));
                 double tx = textLine.getX() > 0 ? textLine.getX() : canvasW / 2;

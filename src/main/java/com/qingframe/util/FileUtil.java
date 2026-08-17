@@ -2,9 +2,14 @@ package com.qingframe.util;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class FileUtil {
+
+    /** 本软件导出的文件名形如 xxx_bordered_001.jpg：文件夹批量导出时需排除，避免把上次导出产物再次纳入 */
+    private static final java.util.regex.Pattern EXPORT_PRODUCT_PATTERN =
+            java.util.regex.Pattern.compile("(?i)_bordered_\\d{3}\\.(jpg|jpeg|png)$");
 
     public static List<String> listImageFiles(String dirPath) {
         List<String> images = new ArrayList<>();
@@ -16,9 +21,12 @@ public class FileUtil {
             if (name.endsWith(".jpg") || name.endsWith(".jpeg") ||
                     name.endsWith(".png") || name.endsWith(".bmp") ||
                     name.endsWith(".tiff") || name.endsWith(".webp")) {
+                if (EXPORT_PRODUCT_PATTERN.matcher(f.getName()).matches()) continue;
                 images.add(f.getAbsolutePath());
             }
         }
+        // 固定排序：批量导出顺序不依赖文件系统枚举
+        Collections.sort(images);
         return images;
     }
 

@@ -43,6 +43,16 @@ public class JsonUtil {
         if (model.getFilmTearConfig() == null) model.setFilmTearConfig(new FilmTearConfig());
         if (model.getLightEffect() == null) model.setLightEffect(new LightEffect());
         if (model.getDecorConfig() == null) model.setDecorConfig(new TextStickerConfig());
+        // Gson 反序列化不调用构造器：逐层补齐 layer 的 fill/stroke/shadow 与 decor 的 textLines/stickers，
+        // 避免模板 JSON 缺嵌套字段时渲染/导出路径 NPE（正常模板字段齐全，行为不变）
+        for (LayerBorder layer : model.getLayerList()) {
+            if (layer.getFillConfig() == null) layer.setFillConfig(new FillConfig());
+            if (layer.getStrokeConfig() == null) layer.setStrokeConfig(new StrokeConfig());
+            if (layer.getShadowGlowConfig() == null) layer.setShadowGlowConfig(new ShadowGlowConfig());
+        }
+        TextStickerConfig decor = model.getDecorConfig();
+        if (decor.getTextLines() == null) decor.setTextLines(new java.util.ArrayList<>());
+        if (decor.getStickers() == null) decor.setStickers(new java.util.ArrayList<>());
     }
 
     public static void saveToFile(TemplateModel model, String filePath) throws IOException {

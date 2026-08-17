@@ -28,7 +28,8 @@ public class PresetService {
     }
 
     public PageResult<Preset> list(String tag, String keyword, int page, int size) {
-        int safePage = Math.max(1, page);
+        // page 上限 10000：保证 (safePage-1)*safeSize 不溢出（max ≈ 100 万，int 安全）
+        int safePage = Math.min(10000, Math.max(1, page));
         int safeSize = Math.min(100, Math.max(1, size));
         int offset = (safePage - 1) * safeSize;
         List<Preset> list = presetMapper.findPage(tag, keyword, offset, safeSize);

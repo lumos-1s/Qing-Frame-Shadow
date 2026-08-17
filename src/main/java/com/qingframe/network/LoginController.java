@@ -68,12 +68,13 @@ public class LoginController implements Initializable {
             JsonObject obj = r.data.getAsJsonObject();
             String token = obj.get("token").getAsString();
             ApiClient.token = token;
-            TokenStore.saveUsername(username);
             if (cbRemember.isSelected()) {
                 TokenStore.save(token);
             } else {
-                TokenStore.clear();
+                // 未勾选记住：只清 token 文件；用户名需在 clear 之后写回，避免被连带删除
+                TokenStore.clearToken();
             }
+            TokenStore.saveUsername(username);
             cacheProfile();
             if (onLoggedIn != null) {
                 onLoggedIn.run();
@@ -118,10 +119,13 @@ public class LoginController implements Initializable {
                 }
                 JsonObject obj = r2.data.getAsJsonObject();
                 ApiClient.token = obj.get("token").getAsString();
-                TokenStore.saveUsername(username);
                 if (cbRemember.isSelected()) {
                     TokenStore.save(ApiClient.token);
+                } else {
+                    // 未勾选记住：清除可能残留的旧账号 token，避免下次启动恢复旧登录态
+                    TokenStore.clearToken();
                 }
+                TokenStore.saveUsername(username);
                 cacheProfile();
                 if (onLoggedIn != null) {
                     onLoggedIn.run();

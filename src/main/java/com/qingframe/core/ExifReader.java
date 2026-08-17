@@ -177,8 +177,11 @@ public class ExifReader {
                         int v = bytesToInt(data, valueOff, 4, bo);
                         exif.iso = "ISO " + v;
                     } else if (type == 3 && count > 1) {
-                        int val = bytesToInt(data, valueOff, Math.min(4, count * 2), bo);
-                        exif.iso = "ISO " + val;
+                        // type=3 且 count>1 时 4 字节值字段存的是数据偏移量，需从 TIFF 偏移处读取首个值
+                        int off = bytesToInt(data, valueOff, 4, bo);
+                        if (off >= 0 && tiffOff + off + 2 <= data.length) {
+                            exif.iso = "ISO " + bytesToInt(data, tiffOff + off, 2, bo);
+                        }
                     }
                     break;
                 case 0x920A:

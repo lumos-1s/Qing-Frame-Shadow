@@ -137,6 +137,14 @@ public final class TokenStore {
         }
     }
 
+    /** 仅清除 token 文件（token 失效时调用），保留用户名/昵称/头像等本地资料 */
+    public static void clearToken() {
+        try {
+            Files.deleteIfExists(TOKEN_FILE);
+        } catch (IOException ignored) {
+        }
+    }
+
     /** 是否勾选过"启动不再显示欢迎页" */
     public static boolean loadSkipWelcome() {
         try {

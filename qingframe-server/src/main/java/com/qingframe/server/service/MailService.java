@@ -25,7 +25,8 @@ public class MailService {
     /** 发送验证码邮件；未配置 SMTP 或发送失败返回 false */
     public boolean sendResetCode(String to, String code) {
         if (from == null || from.isEmpty()) {
-            log.warn("[mail] 未配置 spring.mail.username，验证码只能本地查看: {}", code);
+            // 不打印验证码明文：日志泄露等于验证码泄露
+            log.warn("[mail] 未配置 spring.mail.username，验证码邮件未发送");
             return false;
         }
         try {

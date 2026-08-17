@@ -49,7 +49,20 @@ public final class ImageCache {
 
     /** 同步加载图片（InputStream 构造器在调用线程完成解码） */
     private static Image loadSynchronously(String src) throws Exception {
-        if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("file:")) {
+        if (src.startsWith("file:")) {
+            // file: URI 用 File/URI 解析：URL.openStream 要求已编码的 URI，含空格/中文的路径会加载失败
+            java.io.File f;
+            try {
+                f = new java.io.File(new java.net.URI(src));
+            } catch (Exception e) {
+                f = new java.io.File(src.substring("file:".length()));
+            }
+            if (!f.isFile()) return null;
+            try (InputStream in = new java.io.FileInputStream(f)) {
+                return new Image(in);
+            }
+        }
+        if (src.startsWith("http://") || src.startsWith("https://")) {
             try (InputStream in = new java.net.URL(src).openStream()) {
                 return new Image(in);
             }

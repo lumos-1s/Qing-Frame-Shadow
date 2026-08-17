@@ -51,7 +51,12 @@ public class ImageExportUtil {
     public static void exportJpg(Image image, String outputPath, float quality) throws IOException {
         BufferedImage bImg = SwingFXUtils.fromFXImage(image, null);
         BufferedImage rgb = new BufferedImage(bImg.getWidth(), bImg.getHeight(), BufferedImage.TYPE_INT_RGB);
-        rgb.createGraphics().drawImage(bImg, 0, 0, java.awt.Color.WHITE, null);
+        java.awt.Graphics2D g = rgb.createGraphics();
+        try {
+            g.drawImage(bImg, 0, 0, java.awt.Color.WHITE, null);
+        } finally {
+            g.dispose();
+        }
         writeJpeg(rgb, new File(outputPath), quality);
     }
 

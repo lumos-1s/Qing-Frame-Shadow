@@ -50,6 +50,8 @@ public class MarketController implements Initializable {
     private int currentPage = 1;
     private long total = 0;
     private final List<String> allTags = new ArrayList<>();
+    /** 请求代次：连续触发 loadPage 时丢弃过期响应，避免旧结果覆盖新列表 */
+    private int pageRequestGen = 0;
 
     public void setMainController(MainController mainController) {
         this.mainController = mainController;
@@ -193,9 +195,12 @@ public class MarketController implements Initializable {
     }
 
     private void loadPage(int page) {
+        final int gen = ++pageRequestGen;
         lblTotal.setText("加载中...");
         PresetMarketService.list(page, 50, currentTag, currentKeyword)
                 .whenComplete((r, err) -> Platform.runLater(() -> {
+                    // 已有更新的请求发出，本次响应作废
+                    if (gen != pageRequestGen) return;
                     if (err != null || r == null) {
                         lblTotal.setText("无法连接服务器");
                         lblHint.setText("请确认服务端已启动 (mvn spring-boot:run)");

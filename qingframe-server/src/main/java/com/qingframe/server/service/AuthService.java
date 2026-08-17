@@ -94,6 +94,10 @@ public class AuthService {
         String nickname = req.getNickname();
         String avatar = req.getAvatar();
         String email = req.getEmail();
+        // 全空请求：直接返回当前资料，避免生成非法 SQL（UPDATE ... SET WHERE）导致 500
+        if (nickname == null && avatar == null && email == null) {
+            return buildProfileData(u);
+        }
         if (nickname != null) {
             nickname = nickname.trim();
             if (nickname.isEmpty()) {
@@ -119,20 +123,34 @@ public class AuthService {
         userMapper.updateProfile(userId, nickname, avatar, email);
 
         User updated = userMapper.findById(userId);
+        return buildProfileData(updated);
+    }
+
+    private Map<String, Object> buildProfileData(User u) {
         Map<String, Object> data = new HashMap<>();
-        data.put("id", updated.getId());
-        data.put("username", updated.getUsername());
-        data.put("email", updated.getEmail());
-        data.put("nickname", updated.getNickname());
-        data.put("avatar", updated.getAvatar());
+        data.put("id", u.getId());
+        data.put("username", u.getUsername());
+        data.put("email", u.getEmail());
+        data.put("nickname", u.getNickname());
+        data.put("avatar", u.getAvatar());
         return data;
     }
 
-    /** 头像必须是 data:image/xxx;base64,... 且解码后不超过 1MB */
+    /** 头像必须是 data:image/xxx;base64,... 且解码后不超过 1MB；仅允许位图格式，禁止 SVG 等可执行内容 */
+    private static final java.util.Set<String> ALLOWED_AVATAR_TYPES =
+            java.util.Set.of("png", "jpeg", "jpg", "webp", "gif");
+
     private void validateAvatar(String avatar) {
         int comma = avatar.indexOf(',');
         if (!avatar.startsWith("data:image/") || comma <= 0) {
             throw new BizException("头像格式必须是 base64 图片数据");
+        }
+        String mime = avatar.substring("data:image/".length(), comma);
+        if (mime.endsWith(";base64")) {
+            mime = mime.substring(0, mime.length() - ";base64".length());
+        }
+        if (!ALLOWED_AVATAR_TYPES.contains(mime.toLowerCase())) {
+            throw new BizException("头像格式仅支持 png/jpeg/webp/gif");
         }
         try {
             byte[] bytes = java.util.Base64.getDecoder().decode(avatar.substring(comma + 1));
@@ -167,14 +185,12 @@ public class AuthService {
         Map<String, Object> data = new HashMap<>();
         data.put("email", email);
         data.put("sent", sent);
-        if (!sent) {
-            // 开发环境降级：SMTP 未配置时验证码随响应返回，便于本地联调（生产必须移除）
-            data.put("devCode", code);
-        }
+        // 安全约束：验证码绝不随响应返回（SMTP 未配置/发送失败时仅返回 sent=false）
         return data;
     }
 
-    /** 校验验证码并重置密码：验证码 10 分钟有效且未使用 */
+    /** 校验验证码并重置密码：验证码 10 分钟有效且未使用；原子消费防止并发重复重置 */
+    @org.springframework.transaction.annotation.Transactional
     public void resetPassword(ResetPasswordRequest req) {
         String email = req.getEmail().trim();
         User u = userMapper.findByEmail(email);
@@ -191,7 +207,10 @@ public class AuthService {
         if (!pr.getCode().equals(req.getCode().trim())) {
             throw new BizException("验证码错误");
         }
-        passwordResetMapper.markUsed(pr.getId());
+        // 原子抢占：仅当仍为未使用状态时标记，失败说明已被其他请求消费
+        if (passwordResetMapper.markUsed(pr.getId()) == 0) {
+            throw new BizException("验证码已被使用，请重新获取");
+        }
         userMapper.updatePassword(u.getId(), passwordEncoder.encode(req.getNewPassword()));
     }
 }

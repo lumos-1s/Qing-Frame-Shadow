@@ -55,6 +55,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -126,7 +127,7 @@ public class MainController implements Initializable {
     private int currentImageIndex = -1;
     private int[] refMargins = new int[4];
     private final Map<File, TemplateModel> imageTemplates = new HashMap<>();
-    private final Map<File, Image> thumbCache = new HashMap<>();
+    private final Map<File, Image> thumbCache = new ConcurrentHashMap<>();
     private static final int THUMB_MAX_DIM = 1280;
     private static final int THUMB_CACHE_MAX = 200;
     private static final long RENDER_DEBOUNCE_MS = 50;
@@ -678,9 +679,11 @@ public class MainController implements Initializable {
         template.setParamFontSize((int) slParamFontSize.getValue());
 
         TextStickerConfig decor = template.getDecorConfig();
-        decor.setExifAutoText(cbExifText.isSelected() ? 1 : 0);
-        decor.setCornerDecorEnable(cbCornerDecor.isSelected() ? 1 : 0);
-        decor.setCornerDecorSize(slCornerDecorSize.getValue());
+        if (decor != null) {
+            decor.setExifAutoText(cbExifText.isSelected() ? 1 : 0);
+            decor.setCornerDecorEnable(cbCornerDecor.isSelected() ? 1 : 0);
+            decor.setCornerDecorSize(slCornerDecorSize.getValue());
+        }
 
         syncManualExif();
         // 手动修改 EXIF 字段后同步参数行到当前模板
@@ -774,7 +777,6 @@ public class MainController implements Initializable {
         lblParamFontSize.setText((int)slParamFontSize.getValue() + "px");
 
         updateLayerList();
-        cbLayerSelect.getSelectionModel().select(0);
         loadLayerToUI();
 
         CornerConfig corner = template.getCornerConfig();
@@ -797,8 +799,12 @@ public class MainController implements Initializable {
         cbLeakType.setValue(light.getLightLeakType());
 
         TextStickerConfig decor = template.getDecorConfig();
-        cbCornerDecor.setSelected(decor.getCornerDecorEnable() == 1);
-        slCornerDecorSize.setValue(decor.getCornerDecorSize());
+        if (decor != null) {
+            cbCornerDecor.setSelected(decor.getCornerDecorEnable() == 1);
+            slCornerDecorSize.setValue(decor.getCornerDecorSize());
+            // 参数水印开关随模板/预设回写，保证加载模板后显示与导出一致
+            if (cbExifText != null) cbExifText.setSelected(decor.getExifAutoText() == 1);
+        }
 
         // 按用户勾选状态把 EXIF 参数行同步进当前模板（预设切换后参数不丢失）
         syncExifTextLine();
@@ -885,7 +891,9 @@ public class MainController implements Initializable {
             saveLastOpenDir(files.get(0).getParentFile());
             loadImage(files.get(0));
             for (int i = 1; i < files.size(); i++) {
-                imageFiles.add(files.get(i));
+                if (!imageFiles.contains(files.get(i))) {
+                    imageFiles.add(files.get(i));
+                }
             }
             updateFilmStrip();
         }
@@ -912,7 +920,7 @@ public class MainController implements Initializable {
                                 if (!ok) {
                                     loadImage(f);
                                     ok = true;
-                                } else {
+                                } else if (!imageFiles.contains(f)) {
                                     imageFiles.add(f);
                                 }
                             } else {
@@ -1186,8 +1194,6 @@ public class MainController implements Initializable {
             t.setDaemon(true);
             return t;
         });
-        // 导出开始前固化当前设置，避免导出过程中界面改动影响后续图片
-        TemplateModel exportTemplate = cloneTemplate(template);
         // 自动编号：从目录已有最大编号 +1 开始，批内原子递增，保证不重复
         String ext = "png".equalsIgnoreCase(fmt) ? "png" : "jpg";
         AtomicInteger fileNum = new AtomicInteger(nextExportNumber(exportDir, ext));
@@ -1199,9 +1205,11 @@ public class MainController implements Initializable {
 
         for (File src : files) {
             final String fileName = src.getName();
+            // 每图独立模板：同步边框到选中图片后，导出与预览使用同一套边框
+            TemplateModel fileTmpl = cloneTemplate(imageTemplates.getOrDefault(src, template));
             pool.execute(() -> {
                 try {
-                    WritableImage result = renderFileOnFxThread(src, exportTemplate);
+                    WritableImage result = renderFileOnFxThread(src, fileTmpl);
                     int n = fileNum.getAndIncrement();
                     String outPath = exportDir.getAbsolutePath() + File.separator +
                             FileUtil.getFileNameWithoutExt(fileName) + "_bordered_" + String.format("%03d", n) + "." + ext;
@@ -1210,16 +1218,22 @@ public class MainController implements Initializable {
                     failed.incrementAndGet();
                     e.printStackTrace();
                     Platform.runLater(() -> showAlert("跳过损坏文件: " + fileName + "\n" + e.getMessage()));
-                }
-                int doneN = completed.incrementAndGet();
-                allDone.countDown();
-                if (doneN % 5 == 0 || doneN == total) {
-                    final double p = (double) doneN / total;
-                    final String label = "正在导出 " + doneN + "/" + total + " - " + fileName;
-                    Platform.runLater(() -> {
-                        progressBar.setProgress(p);
-                        statusLabel.setText(label);
-                    });
+                } catch (Throwable t) {
+                    // OOM 等 Error 也计入失败并释放 latch，避免批量导出永久挂起
+                    failed.incrementAndGet();
+                    t.printStackTrace();
+                    Platform.runLater(() -> showAlert("跳过文件: " + fileName + "\n" + t.getMessage()));
+                } finally {
+                    int doneN = completed.incrementAndGet();
+                    allDone.countDown();
+                    if (doneN % 5 == 0 || doneN == total) {
+                        final double p = (double) doneN / total;
+                        final String label = "正在导出 " + doneN + "/" + total + " - " + fileName;
+                        Platform.runLater(() -> {
+                            progressBar.setProgress(p);
+                            statusLabel.setText(label);
+                        });
+                    }
                 }
             });
         }
@@ -1392,9 +1406,8 @@ public class MainController implements Initializable {
         }
         if (zoomSlider != null && Math.abs(zoomSlider.getValue() - zoomValue) > 0.0001) {
             zoomSlider.setValue(zoomValue);
-        } else {
-            scheduleRender();
         }
+        scheduleRender();
     }
 
     @FXML
@@ -2688,9 +2701,10 @@ public class MainController implements Initializable {
         BufferedImage cur = awt;
         int[] edges = {EXPORT_SAFE_EDGE, 1800, 1200};
         for (int edge : edges) {
-            if (Math.max(cur.getWidth(), cur.getHeight()) <= edge) break;
+            // 跳过不小于当前尺寸的档位，继续尝试更小档（小图原画质失败时仍能逐级降级）
+            if (Math.max(cur.getWidth(), cur.getHeight()) <= edge) continue;
             BufferedImage scaled = downscaleAwtToMaxEdge(cur, edge);
-            if (scaled == cur) break;
+            if (scaled == cur) continue;
             cur = scaled;
             r = renderQuietly(cur, awt, scaleTemplateForExport(tmpl, (double) cur.getWidth() / awt.getWidth()));
             boolean blank = r == null || ImageExportUtil.looksBlank(r);
@@ -2852,7 +2866,10 @@ public class MainController implements Initializable {
                 latch.countDown();
             }
         });
-        latch.await();
+        // 超时保护：FX 线程被阻塞/退出时避免导出线程永久挂死
+        if (!latch.await(15, TimeUnit.SECONDS)) {
+            throw new IOException("渲染超时：界面线程未响应");
+        }
         if (err[0] != null) throw err[0];
         return result[0];
     }
@@ -2951,7 +2968,7 @@ public class MainController implements Initializable {
                     latch.countDown();
                 }
             });
-            latch.await();
+            if (!latch.await(15, TimeUnit.SECONDS)) return null;
             if (result[0] != null) {
                 if (thumbCache.size() >= THUMB_CACHE_MAX) {
                     thumbCache.clear();

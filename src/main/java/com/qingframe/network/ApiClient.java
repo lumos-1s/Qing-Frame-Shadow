@@ -91,9 +91,10 @@ public final class ApiClient {
             result.code = -1;
             result.message = "服务器响应解析失败 (HTTP " + resp.statusCode() + ")";
         }
-        // 401：token 失效，自动登出
+        // 401：token 失效，自动登出（同步清磁盘 token，避免重启后"假登录"）
         if (result.code == 401 || result.httpStatus == 401) {
             token = null;
+            TokenStore.clearToken();
         }
         return result;
     }

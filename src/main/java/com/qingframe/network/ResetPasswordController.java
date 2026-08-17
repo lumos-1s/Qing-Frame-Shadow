@@ -49,16 +49,20 @@ public class ResetPasswordController implements Initializable {
                 showHint(r.errorMessage(), false);
                 return;
             }
-            // 开发环境：SMTP 未配置时服务端会返回 devCode，直接显示便于本地联调
-            String devCode = "";
+            // 服务端不再返回验证码；sent=false 表示邮件服务未配置/发送失败
+            boolean sent = false;
             try {
                 JsonObject data = r.data.getAsJsonObject();
-                if (data.has("devCode")) {
-                    devCode = "（本地开发模式验证码：" + data.get("devCode").getAsString() + "）";
+                if (data.has("sent")) {
+                    sent = data.get("sent").getAsBoolean();
                 }
             } catch (Exception ignored) {
             }
-            showHint("验证码已发送到 " + email + "，" + (devCode.isEmpty() ? "请查收邮件" : devCode), true);
+            if (!sent) {
+                showHint("验证码邮件发送失败：邮件服务未配置或不可用，请联系管理员", false);
+            } else {
+                showHint("验证码已发送到 " + email + "，请查收邮件", true);
+            }
         }));
     }
 

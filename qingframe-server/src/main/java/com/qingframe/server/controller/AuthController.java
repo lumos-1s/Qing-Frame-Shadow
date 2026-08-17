@@ -60,7 +60,7 @@ public class AuthController {
 
     /** 更新个人资料：昵称 / 头像（需登录） */
     @PutMapping("/profile")
-    public Result updateProfile(HttpServletRequest request, @RequestBody ProfileRequest req) {
+    public Result updateProfile(HttpServletRequest request, @Valid @RequestBody ProfileRequest req) {
         Long userId = (Long) request.getAttribute(JwtInterceptor.ATTR_USER_ID);
         if (userId == null) {
             throw new BizException(401, "未登录");

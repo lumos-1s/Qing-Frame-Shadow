@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS `user` (
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_username (username)
+  UNIQUE KEY uk_username (username),
+  UNIQUE KEY uk_email (email)
 ) ENGINE = InnoDB COMMENT '用户表';
 
 CREATE TABLE IF NOT EXISTS preset (
@@ -74,3 +75,4 @@ CREATE TABLE IF NOT EXISTS password_reset (
 -- 存量库升级（已按旧版建过库时执行一次）：
 -- ALTER TABLE `user` ADD COLUMN avatar MEDIUMTEXT NULL COMMENT '头像 base64 data URL' AFTER nickname;
 -- ALTER TABLE `user` ADD COLUMN email VARCHAR(100) NOT NULL DEFAULT '' COMMENT '邮箱（找回密码用）' AFTER password_hash;
+-- ALTER TABLE `user` ADD UNIQUE KEY uk_email (email);  -- 需先确保无重复 email/空串

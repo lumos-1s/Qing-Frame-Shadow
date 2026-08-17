@@ -168,8 +168,8 @@ public class BorderProcessor {
         return Math.max(6, (int) Math.round((50 + blurIntensity / 2.0) * blurScale));
     }
 
-    private static ExifReader.ExifData currentExif;
-    private static boolean useExifEnabled = true;
+    private static volatile ExifReader.ExifData currentExif;
+    private static volatile boolean useExifEnabled = true;
     private static volatile String manualLogoBrand;
     private static volatile int exifFontSize = 35;
     private static volatile int cornerRadius = 30;
@@ -1113,7 +1113,7 @@ public class BorderProcessor {
         return result;
     }
 
-    private static Color manualGrad1, manualGrad2;
+    private static volatile Color manualGrad1, manualGrad2;
     public static void setGradientColors(Color c1, Color c2) { manualGrad1 = c1; manualGrad2 = c2; }
     public static void clearGradientColors() { manualGrad1 = null; manualGrad2 = null; }
 
