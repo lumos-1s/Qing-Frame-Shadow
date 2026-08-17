@@ -51,12 +51,25 @@ public class IconRenderer {
         gc.setStroke(Color.rgb(0, 0, 0, 0.5));
         gc.setFill(Color.rgb(0, 0, 0, 0.5));
         gc.setLineWidth(lw * 2.4);
-        drawShape(gc, id, size);
+        drawShape(gc, shapeId(id), size);
         gc.setStroke(Color.WHITE);
         gc.setFill(Color.WHITE);
         gc.setLineWidth(lw);
-        drawShape(gc, id, size);
+        drawShape(gc, shapeId(id), size);
         gc.restore();
+    }
+
+    /** 放置到画布时 id 带有 _<nanoTime> 后缀，绘制前还原基础形状 id（brand_* 与图片路径已提前返回） */
+    private static String shapeId(String id) {
+        if (id == null) return "";
+        int us = id.lastIndexOf('_');
+        if (us > 0) {
+            String suffix = id.substring(us + 1);
+            if (!suffix.isEmpty() && suffix.chars().allMatch(Character::isDigit)) {
+                return id.substring(0, us);
+            }
+        }
+        return id;
     }
 
     /** 按 id 绘制图标形状（供黑白两遍绘制复用） */

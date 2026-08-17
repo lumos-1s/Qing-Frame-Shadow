@@ -86,6 +86,7 @@ public class MainController implements Initializable {
     @FXML private CheckBox cbTearEnable, cbShadow, cbGlow;
     @FXML private CheckBox cbVignette, cbLightLeak, cbExifText, cbCornerDecor;
     @FXML private ColorPicker cpFillColor, cpStrokeColor, cpGlowColor, cpTextColor;
+    @FXML private ComboBox<String> cbTextFont;
     @FXML private ScrollPane brandIconScroll, photoDecorScroll, simpleIconScroll, weatherIconScroll;
     @FXML private HBox brandIconBox, photoDecorBox, simpleIconBox, weatherIconBox, customIconBox;
     @FXML private Slider slActiveIconOpacity;
@@ -241,6 +242,20 @@ public class MainController implements Initializable {
         bindColorPickers();
         bindLayerSelect();
 
+        // 自定义文字：输入实时预览，字号/颜色/字体改动即时应用到当前文字行
+        List<String> fontFamilies = new ArrayList<>(javafx.scene.text.Font.getFamilies());
+        fontFamilies.sort(String::compareTo);
+        cbTextFont.setItems(FXCollections.observableArrayList(fontFamilies));
+        cbTextFont.setValue("Microsoft YaHei");
+
+        tfCustomText.textProperty().addListener((o, ov, nv) -> {
+            syncLiveTextLine();
+            renderPreview();
+        });
+        slTextSize.valueProperty().addListener((o, ov, nv) -> applyTextStyleToCurrent());
+        cpTextColor.valueProperty().addListener((o, ov, nv) -> applyTextStyleToCurrent());
+        cbTextFont.valueProperty().addListener((o, ov, nv) -> applyTextStyleToCurrent());
+
         cbCanvasRatio.valueProperty().addListener((o,ov,nv) -> {
             if (nv != null) { template.setCanvasRatio(nv); onSettingChanged(); }
         });
@@ -333,8 +348,12 @@ public class MainController implements Initializable {
                     if (ke.isControlDown() && ke.getCode() == KeyCode.A) {
                         selectAllImages();
                         ke.consume();
-                    } else if (ke.getCode() == KeyCode.DELETE && IconManager.getSelected() != null) {
-                        onDeleteActiveIcon();
+                    } else if (ke.getCode() == KeyCode.DELETE && (IconManager.getSelected() != null || selectedTextLine != null)) {
+                        if (selectedTextLine != null) {
+                            onDeleteSelectedTextLine();
+                        } else {
+                            onDeleteActiveIcon();
+                        }
                         ke.consume();
                     }
                 });
@@ -955,6 +974,12 @@ public class MainController implements Initializable {
                 }
             }
 
+            // 切换照片前记录旧画布尺寸，用于把已放置的 Logo/图标按比例换算到新照片上
+            double[] oldCanvas = null;
+            if (originImage != null && !IconManager.getActiveIcons().isEmpty()) {
+                oldCanvas = engine.computeCanvasSize(originImage, this.template);
+            }
+
             int idx = imageFiles.indexOf(file);
             if (idx < 0) {
                 imageFiles.add(file);
@@ -973,6 +998,19 @@ public class MainController implements Initializable {
             selectedIndices.clear();
             selectedIndices.add(idx);
             originImage = new Image(file.toURI().toString(), false);
+
+            // 画布尺寸随照片变化：按比例平移已放置图标，保证在其他照片上的相对位置一致
+            if (oldCanvas != null && oldCanvas[0] > 0 && oldCanvas[1] > 0) {
+                double[] newCanvas = engine.computeCanvasSize(originImage, this.template);
+                if (newCanvas[0] > 0 && newCanvas[1] > 0) {
+                    double rx = newCanvas[0] / oldCanvas[0];
+                    double ry = newCanvas[1] / oldCanvas[1];
+                    for (IconItem icon : IconManager.getActiveIcons()) {
+                        icon.setX(icon.getX() * rx);
+                        icon.setY(icon.getY() * ry);
+                    }
+                }
+            }
 
             ExifReader.ExifData exifData = ExifReader.parse(file);
             BorderProcessor.setExifData(exifData);
@@ -1081,7 +1119,15 @@ public class MainController implements Initializable {
                     return;
                 }
                 syncModelFromUI();
-                imageTemplates.put(imageFiles.get(idx), cloneTemplate(template));
+                TemplateModel target = cloneTemplate(template);
+                // 文字坐标按源画布→目标画布换算，保证在其他照片上的相对位置一致
+                double[] srcCanvas = engine.computeCanvasSize(originImage, template);
+                double[] dstSize = readImageSize(imageFiles.get(idx));
+                if (dstSize != null) {
+                    double[] dstCanvas = engine.computeCanvasSize(dstSize[0], dstSize[1], target);
+                    rebaseTextLinesToCanvas(target, srcCanvas[0], srcCanvas[1], dstCanvas[0], dstCanvas[1]);
+                }
+                imageTemplates.put(imageFiles.get(idx), target);
                 clearThumbCache();
                 updateFilmStrip();
                 statusLabel.setText("已同步边框到: " + imageFiles.get(idx).getName());
@@ -1338,6 +1384,13 @@ public class MainController implements Initializable {
             TemplateModel target = cloneTemplate(template);
             if (target.getDecorConfig() != null && target.getDecorConfig().getTextLines() != null) {
                 target.getDecorConfig().getTextLines().removeIf(MainController::isAutoExifLine);
+            }
+            // 文字坐标按源画布→目标画布换算，保证同步后文字在其他照片上的相对位置一致
+            double[] srcCanvas = engine.computeCanvasSize(originImage, template);
+            double[] dstSize = readImageSize(imageFiles.get(idx));
+            if (dstSize != null) {
+                double[] dstCanvas = engine.computeCanvasSize(dstSize[0], dstSize[1], target);
+                rebaseTextLinesToCanvas(target, srcCanvas[0], srcCanvas[1], dstCanvas[0], dstCanvas[1]);
             }
             // 真正把当前边框同步到选中的图片：切换预览与导出都使用同一套边框
             imageTemplates.put(imageFiles.get(idx), target);
@@ -1872,13 +1925,90 @@ public class MainController implements Initializable {
     private void onAddTextLine() {
         String text = tfCustomText.getText();
         if (text == null || text.trim().isEmpty()) return;
-        TextStickerConfig.TextLine line = new TextStickerConfig.TextLine();
-        line.setText(text.trim());
-        line.setFontSize(slTextSize.getValue());
-        line.setColorHex(toHex(cpTextColor.getValue()));
-        template.getDecorConfig().getTextLines().add(line);
-        onSettingChanged();
+        if (liveTextLine == null) syncLiveTextLine();
+        if (liveTextLine == null) return;
+        // 把实时预览草稿固化为正式文字行（拖动过保持自由坐标，未拖动过保持底部对齐）
+        if ("live".equals(liveTextLine.getAlign())) liveTextLine.setAlign("bottom");
+        liveTextLine.setText(text.trim());
+        liveTextLine.setFontSize(slTextSize.getValue());
+        liveTextLine.setColorHex(toHex(cpTextColor.getValue()));
+        if (cbTextFont.getValue() != null) liveTextLine.setFontFamily(cbTextFont.getValue());
+        liveTextLine = null;
+        selectedTextLine = null;
+        engine.setSelectedTextLine(null);
         tfCustomText.clear();
+        onSettingChanged();
+    }
+
+    /** 把输入框内容同步为画布上的实时预览文字行（空文本则移除草稿行） */
+    private void syncLiveTextLine() {
+        if (template == null || template.getDecorConfig() == null) return;
+        String text = tfCustomText.getText() == null ? "" : tfCustomText.getText().trim();
+        List<TextStickerConfig.TextLine> lines = template.getDecorConfig().getTextLines();
+        if (liveTextLine != null && !lines.contains(liveTextLine)) {
+            liveTextLine = null;
+            if (selectedTextLine != null && !lines.contains(selectedTextLine)) {
+                selectedTextLine = null;
+                engine.setSelectedTextLine(null);
+            }
+        }
+        if (text.isEmpty()) {
+            if (liveTextLine != null) {
+                lines.remove(liveTextLine);
+                if (selectedTextLine == liveTextLine) {
+                    selectedTextLine = null;
+                    engine.setSelectedTextLine(null);
+                }
+                liveTextLine = null;
+            }
+            return;
+        }
+        if (liveTextLine == null) {
+            liveTextLine = new TextStickerConfig.TextLine();
+            liveTextLine.setAlign("live");
+            lines.add(liveTextLine);
+        }
+        liveTextLine.setText(text);
+        selectTextLine(liveTextLine);
+    }
+
+    /** 字号/颜色/字体改动：应用到正在输入的草稿行；无草稿时应用到选中的文字行 */
+    private void applyTextStyleToCurrent() {
+        TextStickerConfig.TextLine target = liveTextLine != null ? liveTextLine : selectedTextLine;
+        if (target == null) return;
+        target.setFontSize(slTextSize.getValue());
+        target.setColorHex(toHex(cpTextColor.getValue()));
+        if (cbTextFont.getValue() != null) target.setFontFamily(cbTextFont.getValue());
+        renderPreview();
+    }
+
+    /** 选中画布上的文字行（蓝色虚线框），并让字号/颜色/字体控件回显当前值 */
+    private void selectTextLine(TextStickerConfig.TextLine line) {
+        if (line != null) {
+            selectedIcon = null;
+        }
+        selectedTextLine = line;
+        engine.setSelectedTextLine(line);
+        IconManager.setSelected(null);
+        if (line != null) {
+            slTextSize.setValue(Math.max(8, Math.min(200, line.getFontSize())));
+            try {
+                cpTextColor.setValue(javafx.scene.paint.Color.web(line.getColorHex()));
+            } catch (Exception ignored) {}
+            if (line.getFontFamily() != null) cbTextFont.setValue(line.getFontFamily());
+        }
+    }
+
+    @FXML
+    private void onDeleteSelectedTextLine() {
+        if (selectedTextLine == null) return;
+        if (template.getDecorConfig() != null) {
+            template.getDecorConfig().getTextLines().remove(selectedTextLine);
+        }
+        if (liveTextLine == selectedTextLine) liveTextLine = null;
+        selectedTextLine = null;
+        engine.setSelectedTextLine(null);
+        renderPreview();
     }
 
     @FXML
@@ -3156,6 +3286,10 @@ public class MainController implements Initializable {
     }
 
     private void selectCanvasIcon(IconItem item) {
+        if (item != null) {
+            selectedTextLine = null;
+            engine.setSelectedTextLine(null);
+        }
         selectedIcon = item;
         IconManager.setSelected(item);
         if (item != null) {
@@ -3195,6 +3329,12 @@ public class MainController implements Initializable {
     private double iconDragStartX, iconDragStartY;
     private double iconOrigX, iconOrigY;
     private boolean draggingIcon;
+    // Canvas interaction for custom text lines
+    private TextStickerConfig.TextLine liveTextLine;
+    private TextStickerConfig.TextLine selectedTextLine;
+    private double textDragStartX, textDragStartY;
+    private double textOrigX, textOrigY;
+    private boolean draggingTextLine;
 
     private void setupCanvasIconInteraction() {
         previewCanvas.setOnMousePressed(e -> {
@@ -3212,7 +3352,28 @@ public class MainController implements Initializable {
                     renderPreview();
                     return;
                 }
+                TextStickerConfig.TextLine tLine = hitTestTextLine(tc[0], tc[1]);
+                if (tLine != null) {
+                    selectTextLine(tLine);
+                    draggingTextLine = true;
+                    textDragStartX = tc[0];
+                    textDragStartY = tc[1];
+                    // 拖拽起点取文字行当前实际渲染位置（底部/顶部对齐行的 getX/getY 可能还是 0/未设置，
+                    // 直接用原始坐标起拖会把文字甩到左上角）
+                    double[] anchor = engine.textLineAnchor(tLine, originImage, template);
+                    if (anchor != null) {
+                        textOrigX = anchor[0];
+                        textOrigY = anchor[1];
+                    } else {
+                        textOrigX = tLine.getX();
+                        textOrigY = tLine.getY();
+                    }
+                    e.consume();
+                    renderPreview();
+                    return;
+                }
                 selectCanvasIcon(null);
+                selectTextLine(null);
                 // 未命中图标：按下即开始视图平移（抓手光标），任意缩放级别均可拖动
                 previewCanvas.getScene().setCursor(javafx.scene.Cursor.CLOSED_HAND);
                 dragStartX = e.getSceneX();
@@ -3223,7 +3384,19 @@ public class MainController implements Initializable {
             }
         });
         previewCanvas.setOnMouseDragged(e -> {
-            if (draggingIcon && selectedIcon != null) {
+            if (draggingTextLine && selectedTextLine != null) {
+                double[] tc = previewToTemplate(e.getX(), e.getY());
+                double dx = tc[0] - textDragStartX;
+                double dy = tc[1] - textDragStartY;
+                selectedTextLine.setX(textOrigX + dx);
+                selectedTextLine.setY(textOrigY + dy);
+                String align = selectedTextLine.getAlign();
+                if ("bottom".equals(align) || "live".equals(align) || "top".equals(align) || "exif".equals(align)) {
+                    selectedTextLine.setAlign("free");
+                }
+                renderPreview();
+                e.consume();
+            } else if (draggingIcon && selectedIcon != null) {
                 double[] tc = previewToTemplate(e.getX(), e.getY());
                 double dx = tc[0] - iconDragStartX;
                 double dy = tc[1] - iconDragStartY;
@@ -3244,8 +3417,9 @@ public class MainController implements Initializable {
             }
         });
         previewCanvas.setOnMouseReleased(e -> {
-            if (draggingIcon) {
+            if (draggingIcon || draggingTextLine) {
                 draggingIcon = false;
+                draggingTextLine = false;
                 onSettingChanged();
             }
             previewCanvas.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
@@ -3256,7 +3430,7 @@ public class MainController implements Initializable {
             previewCanvas.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
         });
         previewCanvas.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 2 && selectedIcon == null) {
+            if (e.getClickCount() == 2 && selectedIcon == null && selectedTextLine == null) {
                 // 双击空白处：恢复居中显示
                 panX = 0;
                 panY = 0;
@@ -3269,6 +3443,13 @@ public class MainController implements Initializable {
                 double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
                 double newScale = Math.max(0.1, Math.min(3.0, selectedIcon.getScale() + delta));
                 selectedIcon.setScale(newScale);
+                renderPreview();
+                e.consume();
+            } else if (selectedTextLine != null) {
+                double delta = e.getDeltaY() > 0 ? 2 : -2;
+                double newSize = Math.max(8, Math.min(200, selectedTextLine.getFontSize() + delta));
+                selectedTextLine.setFontSize(newSize);
+                if (selectedTextLine == liveTextLine) slTextSize.setValue(newSize);
                 renderPreview();
                 e.consume();
             } else {
@@ -3295,6 +3476,57 @@ public class MainController implements Initializable {
             if (mx >= item.getX() - hw && mx <= item.getX() + hw &&
                 my >= item.getY() - hw && my <= item.getY() + hw) {
                 return item;
+            }
+        }
+        return null;
+    }
+
+    /** 读取图片像素尺寸（仅解析文件头，不加载整图） */
+    private double[] readImageSize(File f) {
+        try (javax.imageio.stream.ImageInputStream in = javax.imageio.ImageIO.createImageInputStream(f)) {
+            java.util.Iterator<javax.imageio.ImageReader> readers = javax.imageio.ImageIO.getImageReaders(in);
+            if (readers.hasNext()) {
+                javax.imageio.ImageReader r = readers.next();
+                try {
+                    r.setInput(in);
+                    return new double[]{r.getWidth(0), r.getHeight(0)};
+                } finally {
+                    r.dispose();
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    /** 把模板中的自定义文字坐标从源画布换算到目标画布，保证同步后文字在其他照片上的相对位置一致（0 视为未设置，保持居中/自动对齐） */
+    private void rebaseTextLinesToCanvas(TemplateModel tmpl, double srcW, double srcH, double dstW, double dstH) {
+        if (tmpl == null || tmpl.getDecorConfig() == null) return;
+        if (srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0) return;
+        double rx = dstW / srcW;
+        double ry = dstH / srcH;
+        for (TextStickerConfig.TextLine l : tmpl.getDecorConfig().getTextLines()) {
+            if (l.getX() != 0) l.setX(l.getX() * rx);
+            if (l.getY() != 0) l.setY(l.getY() * ry);
+        }
+    }
+
+    private TextStickerConfig.TextLine hitTestTextLine(double mx, double my) {
+        if (originImage == null || template == null || template.getDecorConfig() == null) return null;
+        List<TextStickerConfig.TextLine> lines = template.getDecorConfig().getTextLines();
+        for (int i = lines.size() - 1; i >= 0; i--) {
+            TextStickerConfig.TextLine l = lines.get(i);
+            if (l.getText() == null || l.getText().isEmpty()) continue;
+            double[] anchor = engine.textLineAnchor(l, originImage, template);
+            if (anchor == null) continue;
+            double fs = Math.max(1, l.getFontSize());
+            double w = BorderEngine.measureTextWidth(l.getText(), l.getFontFamily(), fs);
+            double h = fs * 1.25;
+            double cx = anchor[0];
+            double cy = anchor[1] - fs * 0.35;
+            double pad = Math.max(6, fs * 0.15);
+            if (mx >= cx - w / 2 - pad && mx <= cx + w / 2 + pad &&
+                my >= cy - h / 2 - pad && my <= cy + h / 2 + pad) {
+                return l;
             }
         }
         return null;

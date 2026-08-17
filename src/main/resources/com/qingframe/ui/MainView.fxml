@@ -512,12 +512,22 @@
                             <TextField fx:id="tfCustomText" promptText="输入文字内容" />
                             <HBox alignment="CENTER_LEFT" spacing="10.0">
                                 <Label text="字号" />
-                                <Slider fx:id="slTextSize" blockIncrement="2" max="72" min="8" prefWidth="80.0" value="16" />
+                                <Slider fx:id="slTextSize" blockIncrement="2" max="200" min="8" prefWidth="80.0" value="16" />
                                 <Label text="颜色" />
                                 <ColorPicker fx:id="cpTextColor" />
                             </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <Label text="字体" />
+                                <ComboBox fx:id="cbTextFont" prefWidth="150.0" />
+                            </HBox>
                 <Button onAction="#onAddTextLine" text="添加文字">
                     <graphic><SVGPath styleClass="ui-icon" content="M4 5h16 M12 5v15 M8 20h8" /></graphic>
+                </Button>
+                <Button maxWidth="1.7976931348623157E308" onAction="#onDeleteSelectedTextLine" text="删除选中文字">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13" /></graphic>
+                    <tooltip>
+                        <Tooltip text="先在画布上点击文字选中（出现蓝色虚线框），再点此删除；也可选中后按 Delete 键" />
+                    </tooltip>
                 </Button>
                             <Separator styleClass="param-group-separator" />
                             <!-- 贴纸 -->

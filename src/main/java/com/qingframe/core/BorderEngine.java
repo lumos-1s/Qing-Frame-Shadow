@@ -26,6 +26,12 @@ public class BorderEngine {
     /** 图标渲染缩放（导出降级时按比例同步图标位置与大小，保证与预览位置一致） */
     private double iconScaleX = 1.0;
     private double iconScaleY = 1.0;
+    /** 画布选中的自定义文字行（用于预览绘制选中框，导出必须关闭） */
+    private TextStickerConfig.TextLine selectedTextLine;
+
+    public void setSelectedTextLine(TextStickerConfig.TextLine line) {
+        this.selectedTextLine = line;
+    }
 
     public void setIconRenderScale(double sx, double sy) {
         this.iconScaleX = sx;
@@ -85,13 +91,16 @@ public class BorderEngine {
      * @return [宽度, 高度]
      */
     public double[] computeCanvasSize(Image originImg, TemplateModel template) {
+        return computeCanvasSize(originImg.getWidth(), originImg.getHeight(), template);
+    }
+
+    /** 按图片像素尺寸计算渲染画布尺寸（无需加载整图，供同步边框换算坐标使用） */
+    public double[] computeCanvasSize(double originW, double originH, TemplateModel template) {
         BaseMargin margin = template.getBaseMargin();
-        double originW = originImg.getWidth();
-        double originH = originImg.getHeight();
         double canvasW = originW + margin.getTotalLeft() + margin.getTotalRight();
         double canvasH = originH + margin.getTotalTop() + margin.getTotalBottom();
         // 侧投影模式（如“浮影白框”）：画布四周额外预留柔和弥散阴影空间，避免阴影被裁剪
-        double shadowSpace = getShadowSpace(originImg, template);
+        double shadowSpace = getShadowSpace(null, template);
         if (shadowSpace > 0) {
             canvasW += shadowSpace * 2;
             canvasH += shadowSpace * 2;
@@ -671,18 +680,7 @@ public class BorderEngine {
         // Draw text lines
         for (TextStickerConfig.TextLine textLine : decor.getTextLines()) {
             if (textLine.getText() == null || textLine.getText().isEmpty()) continue;
-            gc.save();
-            // 字号钳制：缺失/非法的 0 或负值会导致 new Font 抛异常（预览报错/导出失败）
-            gc.setFont(new Font(textLine.getFontFamily(), Math.max(1, textLine.getFontSize())));
-            gc.setTextAlign(TextAlignment.CENTER);
-            gc.setFill(parseColor(textLine.getColorHex(), textLine.getOpacity()));
-            double tx = textLine.getX() > 0 ? textLine.getX() : cw / 2;
-            double ty = textLine.getY() > 0 ? textLine.getY() : ch - textLine.getFontSize() - 10;
-            if ("bottom".equals(textLine.getAlign()) || "exif".equals(textLine.getAlign()))
-                ty = ch - textLine.getFontSize() - 10;
-            else if ("top".equals(textLine.getAlign())) ty = textLine.getFontSize() + 10;
-            gc.fillText(textLine.getText(), tx, ty);
-            gc.restore();
+            drawTextLine(gc, textLine, cw, ch, false, 0, 0);
         }
 
         // Draw stickers
@@ -732,6 +730,110 @@ public class BorderEngine {
                 gc.setTextAlign(TextAlignment.CENTER);
                 gc.fillText(exifText, cw / 2, ch - barH + 26);
             }
+        }
+    }
+
+    /** 统一的自定义文字行绘制（默认画布 / 卡片样式共用，保证预览、命中检测与导出一致） */
+    private void drawTextLine(GraphicsContext gc, TextStickerConfig.TextLine textLine, double cw, double ch, boolean card, double cardY, double cardH) {
+        gc.save();
+        // 字号钳制：缺失/非法的 0 或负值会导致 new Font 抛异常（预览报错/导出失败）
+        double fs = Math.max(1, textLine.getFontSize());
+        gc.setFont(new Font(textLine.getFontFamily(), fs));
+        gc.setTextAlign(TextAlignment.CENTER);
+        gc.setFill(parseColor(textLine.getColorHex(), textLine.getOpacity()));
+        double[] anchor = textLineAnchor(textLine, cw, ch, card, cardY, cardH);
+        gc.fillText(textLine.getText(), anchor[0], anchor[1]);
+        if (renderSelection && textLine == selectedTextLine) {
+            drawTextSelection(gc, textLine, anchor[0], anchor[1], fs);
+        }
+        gc.restore();
+    }
+
+    /** 文字行锚点：返回 {tx=水平中心, ty=基线Y}，与画布命中检测共用，保证点击框与文字完全重合 */
+    private static double[] textLineAnchor(TextStickerConfig.TextLine textLine, double cw, double ch, boolean card, double cardY, double cardH) {
+        double fs = Math.max(1, textLine.getFontSize());
+        String align = textLine.getAlign();
+        // 用户拖动过的自由定位行：x/y 即为最终坐标，允许 0/负值（拖到画布上半区/左侧），不做默认回退
+        if ("free".equals(align)) {
+            return new double[]{textLine.getX(), textLine.getY()};
+        }
+        double tx = textLine.getX() > 0 ? textLine.getX() : cw / 2;
+        double ty;
+        if ("bottom".equals(align) || "exif".equals(align)) {
+            ty = card ? cardY + cardH + Math.max(8, ch * 0.008) : ch - fs - 10;
+        } else if ("top".equals(align)) {
+            ty = card ? fs + Math.max(6, ch * 0.004) : fs + 10;
+        } else {
+            ty = textLine.getY() > 0 ? textLine.getY()
+                    : (card ? cardY + cardH + Math.max(8, ch * 0.008) : ch - fs - 10);
+        }
+        return new double[]{tx, ty};
+    }
+
+    /** 计算文字行在当前画布（含画布比例/侧投影预留空间）中的锚点，供 MainController 点击命中检测；相框样式不渲染文字时返回 null */
+    public double[] textLineAnchor(TextStickerConfig.TextLine textLine, Image originImg, TemplateModel tmpl) {
+        String pfStyle = tmpl.getPhotoFrameStyle();
+        if (pfStyle != null && !pfStyle.isEmpty() && !"NONE".equals(pfStyle)) return null;
+        BaseMargin margin = tmpl.getBaseMargin();
+        if (margin.getBgBlurEnable() == 1) {
+            double cw = originImg.getWidth() + margin.getTotalLeft() + margin.getTotalRight();
+            double ch = originImg.getHeight() + margin.getTotalTop() + margin.getTotalBottom();
+            String ratio = tmpl.getCanvasRatio();
+            if (!"original".equals(ratio)) {
+                double[] wh = parseRatio(ratio);
+                if (wh != null) {
+                    double targetRatio = wh[0] / wh[1];
+                    double currentRatio = cw / ch;
+                    if (currentRatio > targetRatio) {
+                        cw = ch * targetRatio;
+                    } else {
+                        ch = cw / targetRatio;
+                    }
+                }
+            }
+            double cardY = margin.getMarginTop();
+            double textAreaH = Math.max(20, ch * 0.011);
+            double cardH = ch - margin.getTotalTop() - margin.getTotalBottom() - textAreaH;
+            return textLineAnchor(textLine, cw, ch, true, cardY, cardH);
+        }
+        double[] cs = computeCanvasSize(originImg, tmpl);
+        return textLineAnchor(textLine, cs[0], cs[1], false, 0, 0);
+    }
+
+    /** 估算文字渲染宽度（命中检测/选中框用），与 JavaFX 排版一致 */
+    public static double measureTextWidth(String text, String family, double size) {
+        try {
+            javafx.scene.text.Text t = new javafx.scene.text.Text(text == null ? "" : text);
+            t.setFont(new Font(family, size));
+            return t.getLayoutBounds().getWidth();
+        } catch (Exception e) {
+            String s = text == null ? "" : text;
+            return s.length() * size * 0.9;
+        }
+    }
+
+    /** 文字行选中框：蓝色虚线框 + 四角手柄（仅预览绘制，导出关闭） */
+    private void drawTextSelection(GraphicsContext gc, TextStickerConfig.TextLine line, double tx, double ty, double fs) {
+        double w = measureTextWidth(line.getText(), line.getFontFamily(), fs);
+        double h = fs * 1.25;
+        double cx = tx;
+        double cy = ty - fs * 0.35;
+        double pad = Math.max(5, fs * 0.15);
+        gc.setLineWidth(1.2);
+        gc.setLineDashes(6, 4);
+        gc.setStroke(Color.rgb(52, 137, 232));
+        gc.strokeRect(cx - w / 2 - pad, cy - h / 2 - pad, w + pad * 2, h + pad * 2);
+        gc.setLineDashes();
+        gc.setFill(Color.rgb(52, 137, 232));
+        double hd = Math.max(3, pad);
+        double[][] corners = {
+                {cx - w / 2 - pad, cy - h / 2 - pad},
+                {cx + w / 2 + pad, cy - h / 2 - pad},
+                {cx - w / 2 - pad, cy + h / 2 + pad},
+                {cx + w / 2 + pad, cy + h / 2 + pad}
+        };
+        for (double[] c : corners) {
+            gc.fillRect(c[0] - hd / 2, c[1] - hd / 2, hd, hd);
         }
     }
 
@@ -853,18 +955,7 @@ public class BorderEngine {
         if (decor != null) {
             for (TextStickerConfig.TextLine textLine : decor.getTextLines()) {
                 if (textLine.getText() == null || textLine.getText().isEmpty()) continue;
-                gc.save();
-                gc.setFont(new Font(textLine.getFontFamily(), Math.max(1, textLine.getFontSize())));
-                gc.setTextAlign(TextAlignment.CENTER);
-                gc.setFill(parseColor(textLine.getColorHex(), textLine.getOpacity()));
-                double tx = textLine.getX() > 0 ? textLine.getX() : canvasW / 2;
-                double ty = textLine.getY() > 0 ? textLine.getY()
-                        : cardY + cardH + Math.max(8, canvasH * 0.008);
-                if ("bottom".equals(textLine.getAlign()) || "exif".equals(textLine.getAlign()))
-                    ty = cardY + cardH + Math.max(8, canvasH * 0.008);
-                else if ("top".equals(textLine.getAlign())) ty = textLine.getFontSize() + Math.max(6, canvasH * 0.004);
-                gc.fillText(textLine.getText(), tx, ty);
-                gc.restore();
+                drawTextLine(gc, textLine, canvasW, canvasH, true, cardY, cardH);
             }
 
             for (TextStickerConfig.Sticker sticker : decor.getStickers()) {
