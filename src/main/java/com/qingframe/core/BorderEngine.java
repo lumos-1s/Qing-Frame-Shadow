@@ -28,9 +28,15 @@ public class BorderEngine {
     private double iconScaleY = 1.0;
     /** 画布选中的自定义文字行（用于预览绘制选中框，导出必须关闭） */
     private TextStickerConfig.TextLine selectedTextLine;
+    /** 画布选中的贴纸（用于预览绘制选中框，导出必须关闭） */
+    private TextStickerConfig.Sticker selectedSticker;
 
     public void setSelectedTextLine(TextStickerConfig.TextLine line) {
         this.selectedTextLine = line;
+    }
+
+    public void setSelectedSticker(TextStickerConfig.Sticker sticker) {
+        this.selectedSticker = sticker;
     }
 
     public void setIconRenderScale(double sx, double sy) {
@@ -110,12 +116,15 @@ public class BorderEngine {
         if (!"original".equals(ratio)) {
             double[] wh = parseRatio(ratio);
             if (wh != null) {
+                // 只扩大、不裁剪：向目标比例"补齐"，照片保持完整
                 double targetRatio = wh[0] / wh[1];
                 double currentRatio = canvasW / canvasH;
                 if (currentRatio > targetRatio) {
-                    canvasW = canvasH * targetRatio;
-                } else {
+                    // 当前偏横（目标更竖）：加高画布
                     canvasH = canvasW / targetRatio;
+                } else {
+                    // 当前偏竖（目标更横）：加宽画布
+                    canvasW = canvasH * targetRatio;
                 }
             }
         }
@@ -156,6 +165,9 @@ public class BorderEngine {
             gc.save();
             gc.translate(px, py);
             gc.setGlobalAlpha(item.getOpacity() / 100.0);
+            if (item.getRotation() != 0) {
+                gc.rotate(item.getRotation());
+            }
             if (imgReady) {
                 gc.drawImage(img, -half, -half, sz, sz);
             } else {
@@ -662,14 +674,41 @@ public class BorderEngine {
         if (light.getLightLeakEnable() == 1) {
             gc.save();
             gc.setGlobalBlendMode(javafx.scene.effect.BlendMode.SCREEN);
-            Color lc = "warm".equals(light.getLightLeakType()) ?
-                    Color.rgb(255, 200, 100, light.getLightLeakOpacity() / 100.0) :
-                    Color.rgb(100, 200, 255, light.getLightLeakOpacity() / 100.0);
-            gc.setFill(lc);
+            double op = light.getLightLeakOpacity() / 100.0;
+            String type = light.getLightLeakType() == null ? "warm" : light.getLightLeakType();
+            Color core, mid;
+            if ("cool".equals(type)) {
+                core = Color.rgb(120, 200, 255);
+                mid = Color.rgb(70, 150, 255);
+            } else if ("magenta".equals(type)) {
+                core = Color.rgb(255, 140, 220);
+                mid = Color.rgb(220, 90, 255);
+            } else {
+                core = Color.rgb(255, 190, 110);
+                mid = Color.rgb(255, 130, 60);
+            }
             double a = Math.toRadians(light.getLightLeakAngle());
-            double ex = cw / 2 + Math.cos(a) * cw;
-            double ey = ch / 2 + Math.sin(a) * ch;
-            gc.fillOval(ex - cw * 0.3, ey - ch * 0.3, cw * 0.6, ch * 0.6);
+            double dx = Math.cos(a);
+            double dy = Math.sin(a);
+            // 光源位于画布边缘外侧，光束与光晕从该方向射入画面
+            double sx = cw / 2 + dx * cw * 0.58;
+            double sy = ch / 2 + dy * ch * 0.58;
+            // 1) 大范围柔光晕（中心亮 → 四周透明，营造氛围色）
+            RadialGradient halo = new RadialGradient(0, 0, sx, sy, Math.max(cw, ch) * 0.85, false, CycleMethod.NO_CYCLE,
+                    new Stop(0, Color.color(mid.getRed(), mid.getGreen(), mid.getBlue(), op * 0.45)),
+                    new Stop(0.35, Color.color(mid.getRed(), mid.getGreen(), mid.getBlue(), op * 0.15)),
+                    new Stop(1, Color.TRANSPARENT));
+            gc.setFill(halo);
+            gc.fillRect(0, 0, cw, ch);
+            // 2) 光束：从光源沿对角方向射入，近端亮、远端淡出
+            double bx = -dx;
+            double by = -dy;
+            LinearGradient beam = new LinearGradient(sx, sy, sx + bx * cw, sy + by * ch, false, CycleMethod.NO_CYCLE,
+                    new Stop(0, Color.color(core.getRed(), core.getGreen(), core.getBlue(), op * 0.9)),
+                    new Stop(0.3, Color.color(core.getRed(), core.getGreen(), core.getBlue(), op * 0.3)),
+                    new Stop(1, Color.TRANSPARENT));
+            gc.setFill(beam);
+            gc.fillRect(0, 0, cw, ch);
             gc.restore();
         }
     }
@@ -689,11 +728,17 @@ public class BorderEngine {
             try {
                 Image simg = ImageCache.get(sticker.getSrc());
                 if (simg == null) continue;
+                double sw = simg.getWidth() * sticker.getScale();
+                double sh = simg.getHeight() * sticker.getScale();
                 gc.save();
                 gc.translate(sticker.getX(), sticker.getY());
                 gc.rotate(sticker.getRotation());
                 gc.setGlobalAlpha(sticker.getOpacity() / 100.0);
-                gc.drawImage(simg, -simg.getWidth() * sticker.getScale() / 2, -simg.getHeight() * sticker.getScale() / 2);
+                gc.drawImage(simg, -sw / 2, -sh / 2, sw, sh);
+                // 贴纸选中框（局部坐标，随贴纸一起平移/旋转，锚点始终贴住贴纸边缘）
+                if (renderSelection && sticker == selectedSticker) {
+                    drawStickerSelection(gc, sticker, sw, sh);
+                }
                 gc.restore();
             } catch (Exception ignored) {}
         }
@@ -742,9 +787,16 @@ public class BorderEngine {
         gc.setTextAlign(TextAlignment.CENTER);
         gc.setFill(parseColor(textLine.getColorHex(), textLine.getOpacity()));
         double[] anchor = textLineAnchor(textLine, cw, ch, card, cardY, cardH);
-        gc.fillText(textLine.getText(), anchor[0], anchor[1]);
         if (renderSelection && textLine == selectedTextLine) {
             drawTextSelection(gc, textLine, anchor[0], anchor[1], fs);
+        }
+        double rot = textLine.getRotation();
+        if (rot != 0) {
+            gc.translate(anchor[0], anchor[1]);
+            gc.rotate(rot);
+            gc.fillText(textLine.getText(), 0, 0);
+        } else {
+            gc.fillText(textLine.getText(), anchor[0], anchor[1]);
         }
         gc.restore();
     }
@@ -782,12 +834,13 @@ public class BorderEngine {
             if (!"original".equals(ratio)) {
                 double[] wh = parseRatio(ratio);
                 if (wh != null) {
+                    // 只扩大、不裁剪：向目标比例"补齐"，照片保持完整
                     double targetRatio = wh[0] / wh[1];
                     double currentRatio = cw / ch;
                     if (currentRatio > targetRatio) {
-                        cw = ch * targetRatio;
-                    } else {
                         ch = cw / targetRatio;
+                    } else {
+                        cw = ch * targetRatio;
                     }
                 }
             }
@@ -837,6 +890,42 @@ public class BorderEngine {
         }
     }
 
+    /** 贴纸选中框（调用前需已处于贴纸的 translate+rotate 变换空间）：PS 风格白框 + 四角方块 + 顶部旋转手柄 */
+    private void drawStickerSelection(GraphicsContext gc, TextStickerConfig.Sticker sticker, double sw, double sh) {
+        double pad = Math.max(5, Math.max(sw, sh) * 0.06);
+        gc.setGlobalAlpha(1.0);
+        gc.setLineDashes();
+        gc.setStroke(Color.rgb(0, 0, 0, 0.45));
+        gc.setLineWidth(0.8);
+        gc.strokeRect(-sw / 2 - pad - 1, -sh / 2 - pad - 1, sw + pad * 2 + 2, sh + pad * 2 + 2);
+        gc.setStroke(Color.WHITE);
+        gc.setLineWidth(1.2);
+        gc.strokeRect(-sw / 2 - pad, -sh / 2 - pad, sw + pad * 2, sh + pad * 2);
+        double hd = Math.max(8, Math.min(16, Math.max(sw, sh) * 0.02));
+        double[][] corners = {
+                {-sw / 2 - pad, -sh / 2 - pad},
+                {sw / 2 + pad, -sh / 2 - pad},
+                {-sw / 2 - pad, sh / 2 + pad},
+                {sw / 2 + pad, sh / 2 + pad}
+        };
+        for (double[] c : corners) {
+            gc.setFill(Color.rgb(0, 0, 0, 0.4));
+            gc.fillRect(c[0] - hd / 2 - 0.8, c[1] - hd / 2 - 0.8, hd + 1.6, hd + 1.6);
+            gc.setFill(Color.WHITE);
+            gc.fillRect(c[0] - hd / 2, c[1] - hd / 2, hd, hd);
+        }
+        // 旋转手柄：顶边中点向上伸出连杆 + 白色圆点
+        double hy = -sh / 2 - pad - 14;
+        gc.setStroke(Color.WHITE);
+        gc.setLineWidth(1.2);
+        gc.strokeLine(0, -sh / 2 - pad, 0, hy + 6);
+        gc.setFill(Color.WHITE);
+        gc.setStroke(Color.rgb(0, 0, 0, 0.4));
+        gc.setLineWidth(1);
+        gc.fillOval(-5, hy - 5, 10, 10);
+        gc.strokeOval(-5, hy - 5, 10, 10);
+    }
+
     private void renderCardStyle(Image originImg, TemplateModel template, GraphicsContext gc, double targetW, double targetH) {
         BaseMargin margin = template.getBaseMargin();
         double originW = originImg.getWidth();
@@ -848,12 +937,13 @@ public class BorderEngine {
         if (!"original".equals(ratio)) {
             double[] wh = parseRatio(ratio);
             if (wh != null) {
+                // 只扩大、不裁剪：向目标比例"补齐"，照片保持完整
                 double targetRatio = wh[0] / wh[1];
                 double currentRatio = canvasW / canvasH;
                 if (currentRatio > targetRatio) {
-                    canvasW = canvasH * targetRatio;
-                } else {
                     canvasH = canvasW / targetRatio;
+                } else {
+                    canvasW = canvasH * targetRatio;
                 }
             }
         }
@@ -963,11 +1053,16 @@ public class BorderEngine {
                 try {
                     Image simg = ImageCache.get(sticker.getSrc());
                     if (simg == null) continue;
+                    double sw = simg.getWidth() * sticker.getScale();
+                    double sh = simg.getHeight() * sticker.getScale();
                     gc.save();
                     gc.translate(sticker.getX(), sticker.getY());
                     gc.rotate(sticker.getRotation());
                     gc.setGlobalAlpha(sticker.getOpacity() / 100.0);
-                    gc.drawImage(simg, -simg.getWidth() * sticker.getScale() / 2, -simg.getHeight() * sticker.getScale() / 2);
+                    gc.drawImage(simg, -sw / 2, -sh / 2, sw, sh);
+                    if (renderSelection && sticker == selectedSticker) {
+                        drawStickerSelection(gc, sticker, sw, sh);
+                    }
                     gc.restore();
                 } catch (Exception ignored) {}
             }

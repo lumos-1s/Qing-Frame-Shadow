@@ -6,6 +6,7 @@ import com.qingframe.core.ExifReader;
 import com.qingframe.core.ExifTextParser;
 import com.qingframe.core.IconManager;
 import com.qingframe.core.IconRenderer;
+import com.qingframe.util.ImageCache;
 import com.qingframe.core.WatermarkRender;
 import com.qingframe.model.*;
 import com.qingframe.network.ApiClient;
@@ -75,7 +76,7 @@ public class MainController implements Initializable {
     @FXML private TabPane rightTabPane;
     @FXML private TextField tfCornerRadius;
     @FXML private Slider slShadowX, slShadowY, slShadowBlur, slShadowSpread;
-    @FXML private Slider slGlowBlur, slGlowOpacity, slVignetteStrength;
+    @FXML private Slider slGlowBlur, slGlowOpacity, slVignetteStrength, slLeakOpacity, slLeakAngle;
     @FXML private Slider slTextSize, slCornerDecorSize, slGlobalMargin, slParamFontSize;
     @FXML private TextField tfMarginTop, tfMarginBottom, tfMarginLeft, tfMarginRight;
     @FXML private TextField tfImgOffsetX, tfImgOffsetY;
@@ -90,6 +91,7 @@ public class MainController implements Initializable {
     @FXML private ScrollPane brandIconScroll, photoDecorScroll, simpleIconScroll, weatherIconScroll;
     @FXML private HBox brandIconBox, photoDecorBox, simpleIconBox, weatherIconBox, customIconBox;
     @FXML private Slider slActiveIconOpacity;
+    @FXML private Slider slElementRotation;
     @FXML private ComboBox<String> cbLayerSelect, cbFillType, cbGradientType, cbStrokePos, cbLeakType, cbExportFormat;
     @FXML private ComboBox<String> cbTextureBlend;
     @FXML private ListView<String> lvPresets;
@@ -348,12 +350,14 @@ public class MainController implements Initializable {
                     if (ke.isControlDown() && ke.getCode() == KeyCode.A) {
                         selectAllImages();
                         ke.consume();
-                    } else if (ke.getCode() == KeyCode.DELETE && (IconManager.getSelected() != null || selectedTextLine != null)) {
-                        if (selectedTextLine != null) {
-                            onDeleteSelectedTextLine();
-                        } else {
-                            onDeleteActiveIcon();
-                        }
+                    } else if (ke.isControlDown() && ke.getCode() == KeyCode.C) {
+                        copySelectedElement();
+                        ke.consume();
+                    } else if (ke.isControlDown() && ke.getCode() == KeyCode.V) {
+                        pasteClipboardElement();
+                        ke.consume();
+                    } else if (ke.getCode() == KeyCode.DELETE && (IconManager.getSelected() != null || selectedTextLine != null || selectedSticker != null)) {
+                        onDeleteActiveElement();
                         ke.consume();
                     }
                 });
@@ -388,6 +392,25 @@ public class MainController implements Initializable {
             slActiveIconOpacity.valueProperty().addListener((o,ov,nv) -> {
                 if (selectedIcon != null) {
                     selectedIcon.setOpacity(nv.intValue());
+                    renderPreview();
+                } else if (selectedSticker != null) {
+                    selectedSticker.setOpacity(nv.intValue());
+                    renderPreview();
+                } else if (selectedTextLine != null) {
+                    selectedTextLine.setOpacity(nv.intValue());
+                    renderPreview();
+                }
+            });
+            slElementRotation.valueProperty().addListener((o,ov,nv) -> {
+                double deg = nv.doubleValue();
+                if (selectedIcon != null) {
+                    selectedIcon.setRotation(deg);
+                    renderPreview();
+                } else if (selectedSticker != null) {
+                    selectedSticker.setRotation(deg);
+                    renderPreview();
+                } else if (selectedTextLine != null) {
+                    selectedTextLine.setRotation(deg);
                     renderPreview();
                 }
             });
@@ -462,12 +485,15 @@ public class MainController implements Initializable {
         slGlowBlur.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slGlowOpacity.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slVignetteStrength.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
+        slLeakOpacity.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
+        slLeakAngle.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slTextSize.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         slCornerDecorSize.valueProperty().addListener((o,ov,nv) -> onSettingChanged());
         setupSliderUndo(slImgScale, slFillOpacity, slStrokeWidth, slStrokeOpacity,
                 slGradientAngle, slTextureScale, slCornerRadius, slTearStrength, slTearDensity,
                 slShadowX, slShadowY, slShadowBlur, slShadowSpread,
                 slGlowBlur, slGlowOpacity, slVignetteStrength, slTextSize, slCornerDecorSize,
+                slLeakOpacity, slLeakAngle,
                 slGlobalMargin);
     }
 
@@ -694,6 +720,8 @@ public class MainController implements Initializable {
         light.setVignetteStrength(slVignetteStrength.getValue());
         light.setLightLeakEnable(cbLightLeak.isSelected() ? 1 : 0);
         light.setLightLeakType(cbLeakType.getValue());
+        light.setLightLeakOpacity(slLeakOpacity.getValue());
+        light.setLightLeakAngle(slLeakAngle.getValue());
 
         template.setParamFontSize((int) slParamFontSize.getValue());
 
@@ -771,6 +799,10 @@ public class MainController implements Initializable {
     private void refreshUI() {
         isUpdating = true;
 
+        // 画布比例：跟随模板当前值回显（旧模板无该字段时为 original）
+        String cr = template.getCanvasRatio();
+        cbCanvasRatio.setValue(cr == null || cr.isEmpty() ? "original" : cr);
+
         BaseMargin margin = template.getBaseMargin();
         cbMarginLock.setSelected(margin.getMarginLock() == 1);
         boolean marginLocked = margin.getMarginLock() == 1;
@@ -816,6 +848,8 @@ public class MainController implements Initializable {
         slVignetteStrength.setValue(light.getVignetteStrength());
         cbLightLeak.setSelected(light.getLightLeakEnable() == 1);
         cbLeakType.setValue(light.getLightLeakType());
+        slLeakOpacity.setValue(light.getLightLeakOpacity());
+        slLeakAngle.setValue(light.getLightLeakAngle());
 
         TextStickerConfig decor = template.getDecorConfig();
         if (decor != null) {
@@ -827,6 +861,15 @@ public class MainController implements Initializable {
 
         // 按用户勾选状态把 EXIF 参数行同步进当前模板（预设切换后参数不丢失）
         syncExifTextLine();
+
+        // 模板刷新后清空画布元素选中态
+        selectedTextLine = null;
+        selectedSticker = null;
+        selectedKind = null;
+        liveTextLine = null;
+        engine.setSelectedTextLine(null);
+        engine.setSelectedSticker(null);
+        IconManager.setSelected(null);
 
         isUpdating = false;
     }
@@ -1986,6 +2029,11 @@ public class MainController implements Initializable {
     private void selectTextLine(TextStickerConfig.TextLine line) {
         if (line != null) {
             selectedIcon = null;
+            selectedSticker = null;
+            selectedKind = ElementKind.TEXT;
+            engine.setSelectedSticker(null);
+            slActiveIconOpacity.setValue(line.getOpacity());
+            slElementRotation.setValue(line.getRotation());
         }
         selectedTextLine = line;
         engine.setSelectedTextLine(line);
@@ -2001,6 +2049,10 @@ public class MainController implements Initializable {
 
     @FXML
     private void onDeleteSelectedTextLine() {
+        if (selectedKind != ElementKind.TEXT) {
+            onDeleteActiveElement();
+            return;
+        }
         if (selectedTextLine == null) return;
         if (template.getDecorConfig() != null) {
             template.getDecorConfig().getTextLines().remove(selectedTextLine);
@@ -2019,9 +2071,27 @@ public class MainController implements Initializable {
         if (file != null) {
             TextStickerConfig.Sticker sticker = new TextStickerConfig.Sticker();
             sticker.setSrc(file.toURI().toString());
-            sticker.setX(previewCanvas.getWidth() / 2);
-            sticker.setY(previewCanvas.getHeight() / 2);
+            if (template.getDecorConfig() == null) {
+                template.setDecorConfig(new TextStickerConfig());
+            }
+            if (originImage != null) {
+                double[] cs = engine.computeCanvasSize(originImage, template);
+                sticker.setX(cs[0] / 2);
+                sticker.setY(cs[1] / 2);
+                // 自动适配画布大小，保证加入后完整可见、四角标记在画布内
+                Image simg = ImageCache.get(sticker.getSrc());
+                if (simg != null && simg.getWidth() > 0) {
+                    double fit = cs[0] * 0.25 / Math.max(simg.getWidth(), simg.getHeight());
+                    sticker.setScale(Math.max(0.02, Math.min(3.0, fit)));
+                }
+            } else {
+                // 未加载照片：按预览视图中心换算到模板坐标，保证贴纸落在可见区域
+                double[] tc = previewToTemplate(previewCanvas.getWidth() / 2, previewCanvas.getHeight() / 2);
+                sticker.setX(tc[0]);
+                sticker.setY(tc[1]);
+            }
             template.getDecorConfig().getStickers().add(sticker);
+            selectSticker(sticker);
             onSettingChanged();
         }
     }
@@ -2544,7 +2614,7 @@ public class MainController implements Initializable {
         if (visible) {
             double prangeX = cw * (Math.max(1.0, zoom) - 1) / 2 + cw * 0.25;
             double prangeY = ch * (Math.max(1.0, zoom) - 1) / 2 + ch * 0.25;
-            if (template.getCompareMode() == 1) {
+if (template.getCompareMode() == 1 && originImage != null) {
                 prangeX = cw / 2 * (zoom - 1) / 2;
             }
             hScrollBar.setMin(-prangeX);
@@ -3288,13 +3358,32 @@ public class MainController implements Initializable {
     private void selectCanvasIcon(IconItem item) {
         if (item != null) {
             selectedTextLine = null;
+            selectedSticker = null;
+            selectedKind = ElementKind.ICON;
             engine.setSelectedTextLine(null);
+            engine.setSelectedSticker(null);
         }
         selectedIcon = item;
         IconManager.setSelected(item);
         if (item != null) {
             slActiveIconOpacity.setValue(item.getOpacity());
+            slElementRotation.setValue(item.getRotation());
         }
+    }
+
+    /** 选中画布贴纸（蓝色虚线框），并同步透明度/旋转控件 */
+    private void selectSticker(TextStickerConfig.Sticker sticker) {
+        if (sticker != null) {
+            selectedIcon = null;
+            selectedTextLine = null;
+            selectedKind = ElementKind.STICKER;
+            engine.setSelectedTextLine(null);
+            IconManager.setSelected(null);
+            slActiveIconOpacity.setValue(sticker.getOpacity());
+            slElementRotation.setValue(sticker.getRotation());
+        }
+        selectedSticker = sticker;
+        engine.setSelectedSticker(sticker);
     }
 
     @FXML
@@ -3311,10 +3400,153 @@ public class MainController implements Initializable {
 
     @FXML
     private void onDeleteActiveIcon() {
-        if (selectedIcon != null) {
+        onDeleteActiveElement();
+    }
+
+    /** 删除当前选中的画布元素（图标/贴纸/文字），未选中时无操作 */
+    private void onDeleteActiveElement() {
+        if (selectedKind == ElementKind.STICKER && selectedSticker != null) {
+            if (template.getDecorConfig() != null) {
+                template.getDecorConfig().getStickers().remove(selectedSticker);
+            }
+            selectedSticker = null;
+            engine.setSelectedSticker(null);
+            renderPreview();
+            onSettingChanged();
+        } else if (selectedKind == ElementKind.TEXT && selectedTextLine != null) {
+            onDeleteSelectedTextLine();
+        } else if (selectedIcon != null) {
             IconManager.removeFromCanvas(selectedIcon);
             selectCanvasIcon(null);
             renderPreview();
+            onSettingChanged();
+        }
+    }
+
+    /** 复制当前选中元素（仅内存） */
+    @FXML
+    private void onCopySelectedElement() {
+        copySelectedElement();
+    }
+
+    private void copySelectedElement() {
+        if (selectedKind == ElementKind.STICKER && selectedSticker != null) {
+            clipSticker = selectedSticker.copy();
+            clipTextLine = null;
+            clipIcon = null;
+            statusLabel.setText("已复制贴纸");
+        } else if (selectedKind == ElementKind.TEXT && selectedTextLine != null && selectedTextLine != liveTextLine) {
+            clipTextLine = selectedTextLine.copy();
+            clipSticker = null;
+            clipIcon = null;
+            statusLabel.setText("已复制文字");
+        } else if (selectedIcon != null) {
+            clipIcon = selectedIcon.copy();
+            clipTextLine = null;
+            clipSticker = null;
+            statusLabel.setText("已复制图标");
+        }
+    }
+
+    /** 粘贴：在原元素位置偏移 24px 处创建副本并选中 */
+    @FXML
+    private void onPasteClipboardElement() {
+        pasteClipboardElement();
+    }
+
+    private void pasteClipboardElement() {
+        if (clipIcon != null) {
+            IconItem c = clipIcon.copy();
+            c.setX(clipIcon.getX() + 24);
+            c.setY(clipIcon.getY() + 24);
+            IconManager.addToCanvas(c);
+            selectCanvasIcon(c);
+            renderPreview();
+            onSettingChanged();
+        } else if (clipSticker != null) {
+            TextStickerConfig.Sticker c = clipSticker.copy();
+            c.setX(clipSticker.getX() + 24);
+            c.setY(clipSticker.getY() + 24);
+            template.getDecorConfig().getStickers().add(c);
+            selectSticker(c);
+            renderPreview();
+            onSettingChanged();
+        } else if (clipTextLine != null) {
+            TextStickerConfig.TextLine c = clipTextLine.copy();
+            c.setX(clipTextLine.getX() + 24);
+            c.setY(clipTextLine.getY() + 24);
+            c.setAlign("free");
+            template.getDecorConfig().getTextLines().add(c);
+            selectTextLine(c);
+            renderPreview();
+            onSettingChanged();
+        }
+    }
+
+    /** 层级调整：置顶/置底/上移/下移（图标、贴纸、文字各自列表内重排） */
+    @FXML
+    private void onZOrderTop() { moveZOrder(1); }
+    @FXML
+    private void onZOrderBottom() { moveZOrder(-1); }
+    @FXML
+    private void onZOrderUp() { moveZOrder(2); }
+    @FXML
+    private void onZOrderDown() { moveZOrder(-2); }
+
+    private void moveZOrder(int op) {
+        boolean changed = false;
+        if (selectedIcon != null) {
+            java.util.List<IconItem> icons = IconManager.getActiveIcons();
+            int idx = icons.indexOf(selectedIcon);
+            if (idx >= 0) {
+                icons.remove(idx);
+                if (op == 1) {
+                    icons.add(selectedIcon);
+                } else if (op == -1) {
+                    icons.add(0, selectedIcon);
+                } else if (op == 2 && idx < icons.size()) {
+                    icons.add(idx + 1, selectedIcon);
+                } else if (op == -2 && idx > 0) {
+                    icons.add(idx - 1, selectedIcon);
+                }
+                changed = true;
+            }
+        } else if (selectedKind == ElementKind.STICKER && selectedSticker != null && template.getDecorConfig() != null) {
+            java.util.List<TextStickerConfig.Sticker> stickers = template.getDecorConfig().getStickers();
+            int idx = stickers.indexOf(selectedSticker);
+            if (idx >= 0) {
+                stickers.remove(idx);
+                if (op == 1) {
+                    stickers.add(selectedSticker);
+                } else if (op == -1) {
+                    stickers.add(0, selectedSticker);
+                } else if (op == 2 && idx < stickers.size()) {
+                    stickers.add(idx + 1, selectedSticker);
+                } else if (op == -2 && idx > 0) {
+                    stickers.add(idx - 1, selectedSticker);
+                }
+                changed = true;
+            }
+        } else if (selectedKind == ElementKind.TEXT && selectedTextLine != null && template.getDecorConfig() != null) {
+            java.util.List<TextStickerConfig.TextLine> lines = template.getDecorConfig().getTextLines();
+            int idx = lines.indexOf(selectedTextLine);
+            if (idx >= 0) {
+                lines.remove(idx);
+                if (op == 1) {
+                    lines.add(selectedTextLine);
+                } else if (op == -1) {
+                    lines.add(0, selectedTextLine);
+                } else if (op == 2 && idx < lines.size()) {
+                    lines.add(idx + 1, selectedTextLine);
+                } else if (op == -2 && idx > 0) {
+                    lines.add(idx - 1, selectedTextLine);
+                }
+                changed = true;
+            }
+        }
+        if (changed) {
+            renderPreview();
+            onSettingChanged();
         }
     }
 
@@ -3335,11 +3567,50 @@ public class MainController implements Initializable {
     private double textDragStartX, textDragStartY;
     private double textOrigX, textOrigY;
     private boolean draggingTextLine;
+    // Canvas interaction for stickers
+    private TextStickerConfig.Sticker selectedSticker;
+    private double stickerDragStartX, stickerDragStartY;
+    private double stickerOrigX, stickerOrigY;
+    private boolean draggingSticker;
+    // 贴纸选中框角点手柄拖拽缩放（围绕贴纸中心）
+    private boolean resizingSticker;
+    private double stickerResizeStartDist;
+    private double stickerOrigScale;
+    // 贴纸选中框顶部旋转手柄拖拽旋转（围绕贴纸中心）
+    private boolean rotatingSticker;
+    private double stickerRotStartAngle;
+    private double stickerRotStartRotation;
+    // 统一画布元素：当前选中的元素种类（用于删除/复制/层级/旋转/透明度）
+    private enum ElementKind { TEXT, STICKER, ICON }
+    private ElementKind selectedKind;
+    // 剪贴板（复制/粘贴，仅元素坐标/样式，不落盘）
+    private TextStickerConfig.TextLine clipTextLine;
+    private TextStickerConfig.Sticker clipSticker;
+    private IconItem clipIcon;
 
     private void setupCanvasIconInteraction() {
         previewCanvas.setOnMousePressed(e -> {
             if (e.isPrimaryButtonDown()) {
                 double[] tc = previewToTemplate(e.getX(), e.getY());
+                // 已选中贴纸：先检测旋转手柄（顶边圆点），再检测四角手柄（缩放），最后贴纸本体（移动）
+                if (selectedSticker != null && isStickerRotateHandle(tc[0], tc[1], selectedSticker)) {
+                    rotatingSticker = true;
+                    stickerRotStartRotation = selectedSticker.getRotation();
+                    stickerRotStartAngle = Math.toDegrees(Math.atan2(
+                            tc[1] - selectedSticker.getY(), tc[0] - selectedSticker.getX()));
+                    e.consume();
+                    renderPreview();
+                    return;
+                }
+                if (selectedSticker != null && isStickerHandle(tc[0], tc[1], selectedSticker)) {
+                    resizingSticker = true;
+                    stickerOrigScale = selectedSticker.getScale();
+                    stickerResizeStartDist = Math.max(1,
+                            Math.hypot(tc[0] - selectedSticker.getX(), tc[1] - selectedSticker.getY()));
+                    e.consume();
+                    renderPreview();
+                    return;
+                }
                 IconItem hit = hitTestIcon(tc[0], tc[1]);
                 if (hit != null) {
                     selectCanvasIcon(hit);
@@ -3348,6 +3619,18 @@ public class MainController implements Initializable {
                     iconDragStartY = tc[1];
                     iconOrigX = hit.getX();
                     iconOrigY = hit.getY();
+                    e.consume();
+                    renderPreview();
+                    return;
+                }
+                TextStickerConfig.Sticker sHit = hitTestSticker(tc[0], tc[1]);
+                if (sHit != null) {
+                    selectSticker(sHit);
+                    draggingSticker = true;
+                    stickerDragStartX = tc[0];
+                    stickerDragStartY = tc[1];
+                    stickerOrigX = sHit.getX();
+                    stickerOrigY = sHit.getY();
                     e.consume();
                     renderPreview();
                     return;
@@ -3374,7 +3657,8 @@ public class MainController implements Initializable {
                 }
                 selectCanvasIcon(null);
                 selectTextLine(null);
-                // 未命中图标：按下即开始视图平移（抓手光标），任意缩放级别均可拖动
+                selectSticker(null);
+                // 未命中元素：按下即开始视图平移（抓手光标），任意缩放级别均可拖动
                 previewCanvas.getScene().setCursor(javafx.scene.Cursor.CLOSED_HAND);
                 dragStartX = e.getSceneX();
                 dragStartY = e.getSceneY();
@@ -3384,7 +3668,25 @@ public class MainController implements Initializable {
             }
         });
         previewCanvas.setOnMouseDragged(e -> {
-            if (draggingTextLine && selectedTextLine != null) {
+            if (rotatingSticker && selectedSticker != null) {
+                double[] tc = previewToTemplate(e.getX(), e.getY());
+                double ang = Math.toDegrees(Math.atan2(
+                        tc[1] - selectedSticker.getY(), tc[0] - selectedSticker.getX()));
+                double rot = normalizeRotation(stickerRotStartRotation + (ang - stickerRotStartAngle));
+                selectedSticker.setRotation(rot);
+                slElementRotation.setValue(rot);
+                renderPreview();
+                e.consume();
+            } else if (resizingSticker && selectedSticker != null) {
+                double[] tc = previewToTemplate(e.getX(), e.getY());
+                double dist = Math.hypot(tc[0] - selectedSticker.getX(), tc[1] - selectedSticker.getY());
+                if (stickerResizeStartDist > 1 && dist > 1) {
+                    double ns = Math.max(0.02, Math.min(5.0, stickerOrigScale * dist / stickerResizeStartDist));
+                    selectedSticker.setScale(ns);
+                    renderPreview();
+                }
+                e.consume();
+            } else if (draggingTextLine && selectedTextLine != null) {
                 double[] tc = previewToTemplate(e.getX(), e.getY());
                 double dx = tc[0] - textDragStartX;
                 double dy = tc[1] - textDragStartY;
@@ -3394,6 +3696,14 @@ public class MainController implements Initializable {
                 if ("bottom".equals(align) || "live".equals(align) || "top".equals(align) || "exif".equals(align)) {
                     selectedTextLine.setAlign("free");
                 }
+                renderPreview();
+                e.consume();
+            } else if (draggingSticker && selectedSticker != null) {
+                double[] tc = previewToTemplate(e.getX(), e.getY());
+                double dx = tc[0] - stickerDragStartX;
+                double dy = tc[1] - stickerDragStartY;
+                selectedSticker.setX(stickerOrigX + dx);
+                selectedSticker.setY(stickerOrigY + dy);
                 renderPreview();
                 e.consume();
             } else if (draggingIcon && selectedIcon != null) {
@@ -3417,9 +3727,12 @@ public class MainController implements Initializable {
             }
         });
         previewCanvas.setOnMouseReleased(e -> {
-            if (draggingIcon || draggingTextLine) {
+            if (draggingIcon || draggingTextLine || draggingSticker || resizingSticker || rotatingSticker) {
                 draggingIcon = false;
                 draggingTextLine = false;
+                draggingSticker = false;
+                resizingSticker = false;
+                rotatingSticker = false;
                 onSettingChanged();
             }
             previewCanvas.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
@@ -3430,7 +3743,7 @@ public class MainController implements Initializable {
             previewCanvas.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
         });
         previewCanvas.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 2 && selectedIcon == null && selectedTextLine == null) {
+            if (e.getClickCount() == 2 && selectedIcon == null && selectedTextLine == null && selectedSticker == null) {
                 // 双击空白处：恢复居中显示
                 panX = 0;
                 panY = 0;
@@ -3439,10 +3752,33 @@ public class MainController implements Initializable {
             }
         });
         previewCanvas.setOnScroll(e -> {
+            if (e.isControlDown()) {
+                // Ctrl + 滚轮：旋转选中元素（图标/贴纸/文字），步进 15°
+                double delta = e.getDeltaY() > 0 ? 15 : -15;
+                if (selectedIcon != null) {
+                    selectedIcon.setRotation(normalizeRotation(selectedIcon.getRotation() + delta));
+                    slElementRotation.setValue(selectedIcon.getRotation());
+                } else if (selectedSticker != null) {
+                    selectedSticker.setRotation(normalizeRotation(selectedSticker.getRotation() + delta));
+                    slElementRotation.setValue(selectedSticker.getRotation());
+                } else if (selectedTextLine != null) {
+                    selectedTextLine.setRotation(normalizeRotation(selectedTextLine.getRotation() + delta));
+                    slElementRotation.setValue(selectedTextLine.getRotation());
+                }
+                renderPreview();
+                e.consume();
+                return;
+            }
             if (selectedIcon != null) {
                 double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
                 double newScale = Math.max(0.1, Math.min(3.0, selectedIcon.getScale() + delta));
                 selectedIcon.setScale(newScale);
+                renderPreview();
+                e.consume();
+            } else if (selectedSticker != null) {
+                double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
+                double newScale = Math.max(0.02, Math.min(3.0, selectedSticker.getScale() + delta));
+                selectedSticker.setScale(newScale);
                 renderPreview();
                 e.consume();
             } else if (selectedTextLine != null) {
@@ -3453,7 +3789,7 @@ public class MainController implements Initializable {
                 renderPreview();
                 e.consume();
             } else {
-                // 未选中图标：滚轮直接缩放视图（拖动可平移查看细节）
+                // 未选中元素：滚轮直接缩放视图（拖动可平移查看细节）
                 double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
                 setZoom(getZoom() + delta);
                 e.consume();
@@ -3461,8 +3797,92 @@ public class MainController implements Initializable {
         });
     }
 
+    /** 旋转角度归一化到 [-180, 180) */
+    private double normalizeRotation(double deg) {
+        double r = deg % 360;
+        if (r >= 180) r -= 360;
+        if (r < -180) r += 360;
+        return r;
+    }
+
+    /** 命中测试：贴纸顶部旋转手柄（圆点 + 连杆），位置与绘制一致（含旋转） */
+    private boolean isStickerRotateHandle(double mx, double my, TextStickerConfig.Sticker s) {
+        if (s.getSrc() == null || s.getSrc().isEmpty()) return false;
+        Image simg = ImageCache.get(s.getSrc());
+        if (simg == null || simg.getWidth() <= 0) return false;
+        double sw = simg.getWidth() * s.getScale();
+        double sh = simg.getHeight() * s.getScale();
+        double pad = Math.max(5, Math.max(sw, sh) * 0.06);
+        double rad = Math.toRadians(s.getRotation());
+        // 画布坐标 → 贴纸局部坐标
+        double lx = (mx - s.getX()) * Math.cos(-rad) - (my - s.getY()) * Math.sin(-rad);
+        double ly = (mx - s.getX()) * Math.sin(-rad) + (my - s.getY()) * Math.cos(-rad);
+        double hy = -sh / 2 - pad - 14;
+        if (Math.hypot(lx, ly - hy) <= 12) return true;
+        if (Math.abs(lx) <= 5 && ly >= -sh / 2 - pad - 12 && ly <= -sh / 2 - pad + 4) return true;
+        return false;
+    }
+
+    /** 命中测试：贴纸选中框的四角手柄（用于拖动缩放），位置与绘制一致（含旋转） */
+    private boolean isStickerHandle(double mx, double my, TextStickerConfig.Sticker s) {
+        if (s.getSrc() == null || s.getSrc().isEmpty()) return false;
+        Image simg = ImageCache.get(s.getSrc());
+        if (simg == null || simg.getWidth() <= 0) return false;
+        double sw = simg.getWidth() * s.getScale();
+        double sh = simg.getHeight() * s.getScale();
+        double pad = Math.max(5, Math.max(sw, sh) * 0.06);
+        double hd = Math.max(3, pad) * 1.8;
+        double rad = Math.toRadians(s.getRotation());
+        double cos = Math.cos(rad);
+        double sin = Math.sin(rad);
+        double[][] corners = {
+                {-sw / 2 - pad, -sh / 2 - pad},
+                {sw / 2 + pad, -sh / 2 - pad},
+                {-sw / 2 - pad, sh / 2 + pad},
+                {sw / 2 + pad, sh / 2 + pad}
+        };
+        for (double[] c : corners) {
+            double wx = s.getX() + c[0] * cos - c[1] * sin;
+            double wy = s.getY() + c[0] * sin + c[1] * cos;
+            if (Math.abs(mx - wx) <= hd / 2 && Math.abs(my - wy) <= hd / 2) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 命中测试：贴纸（中心 + 旋转包围盒，右上优先） */
+    private TextStickerConfig.Sticker hitTestSticker(double mx, double my) {
+        if (template == null || template.getDecorConfig() == null) return null;
+        java.util.List<TextStickerConfig.Sticker> stickers = template.getDecorConfig().getStickers();
+        for (int i = stickers.size() - 1; i >= 0; i--) {
+            TextStickerConfig.Sticker s = stickers.get(i);
+            if (s.getSrc() == null || s.getSrc().isEmpty()) continue;
+            Image simg = ImageCache.get(s.getSrc());
+            if (simg == null || simg.getWidth() <= 0) continue;
+            double sw = simg.getWidth() * s.getScale();
+            double sh = simg.getHeight() * s.getScale();
+            if (pointInRotatedBox(mx, my, s.getX(), s.getY(), sw, sh, Math.toRadians(s.getRotation()))) {
+                return s;
+            }
+        }
+        return null;
+    }
+
+    /** 判断点是否在旋转矩形内（cx,cy 为中心，w,h 未旋转尺寸，rad 弧度） */
+    private boolean pointInRotatedBox(double px, double py, double cx, double cy, double w, double h, double rad) {
+        double dx = px - cx;
+        double dy = py - cy;
+        double cos = Math.cos(-rad);
+        double sin = Math.sin(-rad);
+        double lx = dx * cos - dy * sin;
+        double ly = dx * sin + dy * cos;
+        return Math.abs(lx) <= w / 2 && Math.abs(ly) <= h / 2;
+    }
+
     private IconItem hitTestIcon(double mx, double my) {
         java.util.List<IconItem> icons = IconManager.getActiveIcons();
+        if (originImage == null || icons.isEmpty()) return null;
         double[] cs = engine.computeCanvasSize(originImage, this.template);
         double cap = Math.max(cs[0], cs[1]) * 0.4;
         for (int i = icons.size() - 1; i >= 0; i--) {

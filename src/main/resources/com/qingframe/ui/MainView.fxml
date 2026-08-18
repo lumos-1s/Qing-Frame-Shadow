@@ -495,6 +495,10 @@
                             <HBox alignment="CENTER_LEFT" spacing="10.0">
                                 <Label text="类型" /><ComboBox fx:id="cbLeakType" prefWidth="100.0" />
                             </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                                <Label text="强度" /><Slider fx:id="slLeakOpacity" blockIncrement="5" max="100" min="0" prefWidth="100.0" />
+                                <Label text="角度" /><Slider fx:id="slLeakAngle" blockIncrement="15" max="360" min="0" prefWidth="80.0" />
+                            </HBox>
                         </VBox>
                     </ScrollPane>
                 </Tab>
@@ -523,10 +527,10 @@
                 <Button onAction="#onAddTextLine" text="添加文字">
                     <graphic><SVGPath styleClass="ui-icon" content="M4 5h16 M12 5v15 M8 20h8" /></graphic>
                 </Button>
-                <Button maxWidth="1.7976931348623157E308" onAction="#onDeleteSelectedTextLine" text="删除选中文字">
+                <Button maxWidth="1.7976931348623157E308" onAction="#onDeleteSelectedTextLine" text="删除选中元素">
                     <graphic><SVGPath styleClass="ui-icon" content="M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13" /></graphic>
                     <tooltip>
-                        <Tooltip text="先在画布上点击文字选中（出现蓝色虚线框），再点此删除；也可选中后按 Delete 键" />
+                        <Tooltip text="先在画布上点击文字/贴纸/图标选中（出现蓝色虚线框），再点此删除；也可选中后按 Delete 键" />
                     </tooltip>
                 </Button>
                             <Separator styleClass="param-group-separator" />
@@ -579,17 +583,43 @@
                                 <HBox fx:id="customIconBox" spacing="6.0" />
                             </ScrollPane>
                             <Separator styleClass="param-group-separator" />
-                            <Label styleClass="param-group-title" text="画布图标管理" />
+                            <Label styleClass="param-group-title" text="画布元素管理" />
                             <HBox alignment="CENTER_LEFT" spacing="8.0">
                                 <Label text="透明度" />
                                 <Slider fx:id="slActiveIconOpacity" blockIncrement="5" max="100" min="0" prefWidth="100.0" value="100" />
                 <Button onAction="#onDeleteActiveIcon" text="删除选中">
                     <graphic><SVGPath styleClass="ui-icon" content="M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13" /></graphic>
                     <tooltip>
-                                        <Tooltip text="先在画布上点击图标选中（出现蓝色虚线框），再点此删除；也可选中后按 Delete 键" />
+                                        <Tooltip text="先在画布上点击图标/贴纸/文字选中（出现蓝色虚线框），再点此删除；也可选中后按 Delete 键" />
                                     </tooltip>
                                 </Button>
                             </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                <Label text="旋转" />
+                                <Slider fx:id="slElementRotation" blockIncrement="15" max="180" min="-180" prefWidth="100.0" value="0">
+                                    <tooltip>
+                                        <Tooltip text="调整选中元素的旋转角度；也可按住 Ctrl + 滚轮在画布上旋转" />
+                                    </tooltip>
+                                </Slider>
+                                <Label text="°" />
+                            </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="6.0">
+                    <Button onAction="#onZOrderTop" text="置顶">
+                        <tooltip><Tooltip text="调整选中元素的层级顺序（图标/贴纸/文字各自排序）" /></tooltip>
+                    </Button>
+                    <Button onAction="#onZOrderBottom" text="置底" />
+                    <Button onAction="#onZOrderUp" text="上移" />
+                    <Button onAction="#onZOrderDown" text="下移" />
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="6.0">
+                    <Button maxWidth="1.7976931348623157E308" onAction="#onCopySelectedElement" text="复制选中">
+                        <graphic><SVGPath styleClass="ui-icon" content="M9 9h11v11H9z M5 15V4h11" /></graphic>
+                        <tooltip><Tooltip text="复制/粘贴画布元素（Ctrl+C / Ctrl+V 也可）" /></tooltip>
+                    </Button>
+                    <Button maxWidth="1.7976931348623157E308" onAction="#onPasteClipboardElement" text="粘贴">
+                        <graphic><SVGPath styleClass="ui-icon" content="M9 9h11v11H9z M5 15V4h11" /></graphic>
+                    </Button>
+                </HBox>
                 <Button maxWidth="1.7976931348623157E308" onAction="#onClearAllIcons" text="清空所有图标">
                     <graphic><SVGPath styleClass="ui-icon" content="M6 6l12 12 M18 6L6 18" /></graphic>
                 </Button>

@@ -14,6 +14,7 @@ public class IconItem {
     private double scale;
     private int opacity;
     private int layer;
+    private double rotation;
 
     public IconItem() {
         this.id = "";
@@ -25,6 +26,7 @@ public class IconItem {
         this.scale = 1.0;
         this.opacity = 100;
         this.layer = 0;
+        this.rotation = 0;
     }
 
     public IconItem(String id, Category category, String label, String src) {
@@ -37,6 +39,7 @@ public class IconItem {
         this.scale = 1.0;
         this.opacity = 100;
         this.layer = 0;
+        this.rotation = 0;
     }
 
     public String getId() { return id; }
@@ -57,4 +60,17 @@ public class IconItem {
     public void setOpacity(int opacity) { this.opacity = opacity; }
     public int getLayer() { return layer; }
     public void setLayer(int layer) { this.layer = layer; }
+    public double getRotation() { return rotation; }
+    public void setRotation(double rotation) { this.rotation = rotation; }
+
+    public IconItem copy() {
+        IconItem c = new IconItem(id + "_copy", category, label, src);
+        c.x = x;
+        c.y = y;
+        c.scale = scale;
+        c.opacity = opacity;
+        c.layer = layer;
+        c.rotation = rotation;
+        return c;
+    }
 }

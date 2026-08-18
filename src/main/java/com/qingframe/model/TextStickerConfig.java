@@ -45,6 +45,7 @@ public class TextStickerConfig {
         private double y;
         private String align;
         private int enableShadow;
+        private double rotation;
 
         public TextLine() {
             this.text = "";
@@ -58,6 +59,7 @@ public class TextStickerConfig {
             this.y = 0;
             this.align = "bottom";
             this.enableShadow = 0;
+            this.rotation = 0;
         }
 
         public String getText() { return text; }
@@ -82,6 +84,26 @@ public class TextStickerConfig {
         public void setAlign(String align) { this.align = align; }
         public int getEnableShadow() { return enableShadow; }
         public void setEnableShadow(int enableShadow) { this.enableShadow = enableShadow; }
+
+        public double getRotation() { return rotation; }
+        public void setRotation(double rotation) { this.rotation = rotation; }
+
+        public TextLine copy() {
+            TextLine c = new TextLine();
+            c.text = text;
+            c.fontFamily = fontFamily;
+            c.fontSize = fontSize;
+            c.fontWeight = fontWeight;
+            c.letterSpacing = letterSpacing;
+            c.colorHex = colorHex;
+            c.opacity = opacity;
+            c.x = x;
+            c.y = y;
+            c.align = align;
+            c.enableShadow = enableShadow;
+            c.rotation = rotation;
+            return c;
+        }
     }
 
     public static class Sticker {
@@ -113,5 +135,16 @@ public class TextStickerConfig {
         public void setRotation(double rotation) { this.rotation = rotation; }
         public int getOpacity() { return opacity; }
         public void setOpacity(int opacity) { this.opacity = opacity; }
+
+        public Sticker copy() {
+            Sticker c = new Sticker();
+            c.src = src;
+            c.x = x;
+            c.y = y;
+            c.scale = scale;
+            c.rotation = rotation;
+            c.opacity = opacity;
+            return c;
+        }
     }
 }

@@ -96,6 +96,15 @@ public class IconManager {
         return placed;
     }
 
+    /** 直接把已配置好坐标/样式的元素加入画布（用于复制粘贴），并分配新 id 与层级 */
+    public static synchronized IconItem addToCanvas(IconItem item) {
+        IconItem placed = item.copy();
+        placed.setId(item.getId() + "_" + System.nanoTime());
+        placed.setLayer(nextLayer++);
+        activeIcons.add(placed);
+        return placed;
+    }
+
     public static synchronized void removeFromCanvas(IconItem item) {
         activeIcons.remove(item);
     }
