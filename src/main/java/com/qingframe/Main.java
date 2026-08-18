@@ -2,13 +2,17 @@ package com.qingframe;
 
 import com.qingframe.network.ApiClient;
 import com.qingframe.network.TokenStore;
+import com.qingframe.ui.SplashScreen;
 import com.qingframe.ui.controller.MainController;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 public class Main extends Application {
 
@@ -17,6 +21,36 @@ public class Main extends Application {
     @Override
     public void start(Stage stage) throws Exception {
         primaryStage = stage;
+        // Photoshop 风格启动加载页：分阶段状态提示，动画结束后构建主窗口并淡出
+        SplashScreen splash = new SplashScreen();
+        splash.show();
+
+        String[] steps = {
+                "正在加载界面资源…",
+                "正在初始化渲染引擎…",
+                "正在加载字体与内置素材…",
+                "正在恢复登录会话…",
+                "启动完成，正在进入主界面…"
+        };
+        Timeline timeline = new Timeline();
+        for (int i = 0; i < steps.length; i++) {
+            final int idx = i;
+            timeline.getKeyFrames().add(new KeyFrame(
+                    Duration.millis(200 + i * 300), e -> splash.setStatus(steps[idx])));
+        }
+        timeline.setOnFinished(e -> {
+            try {
+                buildMainWindow(stage);
+                splash.closeFade();
+            } catch (Exception ex) {
+                splash.setStatus("启动失败: " + ex.getMessage());
+                ex.printStackTrace();
+            }
+        });
+        timeline.play();
+    }
+
+    private void buildMainWindow(Stage stage) throws Exception {
         // 启动时静默恢复上次"记住登录"的会话（方案 B）
         if (ApiClient.token == null) {
             ApiClient.token = TokenStore.load();
