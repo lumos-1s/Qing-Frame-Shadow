@@ -144,8 +144,8 @@ public class MainController implements Initializable {
     private double puzzleDragX = 0, puzzleDragY = 0;
     private double puzzleDragStartRelX = 0, puzzleDragStartRelY = 0;
     private int puzzlePressCell = -1;
-    /** 间隙字幕编辑器当前打开的间隙下标（-1=未打开） */
-    private int captionEditorGap = -1;
+    /** 间隙字幕编辑器（控件接线与回显/应用逻辑见 CaptionEditorHelper） */
+    private com.qingframe.ui.CaptionEditorHelper captionEditor;
     /** 拼图预览整体缩放（1=适配窗口）与平移量 */
     private double puzzlePreviewZoom = 1.0;
     private double puzzleViewTx = 0, puzzleViewTy = 0;
@@ -510,23 +510,16 @@ public class MainController implements Initializable {
         // ── 间隙字幕编辑器（两行独立字体/字号）──
         cbCapFont1.setItems(FXCollections.observableArrayList(fontFamilies));
         cbCapFont2.setItems(FXCollections.observableArrayList(fontFamilies));
-        cbCapFont1.setValue("Microsoft YaHei");
-        cbCapFont2.setValue("Microsoft YaHei");
-        tfCapLine1.textProperty().addListener((o, ov, nv) -> applyCaptionEditor());
-        tfCapLine2.textProperty().addListener((o, ov, nv) -> applyCaptionEditor());
-        slCapSize1.valueProperty().addListener((o, ov, nv) -> {
-            if (lblCapSize1 != null) lblCapSize1.setText(String.valueOf(nv.intValue()));
-            applyCaptionEditor();
-        });
-        slCapSize2.valueProperty().addListener((o, ov, nv) -> {
-            if (lblCapSize2 != null) lblCapSize2.setText(String.valueOf(nv.intValue()));
-            applyCaptionEditor();
-        });
-        cbCapFont1.valueProperty().addListener((o, ov, nv) -> applyCaptionEditor());
-        cbCapFont2.valueProperty().addListener((o, ov, nv) -> applyCaptionEditor());
-        cpCapColor.valueProperty().addListener((o, ov, nv) -> applyCaptionEditor());
-        cbCapBgBar.selectedProperty().addListener((o, ov, nv) -> applyCaptionEditor());
-        slCapSpacing.valueProperty().addListener((o, ov, nv) -> applyCaptionEditor());
+        captionEditor = new com.qingframe.ui.CaptionEditorHelper(
+                vbCaptionEditor, tfCapLine1, tfCapLine2,
+                slCapSize1, slCapSize2, lblCapSize1, lblCapSize2,
+                cbCapFont1, cbCapFont2, cpCapColor, cbCapBgBar, slCapSpacing,
+                cbPuzzleGapPick,
+                () -> puzzleMode,
+                () -> template != null ? template.getPuzzlrConfig() : null,
+                s -> statusLabel.setText(s),
+                this::schedulePuzzleRender);
+        captionEditor.wire();
 
         tfCustomText.textProperty().addListener((o, ov, nv) -> {
             syncLiveTextLine();
@@ -2774,141 +2767,44 @@ public class MainController implements Initializable {
 
     /** 当前下拉框选中间隙对应的字幕（无则 null） */
     private GapCaption currentGapCaption() {
-        if (!puzzleMode || template == null) return null;
-        int idx = cbPuzzleGapPick.getSelectionModel().getSelectedIndex();
-        PuzzlrConfig pc = template.getPuzzlrConfig();
-        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
-        if (idx < 0 || idx >= axes.length) return null;
-        String gid = (axes[idx][0] == 0 ? "V" : "H") + idx;
-        for (GapCaption c : pc.getGapCaptions()) {
-            if (gid.equals(c.getGapId())) return c;
-        }
-        return null;
+        return captionEditor != null ? captionEditor.current() : null;
     }
 
     /** 添加/编辑字幕按钮：对选中间隙创建（如无）并打开下方编辑器 */
     @FXML
     private void onEditGapCaption() {
-        if (!puzzleMode) return;
-        int idx = cbPuzzleGapPick.getSelectionModel().getSelectedIndex();
-        PuzzlrConfig pc = template.getPuzzlrConfig();
-        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
-        if (idx < 0 || idx >= axes.length) {
-            statusLabel.setText("请先在上方选择一条间隙");
-            return;
-        }
-        String gid = (axes[idx][0] == 0 ? "V" : "H") + idx;
-        GapCaption cap = currentGapCaption();
-        if (cap == null) {
-            cap = new GapCaption();
-            cap.setGapId(gid);
-            pc.getGapCaptions().add(cap);
-            statusLabel.setText("已在间隙 " + gid + " 创建字幕，输入文字即可");
-        } else {
-            statusLabel.setText("正在编辑间隙 " + gid + " 的字幕");
-        }
-        captionEditorGap = idx;
-        loadCaptionEditor(cap);
-        vbCaptionEditor.setVisible(true);
-        vbCaptionEditor.setManaged(true);
-        refreshGapPicker();
-        schedulePuzzleRender();
+        captionEditor.editSelected();
     }
 
     /** 删除字幕按钮：删除当前选中间隙绑定的字幕 */
     @FXML
     private void onDeleteGapCaption() {
-        if (!puzzleMode) return;
-        int idx = cbPuzzleGapPick.getSelectionModel().getSelectedIndex();
-        PuzzlrConfig pc = template.getPuzzlrConfig();
-        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
-        if (idx < 0 || idx >= axes.length) {
-            statusLabel.setText("请先在上方选择一条间隙");
-            return;
-        }
-        String gid = (axes[idx][0] == 0 ? "V" : "H") + idx;
-        boolean removed = pc.getGapCaptions().removeIf(c -> gid.equals(c.getGapId()));
-        if (captionEditorGap == idx) closeCaptionEditor();
-        refreshGapPicker();
-        schedulePuzzleRender();
-        statusLabel.setText(removed ? "已删除间隙 " + gid + " 的字幕" : "该间隙没有字幕");
+        captionEditor.deleteSelected();
     }
 
     /** 关闭字幕编辑器 */
     private void closeCaptionEditor() {
-        captionEditorGap = -1;
-        if (vbCaptionEditor != null) {
-            vbCaptionEditor.setVisible(false);
-            vbCaptionEditor.setManaged(false);
-        }
+        if (captionEditor != null) captionEditor.close();
     }
 
-    /** 把字幕内容回显到编辑器控件（isUpdating 防回写） */
+    /** 把字幕内容回显到编辑器控件（逻辑见 CaptionEditorHelper） */
     private void loadCaptionEditor(GapCaption c) {
-        isUpdating = true;
-        try {
-            tfCapLine1.setText(c.getTextContent());
-            tfCapLine2.setText(c.getTextContent2());
-            slCapSize1.setValue(clamp(c.getFontSize(), 8, 200));
-            slCapSize2.setValue(clamp(c.getFontSize2(), 8, 200));
-            lblCapSize1.setText(String.valueOf((int) Math.round(clamp(c.getFontSize(), 8, 200))));
-            lblCapSize2.setText(String.valueOf((int) Math.round(clamp(c.getFontSize2(), 8, 200))));
-            cbCapFont1.setValue(c.getFontFamily() != null ? c.getFontFamily() : "Microsoft YaHei");
-            cbCapFont2.setValue(c.getFontFamily2() != null ? c.getFontFamily2() : "Microsoft YaHei");
-            try {
-                cpCapColor.setValue(javafx.scene.paint.Color.web(c.getColorHex()));
-            } catch (Exception ignored) {}
-            cbCapBgBar.setSelected(c.isBgBar());
-            slCapSpacing.setValue(clamp(c.getLineSpacing() * 100, 0, 300));
-        } finally {
-            isUpdating = false;
-        }
+        captionEditor.load(c);
     }
 
-    /** 编辑器控件 → 当前字幕（内容变化即实时渲染） */
+    /** 编辑器控件 → 当前字幕（内容变化即实时渲染，逻辑见 CaptionEditorHelper） */
     private void applyCaptionEditor() {
-        if (isUpdating || captionEditorGap < 0) return;
-        GapCaption c = currentGapCaption();
-        if (c == null) return;
-        c.setTextContent(tfCapLine1.getText() == null ? "" : tfCapLine1.getText().trim());
-        c.setTextContent2(tfCapLine2.getText() == null ? "" : tfCapLine2.getText().trim());
-        c.setFontSize(slCapSize1.getValue());
-        c.setFontSize2(slCapSize2.getValue());
-        if (cbCapFont1.getValue() != null) c.setFontFamily(cbCapFont1.getValue());
-        if (cbCapFont2.getValue() != null) c.setFontFamily2(cbCapFont2.getValue());
-        c.setColorHex(toHex(cpCapColor.getValue()));
-        c.setBgBar(cbCapBgBar.isSelected());
-        c.setLineSpacing(Math.max(0, slCapSpacing.getValue()) / 100.0);
-        schedulePuzzleRender();
+        captionEditor.apply();
     }
 
-    /** 间隙下拉框：列出当前布局所有分割间隙，已绑定字幕的标记 ● */
+    /** 间隙下拉框：列出当前布局所有分割间隙（逻辑见 CaptionEditorHelper） */
     private void refreshGapPicker() {
-        if (cbPuzzleGapPick == null || template == null) return;
-        PuzzlrConfig pc = template.getPuzzlrConfig();
-        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
-        javafx.collections.ObservableList<String> items = FXCollections.observableArrayList();
-        for (int i = 0; i < axes.length; i++) {
-            String gid = (axes[i][0] == 0 ? "V" : "H") + i;
-            boolean bound = false;
-            for (GapCaption c : pc.getGapCaptions()) {
-                if (gid.equals(c.getGapId())) { bound = true; break; }
-            }
-            items.add((axes[i][0] == 0 ? "竖向间隙 " : "横向间隙 ") + (i + 1)
-                    + (axes[i][0] == 0 ? "（左右格之间）" : "（上下格之间）") + (bound ? " ●" : ""));
-        }
-        int sel = cbPuzzleGapPick.getSelectionModel().getSelectedIndex();
-        cbPuzzleGapPick.setItems(items);
-        if (sel >= 0 && sel < items.size()) cbPuzzleGapPick.getSelectionModel().select(sel);
+        captionEditor.refreshPicker();
     }
 
-    /** 添加/编辑字幕按钮：对当前选中的间隙创建或进入编辑 */
     /** 布局切换后清理：绑定的分割轴已不存在的字幕自动删除 */
     private void pruneGapCaptions(PuzzlrConfig pc) {
-        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
-        pc.getGapCaptions().removeIf(c -> com.qingframe.core.PuzzlrRenderer.gapAxisOf(c.getGapId(), axes) == null);
-        if (captionEditorGap >= 0 && currentGapCaption() == null) closeCaptionEditor();
-        refreshGapPicker();
+        captionEditor.prune(pc);
     }
 
     /** 交换两格内容：图片路径 + 偏移/缩放/填充参数整体互换 */
