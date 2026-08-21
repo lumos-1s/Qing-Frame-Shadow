@@ -171,9 +171,9 @@ public class MainController implements Initializable {
     private int currentImageIndex = -1;
     private int[] refMargins = new int[4];
     private final Map<File, TemplateModel> imageTemplates = new HashMap<>();
-    private final Map<File, Image> thumbCache = new ConcurrentHashMap<>();
-    private static final int THUMB_MAX_DIM = 1280;
-    private static final int THUMB_CACHE_MAX = 200;
+    /** 胶片条缩略图服务：缓存/队列/代次管理（逻辑见 ThumbnailService） */
+    private final com.qingframe.service.ThumbnailService thumbs =
+            new com.qingframe.service.ThumbnailService((src, tmpl) -> engine.renderThumbnail(src, tmpl));
     private static final long RENDER_DEBOUNCE_MS = 50;
     /** 导出渲染的安全长边（约 2400px，约 400 万像素），落在大多数环境的稳定渲染区 */
     private static final int EXPORT_SAFE_EDGE = 2400;
@@ -892,14 +892,6 @@ public class MainController implements Initializable {
     private final com.qingframe.service.PuzzleImageService puzzleImages =
             new com.qingframe.service.PuzzleImageService();
 
-    private final ExecutorService thumbExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "thumb-worker");
-        t.setDaemon(true);
-        return t;
-    });
-    /** 缩略图队列代次：每次重建胶片条时递增，用于丢弃过期任务 */
-    private volatile long thumbGeneration = 0;
-
     private void onSettingChanged() {
         if (isUpdating) return;
         syncModelFromUI();
@@ -944,8 +936,7 @@ public class MainController implements Initializable {
     /** 仅失效当前图片的缩略图：参数变化只影响当前图的独立模板快照，其他图缩略图仍然有效 */
     private void invalidateCurrentThumb() {
         if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
-            File cur = imageFiles.get(currentImageIndex);
-            if (cur != null) thumbCache.remove(cur);
+            thumbs.evict(imageFiles.get(currentImageIndex));
         }
     }
 
@@ -1482,7 +1473,7 @@ public class MainController implements Initializable {
             return;
         }
         filmStrip.setVisible(true);
-        thumbGeneration++;
+        thumbs.bumpGeneration();
         thumbnailBox.getChildren().clear();
         for (int i = 0; i < imageFiles.size(); i++) {
             File f = imageFiles.get(i);
@@ -1501,7 +1492,7 @@ public class MainController implements Initializable {
             iv.setImage(raw);
 
             // 检查缓存，如有带边框缩略图直接替换
-            Image cached = thumbCache.get(f);
+            Image cached = thumbs.getCached(f);
             if (cached != null && cached.getWidth() > 0) {
                 iv.setImage(cached);
             }
@@ -1581,27 +1572,19 @@ public class MainController implements Initializable {
 
             // 后台队列渲染带边框缩略图，完成后替换（单线程队列，避免并发风暴）
             TemplateModel imgTmpl = imageTemplates.getOrDefault(f, template);
-            scheduleThumbnail(idx, f, imgTmpl);
+            thumbs.schedule(idx, f, imgTmpl, this::applyThumbToFilmStrip);
         }
     }
 
-    private void scheduleThumbnail(int idx, File file, TemplateModel tmpl) {
-        final long gen = thumbGeneration;
-        thumbExecutor.execute(() -> {
-            if (gen != thumbGeneration) return;
-            Image thumb = getOrCreateThumbnail(file, tmpl);
-            if (thumb == null || gen != thumbGeneration) return;
-            Platform.runLater(() -> {
-                if (gen != thumbGeneration) return;
-                if (idx < thumbnailBox.getChildren().size()) {
-                    Node node = thumbnailBox.getChildren().get(idx);
-                    if (node instanceof StackPane) {
-                        ImageView innerIv = (ImageView) ((StackPane) node).getChildren().get(0);
-                        innerIv.setImage(thumb);
-                    }
-                }
-            });
-        });
+    /** 缩略图生成完成（FX 线程）：替换胶片条对应格子的图片 */
+    private void applyThumbToFilmStrip(int idx, Image thumb) {
+        if (idx < thumbnailBox.getChildren().size()) {
+            Node node = thumbnailBox.getChildren().get(idx);
+            if (node instanceof StackPane) {
+                ImageView innerIv = (ImageView) ((StackPane) node).getChildren().get(0);
+                innerIv.setImage(thumb);
+            }
+        }
     }
 
     private void switchToImage(int idx) {
@@ -1617,7 +1600,7 @@ public class MainController implements Initializable {
         if (idx < 0 || idx >= imageFiles.size()) return;
         File removed = imageFiles.remove(idx);
         imageTemplates.remove(removed);
-        thumbCache.remove(removed);
+        thumbs.evict(removed);
 
         // 修正多选下标
         selectedIndices.removeIf(s -> s == idx);
@@ -4335,65 +4318,8 @@ if (template.getCompareMode() == 1 && originImage != null) {
         return SwingFXUtils.toFXImage(out, null);
     }
 
-    /** 非 sRGB 色彩空间的图转换到 sRGB；已是 sRGB 或无 ICC 的图原样返回（转换失败也回退原图） */
-    private BufferedImage downscaleIfNeeded(BufferedImage img) {
-        int w = img.getWidth();
-        int h = img.getHeight();
-        if (w <= THUMB_MAX_DIM && h <= THUMB_MAX_DIM) return img;
-        double scale = Math.min((double) THUMB_MAX_DIM / w, (double) THUMB_MAX_DIM / h);
-        int nw = (int) (w * scale);
-        int nh = (int) (h * scale);
-        BufferedImage scaled = new BufferedImage(nw, nh, BufferedImage.TYPE_INT_ARGB);
-        java.awt.Graphics2D g = scaled.createGraphics();
-        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g.drawImage(img, 0, 0, nw, nh, null);
-        g.dispose();
-        return scaled;
-    }
-
-    private Image getOrCreateThumbnail(File file, TemplateModel tmpl) {
-        Image cached = thumbCache.get(file);
-        if (cached != null && cached.getWidth() > 0) return cached;
-        try {
-            // 缩略图只需 1280 长边：用降采样解码替代全尺寸解码，大图耗时从秒级降到几十毫秒
-            BufferedImage awtImg = com.qingframe.service.PuzzleImageService.decodeScaled(file, THUMB_MAX_DIM, true);
-            if (awtImg == null) return null;
-            ExifReader.ExifData exif = ExifReader.parse(file);
-            if (exif != null) awtImg = com.qingframe.service.PuzzleImageService.applyOrientation(awtImg, exif.orientation);
-            awtImg = downscaleIfNeeded(awtImg);
-            CountDownLatch latch = new CountDownLatch(1);
-            Image[] result = new Image[1];
-            final BufferedImage finalImg = awtImg;
-            Platform.runLater(() -> {
-                try {
-                    WritableImage fxImg = SwingFXUtils.toFXImage(finalImg, null);
-                    result[0] = engine.renderThumbnail(fxImg, tmpl);
-                } catch (Exception ignored) {
-                } finally {
-                    latch.countDown();
-                }
-            });
-            if (!latch.await(15, TimeUnit.SECONDS)) return null;
-            if (result[0] != null) {
-                if (thumbCache.size() >= THUMB_CACHE_MAX) {
-                    // 淘汰约一半而不是全部清空，避免大图库瞬间集体重新解码
-                    int toRemove = thumbCache.size() / 2;
-                    java.util.Iterator<File> it = thumbCache.keySet().iterator();
-                    while (toRemove-- > 0 && it.hasNext()) {
-                        it.next();
-                        it.remove();
-                    }
-                }
-                thumbCache.put(file, result[0]);
-            }
-            return result[0];
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
     private void clearThumbCache() {
-        thumbCache.clear();
+        thumbs.clear();
     }
 
     private void showAlert(String msg) {
