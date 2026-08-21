@@ -2460,33 +2460,30 @@ public class MainController implements Initializable {
     private void updatePuzzleViewFit() {
         Image img = puzzlePreviewView.getImage();
         if (img == null || !puzzleMode) return;
-        double cw = puzzleViewport.getWidth();
-        double ch = puzzleViewport.getHeight();
-        if (!Double.isFinite(cw) || !Double.isFinite(ch) || cw <= 10 || ch <= 10) return;
-        double iw = img.getWidth(), ih = img.getHeight();
-        if (!Double.isFinite(iw) || !Double.isFinite(ih) || iw <= 0 || ih <= 0) return;
-        double s = Math.min(cw / iw, ch / ih) * puzzlePreviewZoom;
-        if (!Double.isFinite(s) || s <= 0) return;
-        // 硬上限：防止任何异常路径把显示尺寸推到纹理极限
-        if (iw * s > 16000 || ih * s > 16000) s = Math.min(16000 / iw, 16000 / ih);
-        puzzleViewScale = s;
-        puzzleFitW = img.getWidth() * s;
-        puzzleFitH = img.getHeight() * s;
+        // 几何计算见 PuzzleViewMath（纯数学可单测）：非法输入/视口过小返回 null
+        double[] fit = com.qingframe.core.PuzzleViewMath.fit(
+                puzzleViewport.getWidth(), puzzleViewport.getHeight(),
+                img.getWidth(), img.getHeight(), puzzlePreviewZoom);
+        if (fit == null) return;
+        puzzleViewScale = fit[0];
+        puzzleFitW = fit[1];
+        puzzleFitH = fit[2];
         puzzlePreviewView.setFitWidth(puzzleFitW);
         puzzlePreviewView.setFitHeight(puzzleFitH);
         // 非托管节点手动居中（不参与布局，避免反馈循环）
-        puzzlePreviewView.relocate((cw - puzzleFitW) / 2, (ch - puzzleFitH) / 2);
+        puzzlePreviewView.relocate((puzzleViewport.getWidth() - puzzleFitW) / 2,
+                (puzzleViewport.getHeight() - puzzleFitH) / 2);
         applyPuzzleViewTranslate();
         refreshPuzzleOverlay();
     }
 
-    /** 钳制并应用视图平移（放大后可平移，未放大归零） */
+    /** 钳制并应用视图平移（放大后可平移，未放大归零），几何计算见 PuzzleViewMath */
     private void applyPuzzleViewTranslate() {
-        double ovfX = Math.max(0, puzzleFitW - puzzleViewport.getWidth()) / 2;
-        double ovfY = Math.max(0, puzzleFitH - puzzleViewport.getHeight()) / 2;
-        if (puzzlePreviewZoom <= 1.001) { puzzleViewTx = 0; puzzleViewTy = 0; }
-        puzzleViewTx = clamp(puzzleViewTx, -ovfX, ovfX);
-        puzzleViewTy = clamp(puzzleViewTy, -ovfY, ovfY);
+        double[] t = com.qingframe.core.PuzzleViewMath.clampTranslate(
+                puzzleViewTx, puzzleViewTy, puzzleFitW, puzzleFitH,
+                puzzleViewport.getWidth(), puzzleViewport.getHeight(), puzzlePreviewZoom);
+        puzzleViewTx = t[0];
+        puzzleViewTy = t[1];
         puzzlePreviewView.setTranslateX(puzzleViewTx);
         puzzlePreviewView.setTranslateY(puzzleViewTy);
         if (puzzleOverlay != null) {
