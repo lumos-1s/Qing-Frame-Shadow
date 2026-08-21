@@ -61,7 +61,7 @@ public class ImageExportUtil {
     }
 
     public static void export(Image image, String outputPath, String format) throws IOException {
-        export(image, outputPath, format, 0.9f);
+        export(image, outputPath, format, 0.95f);
     }
 
     public static void export(Image image, String outputPath, String format, float jpegQuality) throws IOException {
@@ -72,15 +72,19 @@ public class ImageExportUtil {
         }
     }
 
+    /** 写出 JPEG：高质量 + 优化哈夫曼表；色彩空间统一 sRGB 由读入端 toSRGB 保证（JPEG 无 ICC 时查看器按 sRGB 解释） */
     private static void writeJpeg(BufferedImage rgb, File outFile, float quality) throws IOException {
         Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpeg");
         if (writers.hasNext()) {
             ImageWriter writer = writers.next();
-            ImageWriteParam param = writer.getDefaultWriteParam();
-            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            param.setCompressionQuality(Math.max(0.1f, Math.min(1.0f, quality)));
             try (ImageOutputStream ios = ImageIO.createImageOutputStream(outFile)) {
                 writer.setOutput(ios);
+                javax.imageio.plugins.jpeg.JPEGImageWriteParam param =
+                        new javax.imageio.plugins.jpeg.JPEGImageWriteParam(null);
+                param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+                param.setCompressionQuality(Math.max(0.1f, Math.min(1.0f, quality)));
+                param.setOptimizeHuffmanTables(true);
+                // 不传自定义 metadata（JPEG 元数据树修改易导致写出损坏），像素直写 + 默认 JFIF 段
                 writer.write(null, new javax.imageio.IIOImage(rgb, null, null), param);
             } finally {
                 writer.dispose();

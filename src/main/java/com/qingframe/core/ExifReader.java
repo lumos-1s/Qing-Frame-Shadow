@@ -24,21 +24,14 @@ public class ExifReader {
 
         public String cleanModel() {
             if (model == null || model.isEmpty()) return "";
-            String m = model.trim();
+            // 优先使用品牌库的规范型号名（如 ILCE-7M4 → A7M4）；未命中时退回 EXIF 原文清理
+            String m = CameraDatabase.getInstance().resolveModel(brand(), model).trim();
             int idx = m.indexOf("back camera");
             if (idx < 0) idx = m.indexOf("front camera");
             if (idx < 0) idx = m.indexOf("rear camera");
             if (idx > 0) m = m.substring(0, idx).trim();
             idx = m.indexOf("back");
             if (idx > 0) m = m.substring(0, idx).trim();
-            // 型号保留 EXIF 原文格式（大小写/空格/连字符/下划线），只去掉重复的品牌前缀
-            String b = brand();
-            if (!b.isEmpty()) {
-                String prefix = b + " ";
-                if (m.toUpperCase().startsWith(prefix.toUpperCase())) {
-                    m = m.substring(prefix.length()).trim();
-                }
-            }
             return m;
         }
 

@@ -10,6 +10,7 @@ public class TemplateModel {
     private FilmTearConfig filmTearConfig;
     private LightEffect lightEffect;
     private TextStickerConfig decorConfig;
+    private PuzzlrConfig puzzlrConfig;
     private String templateName;
     private String templateTag;
     private int exportDpi;
@@ -18,6 +19,9 @@ public class TemplateModel {
     private String photoFrameStyle;
     private int photoFrameBorderSize;
     private int paramFontSize;
+    private int paramType;
+    private String paramPosition;
+    private int blurIntensity;
 
     public TemplateModel() {
         this.baseMargin = new BaseMargin();
@@ -29,6 +33,7 @@ public class TemplateModel {
         this.filmTearConfig = new FilmTearConfig();
         this.lightEffect = new LightEffect();
         this.decorConfig = new TextStickerConfig();
+        this.puzzlrConfig = new PuzzlrConfig();
         this.templateName = "默认模板";
         this.templateTag = "通用";
         this.exportDpi = 300;
@@ -37,6 +42,9 @@ public class TemplateModel {
         this.photoFrameStyle = null;
         this.photoFrameBorderSize = 60;
         this.paramFontSize = 100;
+        this.paramType = 0;
+        this.paramPosition = "居中";
+        this.blurIntensity = 50;
     }
 
     public BaseMargin getBaseMargin() { return baseMargin; }
@@ -51,6 +59,8 @@ public class TemplateModel {
     public void setLightEffect(LightEffect lightEffect) { this.lightEffect = lightEffect; }
     public TextStickerConfig getDecorConfig() { return decorConfig; }
     public void setDecorConfig(TextStickerConfig decorConfig) { this.decorConfig = decorConfig; }
+    public PuzzlrConfig getPuzzlrConfig() { return puzzlrConfig; }
+    public void setPuzzlrConfig(PuzzlrConfig puzzlrConfig) { this.puzzlrConfig = puzzlrConfig; }
     public String getTemplateName() { return templateName; }
     public void setTemplateName(String templateName) { this.templateName = templateName; }
     public String getTemplateTag() { return templateTag; }
@@ -67,4 +77,10 @@ public class TemplateModel {
     public void setPhotoFrameBorderSize(int photoFrameBorderSize) { this.photoFrameBorderSize = photoFrameBorderSize; }
     public int getParamFontSize() { return paramFontSize; }
     public void setParamFontSize(int paramFontSize) { this.paramFontSize = paramFontSize; }
+    public int getParamType() { return paramType; }
+    public void setParamType(int paramType) { this.paramType = paramType; }
+    public String getParamPosition() { return paramPosition; }
+    public void setParamPosition(String paramPosition) { this.paramPosition = paramPosition; }
+    public int getBlurIntensity() { return blurIntensity > 0 ? blurIntensity : 50; }
+    public void setBlurIntensity(int blurIntensity) { this.blurIntensity = blurIntensity; }
 }

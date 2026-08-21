@@ -42,7 +42,7 @@ public class PresetService {
 
     /** 内置预设 = 代码预设 + classpath 下的 JSON 预设 + 自动取色 */
     public List<String> loadPresetList() {
-        List<String> list = new ArrayList<>(List.of("极简白框", "复古胶片", "拍立得", "证件照", "电影宽屏"));
+        List<String> list = new ArrayList<>(List.of("复古胶片", "拍立得", "证件照"));
         for (String name : scanResourceDir("com/qingframe/presets")) {
             if (!list.contains(name)) list.add(name);
         }
@@ -238,16 +238,6 @@ public class PresetService {
     public TemplateModel createPreset(String name) {
         TemplateModel t = new TemplateModel();
         switch (name) {
-            case "极简白框":
-                t.getBaseMargin().setMarginTop(60);
-                t.getBaseMargin().setMarginBottom(60);
-                t.getBaseMargin().setMarginLeft(60);
-                t.getBaseMargin().setMarginRight(60);
-                t.getBaseMargin().setImgScale(1.0);
-                t.getLayerList().get(0).getFillConfig().setFillHex("#ffffff");
-                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(2);
-                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#333333");
-                break;
             case "复古胶片":
                 t.getBaseMargin().setMarginTop(100);
                 t.getBaseMargin().setMarginBottom(140);
@@ -280,14 +270,6 @@ public class PresetService {
                 t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(1);
                 t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#cccccc");
                 break;
-            case "电影宽屏":
-                t.getBaseMargin().setMarginTop(120);
-                t.getBaseMargin().setMarginBottom(120);
-                t.getBaseMargin().setMarginLeft(0);
-                t.getBaseMargin().setMarginRight(0);
-                t.getBaseMargin().setImgScale(1.0);
-                t.getLayerList().get(0).getFillConfig().setFillHex("#000000");
-                break;
             case "无边框":
                 t.getBaseMargin().setMarginTop(0);
                 t.getBaseMargin().setMarginBottom(0);
@@ -306,16 +288,6 @@ public class PresetService {
                 t.getLayerList().get(0).getFillConfig().setFillHex("#ffffff");
                 t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(2);
                 t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#333333");
-                break;
-            case "复古边框":
-                t.getBaseMargin().setMarginTop(80);
-                t.getBaseMargin().setMarginBottom(80);
-                t.getBaseMargin().setMarginLeft(80);
-                t.getBaseMargin().setMarginRight(80);
-                t.getBaseMargin().setImgScale(0.92);
-                t.getLayerList().get(0).getFillConfig().setFillHex("#f5f0e8");
-                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(6);
-                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#8b7355");
                 break;
             case "圆角边框":
                 t.getBaseMargin().setMarginTop(60);

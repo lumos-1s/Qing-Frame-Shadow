@@ -200,6 +200,23 @@ public class BorderEngine {
         }
     }
 
+    /** 渲染相框前把模板的相框参数应用到 AWT 静态参数（字号/圆角/模糊/参数类型/位置），保证每张图片各自独立 */
+    public static void applyTemplateStaticParams(TemplateModel template) {
+        BorderProcessor.setExifFontSize(Math.max(2, template.getParamFontSize()));
+        CornerConfig cc = template.getCornerConfig();
+        if (cc != null) BorderProcessor.setCornerRadius((int) Math.round(cc.getCornerRadiusAll()));
+        BorderProcessor.setBlurIntensity(template.getBlurIntensity());
+        BorderProcessor.setParamType(template.getParamType());
+        String pos = template.getParamPosition();
+        if (pos == null || pos.isEmpty()) pos = "居中";
+        switch (pos) {
+            case "居左" -> WatermarkRender.setPosition(WatermarkRender.Position.LEFT);
+            case "居右" -> WatermarkRender.setPosition(WatermarkRender.Position.RIGHT);
+            case "分列" -> WatermarkRender.setPosition(WatermarkRender.Position.SPLIT);
+            default -> WatermarkRender.setPosition(WatermarkRender.Position.CENTER);
+        }
+    }
+
     private void renderPhotoFrameStyle(Image originImg, TemplateModel template, GraphicsContext gc, double targetW, double targetH) {
         String styleStr = template.getPhotoFrameStyle();
         BorderProcessor.Style style;
@@ -215,22 +232,36 @@ public class BorderEngine {
         BufferedImage awtSrc = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB_PRE);
         SwingFXUtils.fromFXImage(originImg, awtSrc);
 
-        int size = Math.max(5, template.getPhotoFrameBorderSize());
-        BufferedImage borderedImg = BorderProcessor.apply(style, awtSrc, size);
-        if (borderedImg == null) return;
+        int prevExif = BorderProcessor.getExifFontSize();
+        int prevCorner = BorderProcessor.getCornerRadius();
+        int prevBlur = BorderProcessor.getBlurIntensity();
+        int prevType = BorderProcessor.getParamType();
+        WatermarkRender.Position prevPos = WatermarkRender.getPosition();
+        applyTemplateStaticParams(template);
+        try {
+            int size = Math.max(5, template.getPhotoFrameBorderSize());
+            BufferedImage borderedImg = BorderProcessor.apply(style, awtSrc, size);
+            if (borderedImg == null) return;
 
-        int bw = borderedImg.getWidth();
-        int bh = borderedImg.getHeight();
-        double scale = Math.min(targetW / bw, targetH / bh);
-        double ox = (targetW - bw * scale) / 2;
-        double oy = (targetH - bh * scale) / 2;
+            int bw = borderedImg.getWidth();
+            int bh = borderedImg.getHeight();
+            double scale = Math.min(targetW / bw, targetH / bh);
+            double ox = (targetW - bw * scale) / 2;
+            double oy = (targetH - bh * scale) / 2;
 
-        Image fxResult = SwingFXUtils.toFXImage(borderedImg, null);
-        gc.save();
-        gc.translate(ox, oy);
-        gc.scale(scale, scale);
-        gc.drawImage(fxResult, 0, 0);
-        gc.restore();
+            Image fxResult = SwingFXUtils.toFXImage(borderedImg, null);
+            gc.save();
+            gc.translate(ox, oy);
+            gc.scale(scale, scale);
+            gc.drawImage(fxResult, 0, 0);
+            gc.restore();
+        } finally {
+            BorderProcessor.setExifFontSize(prevExif);
+            BorderProcessor.setCornerRadius(prevCorner);
+            BorderProcessor.setBlurIntensity(prevBlur);
+            BorderProcessor.setParamType(prevType);
+            WatermarkRender.setPosition(prevPos);
+        }
     }
 
     public WritableImage renderBorder(Image originImg, TemplateModel template) {
@@ -250,12 +281,26 @@ public class BorderEngine {
                     int ph = (int) originImg.getHeight();
                     BufferedImage awtSrc = new BufferedImage(pw, ph, BufferedImage.TYPE_INT_ARGB_PRE);
                     SwingFXUtils.fromFXImage(originImg, awtSrc);
-                    int size = Math.max(5, template.getPhotoFrameBorderSize());
-                    BufferedImage borderedImg = BorderProcessor.apply(style, awtSrc, size);
-                    if (borderedImg != null) {
-                        WritableImage result = new WritableImage(borderedImg.getWidth(), borderedImg.getHeight());
-                        SwingFXUtils.toFXImage(borderedImg, result);
-                        return result;
+                    int prevExif = BorderProcessor.getExifFontSize();
+                    int prevCorner = BorderProcessor.getCornerRadius();
+                    int prevBlur = BorderProcessor.getBlurIntensity();
+                    int prevType = BorderProcessor.getParamType();
+                    WatermarkRender.Position prevPos = WatermarkRender.getPosition();
+                    applyTemplateStaticParams(template);
+                    try {
+                        int size = Math.max(5, template.getPhotoFrameBorderSize());
+                        BufferedImage borderedImg = BorderProcessor.apply(style, awtSrc, size);
+                        if (borderedImg != null) {
+                            WritableImage result = new WritableImage(borderedImg.getWidth(), borderedImg.getHeight());
+                            SwingFXUtils.toFXImage(borderedImg, result);
+                            return result;
+                        }
+                    } finally {
+                        BorderProcessor.setExifFontSize(prevExif);
+                        BorderProcessor.setCornerRadius(prevCorner);
+                        BorderProcessor.setBlurIntensity(prevBlur);
+                        BorderProcessor.setParamType(prevType);
+                        WatermarkRender.setPosition(prevPos);
                     }
                 }
             }
@@ -778,17 +823,27 @@ public class BorderEngine {
         }
     }
 
+    /** 识别参数行的字号：以 2000px 画布宽为基准，跟随照片大小自动缩放（0.5~2.5 倍）；普通文字行保持原值 */
+    private static double autoExifTextSize(TextStickerConfig.TextLine textLine, double canvasW) {
+        double fs = Math.max(1, textLine.getFontSize());
+        if ("exif".equals(textLine.getAlign())) {
+            double k = Math.max(0.5, Math.min(2.5, canvasW / 2000.0));
+            fs = Math.max(4, fs * k);
+        }
+        return fs;
+    }
+
     /** 统一的自定义文字行绘制（默认画布 / 卡片样式共用，保证预览、命中检测与导出一致） */
     private void drawTextLine(GraphicsContext gc, TextStickerConfig.TextLine textLine, double cw, double ch, boolean card, double cardY, double cardH) {
         gc.save();
         // 字号钳制：缺失/非法的 0 或负值会导致 new Font 抛异常（预览报错/导出失败）
-        double fs = Math.max(1, textLine.getFontSize());
+        double fs = autoExifTextSize(textLine, cw);
         gc.setFont(new Font(textLine.getFontFamily(), fs));
         gc.setTextAlign(TextAlignment.CENTER);
         gc.setFill(parseColor(textLine.getColorHex(), textLine.getOpacity()));
         double[] anchor = textLineAnchor(textLine, cw, ch, card, cardY, cardH);
         if (renderSelection && textLine == selectedTextLine) {
-            drawTextSelection(gc, textLine, anchor[0], anchor[1], fs);
+            drawTextSelection(gc, textLine, anchor[0], anchor[1], fs, cw, ch);
         }
         double rot = textLine.getRotation();
         if (rot != 0) {
@@ -803,7 +858,7 @@ public class BorderEngine {
 
     /** 文字行锚点：返回 {tx=水平中心, ty=基线Y}，与画布命中检测共用，保证点击框与文字完全重合 */
     private static double[] textLineAnchor(TextStickerConfig.TextLine textLine, double cw, double ch, boolean card, double cardY, double cardH) {
-        double fs = Math.max(1, textLine.getFontSize());
+        double fs = autoExifTextSize(textLine, cw);
         String align = textLine.getAlign();
         // 用户拖动过的自由定位行：x/y 即为最终坐标，允许 0/负值（拖到画布上半区/左侧），不做默认回退
         if ("free".equals(align)) {
@@ -866,7 +921,7 @@ public class BorderEngine {
     }
 
     /** 文字行选中框：蓝色虚线框 + 四角手柄（仅预览绘制，导出关闭） */
-    private void drawTextSelection(GraphicsContext gc, TextStickerConfig.TextLine line, double tx, double ty, double fs) {
+    private void drawTextSelection(GraphicsContext gc, TextStickerConfig.TextLine line, double tx, double ty, double fs, double cw, double ch) {
         double w = measureTextWidth(line.getText(), line.getFontFamily(), fs);
         double h = fs * 1.25;
         double cx = tx;
@@ -877,6 +932,20 @@ public class BorderEngine {
         gc.setStroke(Color.rgb(52, 137, 232));
         gc.strokeRect(cx - w / 2 - pad, cy - h / 2 - pad, w + pad * 2, h + pad * 2);
         gc.setLineDashes();
+        // 居中提示：自由定位的文字行接近画布水平/垂直中线时，给出蓝色对齐参考线（加粗+高亮，吸附范围 8px）
+        if ("free".equals(line.getAlign())) {
+            double snap = 8.0;
+            gc.setStroke(Color.rgb(0, 140, 255));
+            gc.setLineWidth(2.5);
+            if (Math.abs(cx - cw / 2) < snap) {
+                gc.strokeLine(cw / 2, 0, cw / 2, cy - h / 2 - pad);
+                gc.strokeLine(cw / 2, cy + h / 2 + pad, cw / 2, ch);
+            }
+            if (Math.abs(cy - ch / 2) < snap) {
+                gc.strokeLine(0, ch / 2, cx - w / 2 - pad, ch / 2);
+                gc.strokeLine(cx + w / 2 + pad, ch / 2, cw, ch / 2);
+            }
+        }
         gc.setFill(Color.rgb(52, 137, 232));
         double hd = Math.max(3, pad);
         double[][] corners = {

@@ -1,0 +1,194 @@
+{
+  "templateName": "金箔奢华",
+  "templateTag": "奢华",
+  "exportDpi": 300,
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 140,
+    "marginBottom": 140,
+    "marginLeft": 120,
+    "marginRight": 120,
+    "imgScale": 0.92,
+    "imgOffsetX": 0,
+    "imgOffsetY": 0,
+    "bgBlurEnable": 0,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 0
+  },
+  "layerList": [
+    {
+      "visible": true,
+      "marginTop": 0,
+      "marginBottom": 0,
+      "marginLeft": 0,
+      "marginRight": 0,
+      "fillConfig": {
+        "fillType": "solid",
+        "fillHex": "#1a140e",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 0,
+        "gradientStops": [
+          {"position": 0.0, "color": "#ffffff"},
+          {"position": 1.0, "color": "#cccccc"}
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1.0,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 2,
+        "strokePos": "inside",
+        "strokeColorHex": "#f5e7a3",
+        "strokeOpacity": 100,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0,
+        "strokeFillType": "solid",
+        "strokeGradientType": "linear",
+        "strokeGradientAngle": 0,
+        "strokeGradientStops": []
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 0,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 10,
+        "shadowSpread": 0,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 40,
+        "glowEnable": 1,
+        "glowColorHex": "#f5e7a3",
+        "glowBlur": 45,
+        "glowSpread": 0,
+        "glowOpacity": 40,
+        "glowType": "outer"
+      }
+    },
+    {
+      "visible": true,
+      "marginTop": -150,
+      "marginBottom": -150,
+      "marginLeft": -150,
+      "marginRight": -150,
+      "fillConfig": {
+        "fillType": "gradient",
+        "fillHex": "#d4af37",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 135,
+        "gradientStops": [
+          {"position": 0.0, "color": "#b8860b"},
+          {"position": 0.5, "color": "#f9e7a6"},
+          {"position": 1.0, "color": "#d4af37"}
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1.0,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 0,
+        "strokePos": "inside",
+        "strokeColorHex": "#ffffff",
+        "strokeOpacity": 100,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0,
+        "strokeFillType": "solid",
+        "strokeGradientType": "linear",
+        "strokeGradientAngle": 0,
+        "strokeGradientStops": []
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 0,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 10,
+        "shadowSpread": 0,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 40,
+        "glowEnable": 0,
+        "glowColorHex": "#ffffff",
+        "glowBlur": 15,
+        "glowSpread": 0,
+        "glowOpacity": 60,
+        "glowType": "outer"
+      }
+    }
+  ],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 20,
+    "cornerRadiusTL": 20,
+    "cornerRadiusTR": 20,
+    "cornerRadiusBL": 20,
+    "cornerRadiusBR": 20,
+    "shapeType": "rect",
+    "customShapeSvg": ""
+  },
+  "filmTearConfig": {
+    "tearEnable": 0,
+    "tearStrength": 10,
+    "tearDensity": 50,
+    "filmPerforationEnable": 0,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 15,
+    "filmPerforationSpacing": 30,
+    "dustScratchEnable": 0,
+    "dustScratchIntensity": 20,
+    "yellowingEnable": 0,
+    "yellowingStrength": 15
+  },
+  "lightEffect": {
+    "vignetteEnable": 1,
+    "vignetteStrength": 25,
+    "vignetteFeather": 50,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 1,
+    "filmGrainIntensity": 6
+  },
+  "decorConfig": {
+    "textLines": [
+      {
+        "text": "✦ LUXE ✦",
+        "fontFamily": "Times New Roman",
+        "fontSize": 20,
+        "fontWeight": 500,
+        "letterSpacing": 10,
+        "colorHex": "#f9e7a6",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "top",
+        "enableShadow": 0
+      },
+      {
+        "text": "GOLDEN AGE",
+        "fontFamily": "Times New Roman",
+        "fontSize": 22,
+        "fontWeight": 600,
+        "letterSpacing": 8,
+        "colorHex": "#f9e7a6",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  }
+}

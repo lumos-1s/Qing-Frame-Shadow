@@ -89,9 +89,6 @@
                         <Button maxWidth="1.7976931348623157E308" onAction="#onPresetRounded" styleClass="sidebar-btn" text="圆角边框">
                             <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" /></graphic>
                         </Button>
-                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetVintage" styleClass="sidebar-btn" text="复古边框">
-                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 5h14v14H5z M9 9h6v6H9z" /></graphic>
-                        </Button>
                         <Button maxWidth="1.7976931348623157E308" onAction="#onPresetPolaroid" styleClass="sidebar-btn" text="拍立得">
                             <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v11H4z M7 16h10v3H7z" /></graphic>
                         </Button>
@@ -242,6 +239,51 @@
                         <Button maxWidth="1.7976931348623157E308" onAction="#onPresetAppleDark" styleClass="sidebar-btn" text="苹果深色卡">
                             <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M5 8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z" /></graphic>
                         </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetPopArt" styleClass="sidebar-btn" text="波普漫画">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 4h16v16H4z M8 8h8v8H8z M14 4l6 6 M6 14l2 6" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetAurora" styleClass="sidebar-btn" text="极光渐变">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 8c4-4 8 4 12 0s4 8 4 8 M4 16c4-4 8 4 12 0" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetMagazine" styleClass="sidebar-btn" text="杂志刊头">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v3H4z M4 11h16v8H4z M6 13h12v1H6z M6 15h9v1H6z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetStarry" styleClass="sidebar-btn" text="暗夜星空">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M12 3l2 5 5 1-4 4 1 5-4-3-4 3 1-5-4-4 5-1z M18 14l1 2 2 1-2 1-1 2-1-2-2-1 2-1z" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetBoarding" styleClass="sidebar-btn" text="复古登机牌">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M4 5h16v14H4z M4 10h16 M4 14h16 M6 16h4 M12 16h6" /></graphic>
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPresetGold" styleClass="sidebar-btn" text="金箔奢华">
+                            <graphic><SVGPath scaleX="0.55" scaleY="0.55" styleClass="sb-icon" content="M6 5h12v14H6z M8 8h8v8H8z M10 10h4v4h-4z" /></graphic>
+                        </Button>
+                    </VBox>
+                </TitledPane>
+
+                <TitledPane animated="true" expanded="false" text="拼图">
+                    <VBox styleClass="sidebar-btn-group">
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="0" styleClass="sidebar-btn" text="2张-左右">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="1" styleClass="sidebar-btn" text="2张-上下">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="2" styleClass="sidebar-btn" text="2张-一大一小">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="3" styleClass="sidebar-btn" text="3张-三横条">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="4" styleClass="sidebar-btn" text="3张-三竖条">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="5" styleClass="sidebar-btn" text="3张-一大两小">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="6" styleClass="sidebar-btn" text="4张-四宫格">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="7" styleClass="sidebar-btn" text="4张-一大三小">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="8" styleClass="sidebar-btn" text="4张-2x2错落">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="9" styleClass="sidebar-btn" text="6张-2x3网格">
+                        </Button>
+                        <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleLayout" userData="10" styleClass="sidebar-btn" text="6张-3x2网格">
+                        </Button>
                     </VBox>
                 </TitledPane>
             </VBox>
@@ -259,6 +301,10 @@
                 <SVGPath scaleX="2.5" scaleY="2.5" styleClass="placeholder-icon" content="M4 7h4l2-2h4l2 2h4v12H4z M12 16m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0" />
                         <Label styleClass="placeholder-text" text="点击左上角【打开图片】导入照片开始编辑" />
                     </VBox>
+                    <StackPane fx:id="puzzleViewport">
+                        <ImageView fx:id="puzzlePreviewView" visible="false" pickOnBounds="true" />
+                        <Pane fx:id="puzzleOverlay" mouseTransparent="true" visible="false" />
+                    </StackPane>
                     <ScrollBar fx:id="hScrollBar" orientation="HORIZONTAL" visible="false" managed="false" />
                     <ScrollBar fx:id="vScrollBar" orientation="VERTICAL" visible="false" managed="false" />
                 </StackPane>
@@ -657,6 +703,72 @@
                 <Button maxWidth="1.7976931348623157E308" onAction="#onOpenMarket" styleClass="btn-primary" text="打开模板市场">
                     <graphic><SVGPath styleClass="ui-icon" content="M12 3l2.5 5.5L20 9l-4.5 3.5L17 18l-5-3-5 3 1.5-5.5L4 9l5.5-.5z" /></graphic>
                 </Button>
+                        </VBox>
+                    </ScrollPane>
+                </Tab>
+                <Tab text="拼图">
+                    <graphic><SVGPath styleClass="ui-icon" content="M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z" /></graphic>
+                    <ScrollPane fitToWidth="true">
+                        <VBox spacing="6.0" styleClass="settings-panel">
+                            <Label styleClass="param-group-title" text="拼图设置" />
+                            <Label text="当前格子" />
+                            <Label fx:id="lblPuzzleSlot" text="未选中格子" />
+                            <Label text="格子间距" />
+                            <Slider fx:id="slPuzzleGap" min="0" max="200" value="8" blockIncrement="1" />
+                            <Label text="间隙字幕（电影字幕条）" />
+                            <ComboBox fx:id="cbPuzzleGapPick" prefWidth="200.0" />
+                            <HBox spacing="8.0">
+                                <Button maxWidth="1.7976931348623157E308" HBox.hgrow="ALWAYS" onAction="#onEditGapCaption" text="添加/编辑字幕" />
+                                <Button onAction="#onDeleteGapCaption" text="删除字幕" />
+                            </HBox>
+                            <VBox fx:id="vbCaptionEditor" spacing="4.0" visible="false" managed="false">
+                                <Label text="第一行文字" />
+                                <TextField fx:id="tfCapLine1" promptText="第一行文字（可留空）" />
+                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                    <Label text="字号" />
+                                    <Slider fx:id="slCapSize1" min="8" max="200" value="60" prefWidth="80.0" />
+                                    <Label fx:id="lblCapSize1" text="60" style="-fx-min-width: 28;" />
+                                    <Label text="字体" />
+                                    <ComboBox fx:id="cbCapFont1" prefWidth="130.0" />
+                                </HBox>
+                                <Label text="第二行文字" />
+                                <TextField fx:id="tfCapLine2" promptText="第二行文字（可留空=单行）" />
+                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                    <Label text="字号" />
+                                    <Slider fx:id="slCapSize2" min="8" max="200" value="60" prefWidth="80.0" />
+                                    <Label fx:id="lblCapSize2" text="60" style="-fx-min-width: 28;" />
+                                    <Label text="字体" />
+                                    <ComboBox fx:id="cbCapFont2" prefWidth="130.0" />
+                                </HBox>
+                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                    <Label text="颜色" />
+                                    <ColorPicker fx:id="cpCapColor" />
+                                    <CheckBox fx:id="cbCapBgBar" text="黑底条" />
+                                </HBox>
+                                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                                    <Label text="行间距" />
+                                    <Slider fx:id="slCapSpacing" min="0" max="300" value="25" blockIncrement="1" prefWidth="150.0" />
+                                </HBox>
+                            </VBox>
+                            <Label text="背景" />
+                            <ComboBox fx:id="cbPuzzleBg" prefWidth="200.0" />
+                            <Label text="画布比例" />
+                            <ComboBox fx:id="cbPuzzleCanvas" prefWidth="200.0" />
+                            <Label text="格子间隙颜色" />
+                            <ColorPicker fx:id="cpPuzzleBorder" prefWidth="200.0" />
+                            <Separator styleClass="param-group-separator" />
+                            <Label text="格内图片调整（作用于选中格子）" />
+                            <Label text="水平偏移" />
+                            <Slider fx:id="slSlotOffsetX" min="0" max="1" value="0.5" />
+                            <Label text="垂直偏移" />
+                            <Slider fx:id="slSlotOffsetY" min="0" max="1" value="0.5" />
+                            <Label text="缩放" />
+                            <Slider fx:id="slSlotZoom" min="0.2" max="4" value="1" />
+                            <Label text="填充方式" />
+                            <ComboBox fx:id="cbSlotFill" prefWidth="200.0" />
+                            <Button maxWidth="1.7976931348623157E308" onAction="#onPuzzleClearSlots" text="清空全部格子图片" />
+                            <Label styleClass="param-group-title" text="操作提示" />
+                            <Label wrapText="true" text="双击格子→更换图片；拖动分割线→调整格子大小；格子内拖动→移动图片；选中格子时滚轮→缩放格子内图片；点击画布外取消选中后滚轮→缩放整体图片；拖拽格子到另一格→交换；顶部缩放滑杆或 Alt+滚轮→整体缩放视图，放大后拖动平移" />
                         </VBox>
                     </ScrollPane>
                 </Tab>

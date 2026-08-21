@@ -47,6 +47,7 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.ByteArrayInputStream;
@@ -112,9 +113,49 @@ public class MainController implements Initializable {
     @FXML private ScrollBar hScrollBar, vScrollBar;
     @FXML private ScrollPane filmStrip;
     @FXML private HBox thumbnailBox;
+    @FXML private ImageView puzzlePreviewView;
+    @FXML private Label lblPuzzleSlot;
+    @FXML private Slider slPuzzleGap, slSlotOffsetX, slSlotOffsetY, slSlotZoom;
+    @FXML private ComboBox<String> cbSlotFill;
+    @FXML private ComboBox<String> cbPuzzleBg;
+    @FXML private ComboBox<String> cbPuzzleCanvas;
+    @FXML private ComboBox<String> cbPuzzleGapPick;
+    @FXML private javafx.scene.layout.StackPane puzzleViewport;
+    @FXML private javafx.scene.layout.VBox vbCaptionEditor;
+    @FXML private TextField tfCapLine1, tfCapLine2;
+    @FXML private Slider slCapSize1, slCapSize2;
+    @FXML private ComboBox<String> cbCapFont1, cbCapFont2;
+    @FXML private ColorPicker cpCapColor;
+    @FXML private CheckBox cbCapBgBar;
+    @FXML private Slider slCapSpacing;
+    @FXML private javafx.scene.control.Label lblCapSize1, lblCapSize2;
+    @FXML private javafx.scene.control.ColorPicker cpPuzzleBorder;
+    @FXML private javafx.scene.layout.Pane puzzleOverlay;
+
+    /** 拼图模式：当前是否处于拼图渲染；拼图配置存在 template.getPuzzlrConfig()，每图模板独立保存 */
+    private boolean puzzleMode = false;
+    /** 拼图模式下当前选中的格子（面板操作/换图对象），-1 表示未选中 */
+    private int puzzleSelectedSlot = -1;
+    /** 拼图预览 ImageView 的 fit 比例（鼠标坐标→画布相对坐标换算） */
+    private double puzzleViewScale = 1.0;
+    private boolean puzzleDragging = false;
+    private boolean puzzleDragAxis = false;
+    private int puzzleDragAxisIdx = -1;
+    private double puzzleDragX = 0, puzzleDragY = 0;
+    private double puzzleDragStartRelX = 0, puzzleDragStartRelY = 0;
+    private int puzzlePressCell = -1;
+    /** 间隙字幕编辑器当前打开的间隙下标（-1=未打开） */
+    private int captionEditorGap = -1;
+    /** 拼图预览整体缩放（1=适配窗口）与平移量 */
+    private double puzzlePreviewZoom = 1.0;
+    private double puzzleViewTx = 0, puzzleViewTy = 0;
+    private double puzzleFitW = 0, puzzleFitH = 0;
+    private boolean panningView = false;
+    private double panStartX = 0, panStartY = 0, panStartTx = 0, panStartTy = 0;
 
     private Image originImage;
     private TemplateModel template;
+    private File currentImageFile;
     private BorderEngine engine = new BorderEngine();
     private boolean isDarkTheme = true;
     private boolean isUpdating = false;
@@ -162,23 +203,47 @@ public class MainController implements Initializable {
         template = new TemplateModel();
 
         previewCanvas.setManaged(false);
-        previewCanvas.widthProperty().bind(dropTarget.widthProperty());
-        previewCanvas.heightProperty().bind(dropTarget.heightProperty());
+        // 画布尺寸守卫同步：布局瞬间可能出现 0/负/NaN，直接 bind 会让渲染线程
+        // 创建纹理失败（NGCanvas RenderBuf NPE 且每帧重复），仅在合法尺寸时同步
+        javafx.beans.InvalidationListener pcSizeSync = obs -> {
+            double w = dropTarget.getWidth(), h = dropTarget.getHeight();
+            if (Double.isFinite(w) && Double.isFinite(h) && w >= 1 && h >= 1) {
+                if (previewCanvas.getWidth() != w) previewCanvas.setWidth(w);
+                if (previewCanvas.getHeight() != h) previewCanvas.setHeight(h);
+            }
+        };
+        dropTarget.widthProperty().addListener(pcSizeSync);
+        dropTarget.heightProperty().addListener(pcSizeSync);
 
         Platform.runLater(() -> {
             renderPreview();
         });
 
         dropTarget.widthProperty().addListener((o,ov,nv) -> {
-            if (nv.doubleValue() > 0) scheduleRender();
+            if (nv.doubleValue() > 0) {
+                if (puzzleMode && puzzlePreviewView.getImage() != null) {
+                    updatePuzzleViewFit();
+                } else {
+                    scheduleRender();
+                }
+            }
         });
         dropTarget.heightProperty().addListener((o,ov,nv) -> {
-            if (nv.doubleValue() > 0) scheduleRender();
+            if (nv.doubleValue() > 0) {
+                if (puzzleMode && puzzlePreviewView.getImage() != null) {
+                    updatePuzzleViewFit();
+                } else {
+                    scheduleRender();
+                }
+            }
         });
 
         setupScrollBars();
 
         setupDragDrop();
+
+        // 右侧栏所有滑块自动附加数值标签（已有专属数值显示的除外）
+        attachSliderValueLabels(rightTabPane);
 
         cbFillType.setItems(FXCollections.observableArrayList("solid", "gradient", "texture", "transparent"));
         cbFillType.setValue("solid");
@@ -193,6 +258,84 @@ public class MainController implements Initializable {
 
         cbExportFormat.setItems(FXCollections.observableArrayList("JPEG", "PNG"));
         cbExportFormat.setValue("JPEG");
+
+        // ── 拼图面板 ──
+        cbSlotFill.setItems(FXCollections.observableArrayList("填满裁切", "完整包含"));
+        cbSlotFill.setValue("填满裁切");
+        // 拼图视口裁剪：整体放大后超出部分不外溢（视口内无 Canvas，安全）
+        // 视图节点全部非托管：ImageView/Overlay 的 pref 尺寸会随整体缩放变大，
+        // 若参与布局会把父容器最小尺寸撑大 → 触发重绘 → 再撑大（×缩放系数的布局死循环）
+        javafx.scene.shape.Rectangle vpClip = new javafx.scene.shape.Rectangle();
+        vpClip.widthProperty().bind(puzzleViewport.widthProperty());
+        vpClip.heightProperty().bind(puzzleViewport.heightProperty());
+        puzzleViewport.setClip(vpClip);
+        puzzlePreviewView.setManaged(false);
+        puzzleOverlay.setManaged(false);
+        // 点击拼图画布以外 → 取消选中格子
+        dropTarget.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_CLICKED, e -> {
+            if (!puzzleMode || puzzlePreviewView.getImage() == null) return;
+            javafx.geometry.Point2D lp = puzzlePreviewView.sceneToLocal(e.getSceneX(), e.getSceneY());
+            if (lp != null && lp.getX() >= 0 && lp.getY() >= 0
+                    && lp.getX() <= puzzlePreviewView.getBoundsInLocal().getWidth()
+                    && lp.getY() <= puzzlePreviewView.getBoundsInLocal().getHeight()) return;
+            if (puzzleSelectedSlot != -1) {
+                puzzleSelectedSlot = -1;
+                updatePuzzleSlotUI();
+                refreshPuzzleOverlay();
+                statusLabel.setText("已取消选中格子");
+            }
+        });
+        cbPuzzleBg.setItems(FXCollections.observableArrayList("白色背景", "模糊照片底"));
+        cbPuzzleBg.setValue("白色背景");
+        cbPuzzleBg.valueProperty().addListener((o,ov,nv) -> {
+            if (isUpdating) return;
+            template.getPuzzlrConfig().setBgMode("模糊照片底".equals(nv) ? 1 : 0);
+            cpPuzzleBorder.setDisable("模糊照片底".equals(nv));
+            schedulePuzzleRender();
+        });
+        cbPuzzleCanvas.setItems(FXCollections.observableArrayList(
+                "自动", "1:1", "3:4", "4:3", "9:16", "16:9", "2:3", "3:2"));
+        cbPuzzleCanvas.setValue("自动");
+        cbPuzzleCanvas.valueProperty().addListener((o,ov,nv) -> {
+            if (isUpdating) return;
+            template.getPuzzlrConfig().setCanvasRatio(parseCanvasRatio(nv));
+            schedulePuzzleRender();
+        });
+        cpPuzzleBorder.setValue(javafx.scene.paint.Color.WHITE);
+        cpPuzzleBorder.valueProperty().addListener((o,ov,nv) -> {
+            if (isUpdating) return;
+            template.getPuzzlrConfig().setBorderColor(String.format("#%02X%02X%02X",
+                    (int) Math.round(nv.getRed() * 255),
+                    (int) Math.round(nv.getGreen() * 255),
+                    (int) Math.round(nv.getBlue() * 255)));
+            schedulePuzzleRender();
+        });
+        slPuzzleGap.valueProperty().addListener((o,ov,nv) -> {
+            if (isUpdating) return;
+            template.getPuzzlrConfig().setGap((int) Math.round(nv.doubleValue()));
+            schedulePuzzleRender();
+        });
+        slSlotOffsetX.valueProperty().addListener((o,ov,nv) -> {
+            if (isUpdating || puzzleSelectedSlot < 0) return;
+            currentPuzzleSlot().setOffsetX(nv.doubleValue());
+            schedulePuzzleRender();
+        });
+        slSlotOffsetY.valueProperty().addListener((o,ov,nv) -> {
+            if (isUpdating || puzzleSelectedSlot < 0) return;
+            currentPuzzleSlot().setOffsetY(nv.doubleValue());
+            schedulePuzzleRender();
+        });
+        slSlotZoom.valueProperty().addListener((o,ov,nv) -> {
+            if (isUpdating || puzzleSelectedSlot < 0) return;
+            currentPuzzleSlot().setZoom(nv.doubleValue());
+            schedulePuzzleRender();
+        });
+        cbSlotFill.valueProperty().addListener((o,ov,nv) -> {
+            if (isUpdating || puzzleSelectedSlot < 0) return;
+            currentPuzzleSlot().setFillMode("填满裁切".equals(nv) ? 0 : 1);
+            schedulePuzzleRender();
+        });
+        setupPuzzleInteraction();
 
         lvPresets.setItems(FXCollections.observableArrayList(loadPresetList()));
         updatePresetListHeight();
@@ -245,10 +388,145 @@ public class MainController implements Initializable {
         bindLayerSelect();
 
         // 自定义文字：输入实时预览，字号/颜色/字体改动即时应用到当前文字行
-        List<String> fontFamilies = new ArrayList<>(javafx.scene.text.Font.getFamilies());
-        fontFamilies.sort(String::compareTo);
+        // 精选字体：去掉不够好看的字体，加入艺术字/签名类，国产字体排在最前
+        List<String[]> curatedFonts = List.of(
+                // 国产字体
+                new String[]{"微软雅黑", "Microsoft YaHei"},
+                new String[]{"黑体", "SimHei"},
+                new String[]{"宋体", "SimSun"},
+                new String[]{"楷体", "KaiTi"},
+                new String[]{"仿宋", "FangSong"},
+                new String[]{"隶书", "LiSu"},
+                new String[]{"幼圆", "YouYuan"},
+                new String[]{"等线", "DengXian"},
+                new String[]{"思源黑体", "Noto Sans SC"},
+                new String[]{"思源宋体", "Noto Serif SC"},
+                new String[]{"汉仪中黑体", "HYZhongHeiTi"},
+                new String[]{"华文行楷", "STXingkai"},
+                new String[]{"华文楷体", "STKaiti"},
+                new String[]{"华文隶书", "STLiti"},
+                new String[]{"华文新魏", "STXinwei"},
+                new String[]{"华文琥珀", "STHupo"},
+                new String[]{"华文彩云", "STCaiyun"},
+                new String[]{"华文细黑", "STXihei"},
+                new String[]{"华文宋体", "STSong"},
+                new String[]{"华文中宋", "STZhongsong"},
+                new String[]{"华文仿宋", "STFangsong"},
+                new String[]{"方正舒体", "FZShuTi"},
+                new String[]{"方正姚体", "FZYaoTi"},
+                // 签名类
+                new String[]{"Brush Script MT"},
+                new String[]{"Edwardian Script ITC"},
+                new String[]{"French Script MT"},
+                new String[]{"Freestyle Script"},
+                new String[]{"Palace Script MT"},
+                new String[]{"Script MT Bold"},
+                new String[]{"Kunstler Script"},
+                new String[]{"Blackadder ITC"},
+                new String[]{"Mistral"},
+                new String[]{"Rage Italic"},
+                new String[]{"Segoe Script"},
+                new String[]{"Segoe Print"},
+                new String[]{"Lucida Handwriting"},
+                new String[]{"Lucida Calligraphy"},
+                new String[]{"Vivaldi"},
+                new String[]{"Vladimir Script"},
+                new String[]{"Monotype Corsiva"},
+                new String[]{"Bradley Hand ITC"},
+                new String[]{"Kristen ITC"},
+                new String[]{"Viner Hand ITC"},
+                // 艺术装饰类
+                new String[]{"Chiller"},
+                new String[]{"Jokerman"},
+                new String[]{"Showcard Gothic"},
+                new String[]{"Cooper Black"},
+                new String[]{"Old English Text MT"},
+                new String[]{"Broadway"},
+                new String[]{"Wide Latin"},
+                new String[]{"Stencil"},
+                new String[]{"Harlow Solid Italic"},
+                new String[]{"Harrington"},
+                new String[]{"Matura MT Script Capitals"},
+                new String[]{"Papyrus"},
+                new String[]{"Parchment"},
+                new String[]{"Playbill"},
+                new String[]{"Pristina"},
+                new String[]{"Ravie"},
+                new String[]{"Snap ITC"},
+                new String[]{"Tempus Sans ITC"},
+                new String[]{"Gigi"},
+                new String[]{"Curlz MT"},
+                new String[]{"Juice ITC"},
+                new String[]{"Bauhaus 93"},
+                new String[]{"Agency FB"},
+                new String[]{"Algerian"},
+                new String[]{"Magneto"},
+                new String[]{"Castellar"},
+                new String[]{"Colonna MT"},
+                new String[]{"Forte"},
+                new String[]{"Gabriola"},
+                new String[]{"Goudy Stout"},
+                new String[]{"Rockwell Extra Bold"},
+                new String[]{"Onyx"},
+                new String[]{"Informal Roman"},
+                new String[]{"Arial Rounded MT Bold"},
+                new String[]{"Niagara"},
+                new String[]{"Engravers MT"},
+                // 经典衬线
+                new String[]{"Georgia"},
+                new String[]{"Palatino Linotype"},
+                new String[]{"Bookman Old Style"},
+                new String[]{"Book Antiqua"},
+                new String[]{"Garamond"},
+                new String[]{"Baskerville Old Face"},
+                new String[]{"Century Schoolbook"},
+                new String[]{"Century"},
+                new String[]{"Century Gothic"},
+                new String[]{"Cambria"},
+                new String[]{"Constantia"},
+                new String[]{"Perpetua"},
+                new String[]{"Bodoni MT"},
+                new String[]{"Bell MT"},
+                new String[]{"Times New Roman"},
+                new String[]{"Rockwell"},
+                new String[]{"Lucida Bright"},
+                new String[]{"Lucida Fax"},
+                new String[]{"Lucida Sans"},
+                new String[]{"Lucida Sans Typewriter"},
+                new String[]{"OCR A Extended"});
+        java.util.Set<String> fontNorm = new java.util.HashSet<>();
+        for (String f : javafx.scene.text.Font.getFamilies()) fontNorm.add(normFontName(f));
+        List<String> fontFamilies = new ArrayList<>();
+        for (String[] cand : curatedFonts) {
+            String hit = null;
+            for (String name : cand) {
+                if (fontNorm.contains(normFontName(name))) { hit = name; break; }
+            }
+            if (hit != null) fontFamilies.add(hit);
+        }
         cbTextFont.setItems(FXCollections.observableArrayList(fontFamilies));
         cbTextFont.setValue("Microsoft YaHei");
+
+        // ── 间隙字幕编辑器（两行独立字体/字号）──
+        cbCapFont1.setItems(FXCollections.observableArrayList(fontFamilies));
+        cbCapFont2.setItems(FXCollections.observableArrayList(fontFamilies));
+        cbCapFont1.setValue("Microsoft YaHei");
+        cbCapFont2.setValue("Microsoft YaHei");
+        tfCapLine1.textProperty().addListener((o, ov, nv) -> applyCaptionEditor());
+        tfCapLine2.textProperty().addListener((o, ov, nv) -> applyCaptionEditor());
+        slCapSize1.valueProperty().addListener((o, ov, nv) -> {
+            if (lblCapSize1 != null) lblCapSize1.setText(String.valueOf(nv.intValue()));
+            applyCaptionEditor();
+        });
+        slCapSize2.valueProperty().addListener((o, ov, nv) -> {
+            if (lblCapSize2 != null) lblCapSize2.setText(String.valueOf(nv.intValue()));
+            applyCaptionEditor();
+        });
+        cbCapFont1.valueProperty().addListener((o, ov, nv) -> applyCaptionEditor());
+        cbCapFont2.valueProperty().addListener((o, ov, nv) -> applyCaptionEditor());
+        cpCapColor.valueProperty().addListener((o, ov, nv) -> applyCaptionEditor());
+        cbCapBgBar.selectedProperty().addListener((o, ov, nv) -> applyCaptionEditor());
+        slCapSpacing.valueProperty().addListener((o, ov, nv) -> applyCaptionEditor());
 
         tfCustomText.textProperty().addListener((o, ov, nv) -> {
             syncLiveTextLine();
@@ -273,6 +551,10 @@ public class MainController implements Initializable {
         // 滑杆与数字输入框双向同步
         zoomSlider.valueProperty().addListener((o, ov, nv) -> {
             double z = nv.doubleValue();
+            if (puzzleMode) {
+                if (!isUpdating) setZoom(z);
+                return;
+            }
             if (Math.abs(z - zoomValue) > 0.0001) {
                 zoomValue = z;
                 tfZoomValue.setText(String.format("%.0f%%", z * 100));
@@ -339,13 +621,16 @@ public class MainController implements Initializable {
         dropTarget.setOnScroll(e -> {
             if (e.isAltDown()) {
                 double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
-                setZoom(getZoom() + delta);
+                setZoom((puzzleMode ? puzzlePreviewZoom : getZoom()) + delta);
                 e.consume();
             }
         });
 
         rootPane.sceneProperty().addListener((obs, oldScene, newScene) -> {
             if (newScene != null) {
+                // 窗口最小化/隐藏时暂停重绘，恢复后补渲染（规避 D3D 退化状态下的纹理异常）
+                newScene.windowProperty().addListener((wo, oldWin, newWin) -> attachWindowPause(newWin));
+                if (newScene.getWindow() != null) attachWindowPause(newScene.getWindow());
                 newScene.setOnKeyPressed(ke -> {
                     if (ke.isControlDown() && ke.getCode() == KeyCode.A) {
                         selectAllImages();
@@ -597,6 +882,21 @@ public class MainController implements Initializable {
         return t;
     });
     private final AtomicBoolean renderScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean puzzleRenderScheduled = new AtomicBoolean(false);
+    private final AtomicBoolean puzzleDirty = new AtomicBoolean(false);
+    private final AtomicBoolean normalDirty = new AtomicBoolean(false);
+    /** 窗口最小化/不可见时暂停重绘：Canvas 在退化渲染状态下保持脏区会每帧重试创建纹理，
+     *  触发 Intel 核显 D3D 驱动的 "Illegal texture dimensions" 已知缺陷（恢复可见后补一次渲染） */
+    private volatile boolean windowRenderPaused = false;
+    /** 拼图图片缓存：path@分辨率档 → 解码+方向+sRGB+降采样后的图（LRU 上限 16 张，超大图不缓存）。
+     *  按分辨率档位缓存后，滚轮连续缩放格子时各档复用，避免反复解码大图卡顿 */
+    private final Map<String, BufferedImage> puzzleImageCache =
+            Collections.synchronizedMap(new LinkedHashMap<String, BufferedImage>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, BufferedImage> eldest) {
+                    return size() > 16;
+                }
+            });
 
     private final ExecutorService thumbExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "thumb-worker");
@@ -609,12 +909,27 @@ public class MainController implements Initializable {
     private void onSettingChanged() {
         if (isUpdating) return;
         syncModelFromUI();
-        clearThumbCache();
+        saveCurrentTemplate();
+        invalidateCurrentThumb();
         scheduleRender();
+    }
+
+    /** 当前图模板立即写回独立快照：保证每张照片参数完全独立，切换/预览/导出都从各自快照恢复 */
+    private void saveCurrentTemplate() {
+        if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
+            File cur = imageFiles.get(currentImageIndex);
+            if (cur != null) {
+                imageTemplates.put(cur, cloneTemplate(template));
+            }
+        }
     }
 
     /** 合并高频参数变化：防抖窗口内最多触发一次预览渲染，避免拖动滑块时逐帧全量重绘 */
     private void scheduleRender() {
+        if (isWindowPaused()) {
+            normalDirty.set(true);
+            return;
+        }
         if (renderScheduled.compareAndSet(false, true)) {
             renderScheduler.schedule(() -> {
                 renderScheduled.set(false);
@@ -628,8 +943,16 @@ public class MainController implements Initializable {
         undoStack.push(cloneTemplate(template));
         redoStack.clear();
         syncModelFromUI();
-        clearThumbCache();
+        invalidateCurrentThumb();
         renderPreview();
+    }
+
+    /** 仅失效当前图片的缩略图：参数变化只影响当前图的独立模板快照，其他图缩略图仍然有效 */
+    private void invalidateCurrentThumb() {
+        if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
+            File cur = imageFiles.get(currentImageIndex);
+            if (cur != null) thumbCache.remove(cur);
+        }
     }
 
     private void syncModelFromUI() {
@@ -651,6 +974,17 @@ public class MainController implements Initializable {
             if (minMargin >= 5) {
                 template.setPhotoFrameBorderSize(minMargin);
             }
+        } catch (Exception ignored) {}
+
+        // 相框参数区：类型/位置/字号/模糊强度写入模板，保证每张图片各自独立
+        try {
+            template.setParamType("完整参数".equals(cbParamType.getValue()) ? 0 : 1);
+            template.setParamPosition(cbParamPosition.getValue());
+        } catch (Exception ignored) {}
+        BorderProcessor.setParamType(template.getParamType());
+        BorderProcessor.setBlurIntensity(template.getBlurIntensity());
+        try {
+            WatermarkRender.setPosition(positionOf(cbParamPosition.getValue()));
         } catch (Exception ignored) {}
 
         LayerBorder layer = getCurrentLayer();
@@ -826,6 +1160,12 @@ public class MainController implements Initializable {
         slParamFontSize.setValue(template.getParamFontSize());
         BorderProcessor.setExifFontSize((int) slParamFontSize.getValue());
         lblParamFontSize.setText((int)slParamFontSize.getValue() + "px");
+        cbParamType.setValue(template.getParamType() == 0 ? "完整参数" : "居中参数");
+        String pos = template.getParamPosition();
+        cbParamPosition.setValue(pos == null || pos.isEmpty() ? "居中" : pos);
+        BorderProcessor.setParamType(template.getParamType());
+        BorderProcessor.setBlurIntensity(template.getBlurIntensity());
+        WatermarkRender.setPosition(positionOf(cbParamPosition.getValue()));
 
         updateLayerList();
         loadLayerToUI();
@@ -870,6 +1210,21 @@ public class MainController implements Initializable {
         engine.setSelectedTextLine(null);
         engine.setSelectedSticker(null);
         IconManager.setSelected(null);
+
+        // 拼图面板回显
+        if (slPuzzleGap != null) {
+            slPuzzleGap.setValue(template.getPuzzlrConfig().getGap());
+            boolean blurBg = template.getPuzzlrConfig().getBgMode() == 1;
+            cbPuzzleBg.setValue(blurBg ? "模糊照片底" : "白色背景");
+            cpPuzzleBorder.setDisable(blurBg);
+            try {
+                cpPuzzleBorder.setValue(javafx.scene.paint.Color.web(template.getPuzzlrConfig().getBorderColor()));
+            } catch (Exception e) {
+                cpPuzzleBorder.setValue(javafx.scene.paint.Color.WHITE);
+            }
+            double canvasR = template.getPuzzlrConfig().getCanvasRatio();
+            cbPuzzleCanvas.setValue(canvasR <= 0 ? "自动" : ratioLabel(canvasR));
+        }
 
         isUpdating = false;
     }
@@ -961,6 +1316,35 @@ public class MainController implements Initializable {
         }
     }
 
+    /** 右侧栏所有滑块自动附加数值标签（已有专属数值显示的除外） */
+    private void attachSliderValueLabels(javafx.scene.Parent root) {
+        java.util.Set<String> skip = java.util.Set.of("slCapSize1", "slCapSize2", "slGlobalMargin");
+        java.util.List<javafx.scene.control.Slider> sliders = new java.util.ArrayList<>();
+        collectSliders(root, sliders);
+        for (javafx.scene.control.Slider s : sliders) {
+            if (s.getId() != null && skip.contains(s.getId())) continue;
+            if (!(s.getParent() instanceof javafx.scene.layout.Pane pane)) continue;
+            javafx.scene.control.Label lbl = new javafx.scene.control.Label();
+            lbl.setStyle("-fx-min-width: 34; -fx-alignment: CENTER_RIGHT; -fx-text-fill: -fx-text-background-color;");
+            int idx = pane.getChildren().indexOf(s);
+            pane.getChildren().add(idx + 1, lbl);
+            Runnable upd = () -> {
+                double v = s.getValue();
+                double range = s.getMax() - s.getMin();
+                lbl.setText(range >= 20 ? String.valueOf((int) Math.round(v)) : String.format("%.1f", v));
+            };
+            s.valueProperty().addListener((o, ov, nv) -> upd.run());
+            upd.run();
+        }
+    }
+
+    private void collectSliders(javafx.scene.Node node, java.util.List<javafx.scene.control.Slider> out) {
+        if (node instanceof javafx.scene.control.Slider s) { out.add(s); return; }
+        if (node instanceof javafx.scene.Parent p) {
+            for (javafx.scene.Node n : p.getChildrenUnmodifiable()) collectSliders(n, out);
+        }
+    }
+
     private void setupDragDrop() {
         rootPane.sceneProperty().addListener((obs, oldScene, newScene) -> {
             if (newScene != null) {
@@ -1008,6 +1392,7 @@ public class MainController implements Initializable {
 
     private void loadImage(File file) {
         try {
+            currentImageFile = file;
             // Save current template for the image being left
             if (currentImageIndex >= 0 && currentImageIndex < imageFiles.size()) {
                 File oldFile = imageFiles.get(currentImageIndex);
@@ -1031,16 +1416,33 @@ public class MainController implements Initializable {
             currentImageIndex = idx;
 
             // Restore saved template for this image, or start fresh
+            // 深拷贝恢复：当前编辑模板与快照彻底解耦，避免引用共享导致调节互相影响
             TemplateModel saved = imageTemplates.get(file);
             if (saved != null) {
-                template = saved;
+                template = cloneTemplate(saved);
             } else {
-                template = new TemplateModel();
+                // 新图无快照：继承当前编辑中的模板（克隆解耦），保证连续打开/拖入的图片效果一致；
+                // 调参后 saveCurrentTemplate 写入独立快照，每图仍然各自独立
+                template = cloneTemplate(template);
+                // 参数水印开关不随新图继承：新图默认不显示相机参数，避免点击胶片框时复选框被自动选中
+                if (template.getDecorConfig() != null) {
+                    template.getDecorConfig().setExifAutoText(0);
+                }
             }
+            logExport("[loadImage] " + file.getName() + " saved=" + (saved != null) + " idx=" + idx
+                    + " current=" + currentImageIndex + " fp=" + templateFingerprint(template));
 
             selectedIndices.clear();
             selectedIndices.add(idx);
             originImage = new Image(file.toURI().toString(), false);
+
+            // 预览照片按 EXIF 方向旋转，与导出/缩略图方向一致：
+            // 竖拍照片旋转后宽高互换，画布尺寸与文字位置才能与导出完全一致
+            ExifReader.ExifData exifData = ExifReader.parse(file);
+            if (exifData != null && exifData.orientation > 1) {
+                originImage = rotateFxImage(originImage, exifData.orientation);
+            }
+            BorderProcessor.setExifData(exifData);
 
             // 画布尺寸随照片变化：按比例平移已放置图标，保证在其他照片上的相对位置一致
             if (oldCanvas != null && oldCanvas[0] > 0 && oldCanvas[1] > 0) {
@@ -1054,9 +1456,6 @@ public class MainController implements Initializable {
                     }
                 }
             }
-
-            ExifReader.ExifData exifData = ExifReader.parse(file);
-            BorderProcessor.setExifData(exifData);
 
             if (exifData != null) {
                 tfExifBrand.setText(exifData.make != null ? exifData.make : "");
@@ -1212,7 +1611,10 @@ public class MainController implements Initializable {
     }
 
     private void switchToImage(int idx) {
-        if (idx < 0 || idx >= imageFiles.size() || idx == currentImageIndex) return;
+        if (idx < 0 || idx >= imageFiles.size() || idx == currentImageIndex) {
+            logExport("[switchToImage] skip idx=" + idx + " current=" + currentImageIndex);
+            return;
+        }
         loadImage(imageFiles.get(idx));
     }
 
@@ -1276,8 +1678,9 @@ public class MainController implements Initializable {
      * 渲染因依赖 Canvas snapshot 仍在界面线程串行执行；输出内容与顺序无关，结果与串行版本一致。
      */
     private void exportImagesInParallel(List<File> files, File exportDir, String fmt, float jpegQuality) {
-        // 原画质导出内存占用大：并发控制在 2 线程内，避免多张大图同时渲染导致内存溢出
-        int threads = Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors()));
+        // FX 渲染（Canvas.snapshot）在界面线程串行执行，多线程并行只对 AWT 预处理有收益；
+        // 单线程可避免多线程同时创建/写入大尺寸 WritableImage 时的 GPU 纹理竞争（曾触发 D3D 设备崩溃）
+        int threads = 1;
         ExecutorService pool = Executors.newFixedThreadPool(threads, r -> {
             Thread t = new Thread(r, "export-worker");
             t.setDaemon(true);
@@ -1420,24 +1823,27 @@ public class MainController implements Initializable {
             return;
         }
         syncModelFromUI();
+        saveCurrentTemplate();
         // 同步边框只同步边框效果：剥离 EXIF 自动参数行，相机参数由每张图片自己的 EXIF 决定
         int count = 0;
         for (int idx : selectedIndices) {
-            if (idx == currentImageIndex) continue;
-            TemplateModel target = cloneTemplate(template);
-            if (target.getDecorConfig() != null && target.getDecorConfig().getTextLines() != null) {
-                target.getDecorConfig().getTextLines().removeIf(MainController::isAutoExifLine);
-            }
-            // 文字坐标按源画布→目标画布换算，保证同步后文字在其他照片上的相对位置一致
-            double[] srcCanvas = engine.computeCanvasSize(originImage, template);
-            double[] dstSize = readImageSize(imageFiles.get(idx));
-            if (dstSize != null) {
-                double[] dstCanvas = engine.computeCanvasSize(dstSize[0], dstSize[1], target);
-                rebaseTextLinesToCanvas(target, srcCanvas[0], srcCanvas[1], dstCanvas[0], dstCanvas[1]);
-            }
-            // 真正把当前边框同步到选中的图片：切换预览与导出都使用同一套边框
-            imageTemplates.put(imageFiles.get(idx), target);
-            count++;
+            try {
+                if (idx == currentImageIndex) continue;
+                TemplateModel target = cloneTemplate(template);
+                if (target.getDecorConfig() != null && target.getDecorConfig().getTextLines() != null) {
+                    target.getDecorConfig().getTextLines().removeIf(MainController::isAutoExifLine);
+                }
+                // 文字坐标按源画布→目标画布换算，保证同步后文字在其他照片上的相对位置一致
+                double[] srcCanvas = engine.computeCanvasSize(originImage, template);
+                double[] dstSize = readImageSize(imageFiles.get(idx));
+                if (dstSize != null) {
+                    double[] dstCanvas = engine.computeCanvasSize(dstSize[0], dstSize[1], target);
+                    rebaseTextLinesToCanvas(target, srcCanvas[0], srcCanvas[1], dstCanvas[0], dstCanvas[1]);
+                }
+                // 真正把当前边框同步到选中的图片：切换预览与导出都使用同一套边框
+                imageTemplates.put(imageFiles.get(idx), target);
+                count++;
+            } catch (Exception ignored) {}
         }
         clearThumbCache();
         updateFilmStrip();
@@ -1495,7 +1901,62 @@ public class MainController implements Initializable {
     }
 
     /** 设置预览缩放并刷新输入框与预览 */
+    /** 实时求值窗口是否处于不可绘制状态（最小化/未显示），避免依赖监听器缓存导致永久暂停 */
+    private boolean isWindowPaused() {
+        if (rootPane.getScene() == null) return false;
+        javafx.stage.Window w = rootPane.getScene().getWindow();
+        if (w == null || !w.isShowing()) return true;
+        return w instanceof javafx.stage.Stage s && s.isIconified();
+    }
+
+    /** 挂接窗口显示/最小化状态 → 暂停或恢复重绘 */
+    private void attachWindowPause(javafx.stage.Window w) {
+        if (w == null) return;
+        w.showingProperty().addListener((o, ov, nv) -> updateWindowPause());
+        if (w instanceof javafx.stage.Stage st) {
+            st.iconifiedProperty().addListener((o, ov, nv) -> updateWindowPause());
+        }
+        updateWindowPause();
+    }
+
+    /** 依据窗口当前状态切换重绘暂停；恢复可见时补一次渲染 */
+    private void updateWindowPause() {
+        boolean paused = isWindowPaused();
+        windowRenderPaused = paused;
+        if (!paused) {
+            if (puzzleMode) {
+                if (puzzleDirty.get()) schedulePuzzleRender();
+                else updatePuzzleViewFit();
+            } else if (normalDirty.compareAndSet(true, false)) {
+                refreshView();
+            }
+        }
+    }
+
+    /** 顶部缩放控件回显指定值（不触发渲染） */
+    private void syncTopZoomUI(double z) {
+        isUpdating = true;
+        try {
+            if (zoomSlider != null) zoomSlider.setValue(z);
+            if (tfZoomValue != null) tfZoomValue.setText(String.format("%.0f%%", z * 100));
+        } finally {
+            isUpdating = false;
+        }
+    }
+
     private void setZoom(double z) {
+        // 拼图模式：顶部缩放控件/普通滚轮/Alt+滚轮 控制拼图预览整体缩放
+        if (puzzleMode) {
+            puzzlePreviewZoom = Math.max(1.0, Math.min(4.0, z));
+            if (tfZoomValue != null) {
+                tfZoomValue.setText(String.format("%.0f%%", puzzlePreviewZoom * 100));
+            }
+            if (zoomSlider != null && Math.abs(zoomSlider.getValue() - puzzlePreviewZoom) > 0.0001) {
+                zoomSlider.setValue(puzzlePreviewZoom);
+            }
+            updatePuzzleViewFit();
+            return;
+        }
         zoomValue = Math.max(0.1, Math.min(3.0, z));
         if (tfZoomValue != null) {
             tfZoomValue.setText(String.format("%.0f%%", zoomValue * 100));
@@ -1537,13 +1998,6 @@ public class MainController implements Initializable {
     @FXML
     private void onPresetRounded() {
         template = createPreset("圆角边框");
-        refreshUI();
-        renderPreview();
-    }
-
-    @FXML
-    private void onPresetVintage() {
-        template = createPreset("复古边框");
         refreshUI();
         renderPreview();
     }
@@ -1600,9 +2054,8 @@ public class MainController implements Initializable {
         template.getCornerConfig().setCornerRadiusTR(200);
         template.getCornerConfig().setCornerRadiusBL(200);
         template.getCornerConfig().setCornerRadiusBR(200);
-        // 恢复共享渲染参数（背景模糊边框期望的圆角与模糊强度）
-        BorderProcessor.setCornerRadius(200);
-        BorderProcessor.setBlurIntensity(50);
+        // 模糊强度写入模板（渲染时从模板应用，保证每图独立）
+        template.setBlurIntensity(50);
         refreshUI();
         renderPreview();
     }
@@ -1753,6 +2206,66 @@ public class MainController implements Initializable {
         statusLabel.setText("已应用预设: 苹果深色圆角卡（黑底圆角悬浮）");
     }
 
+    /** 潮流风格：波普漫画风（白底粗黑描边 + 漫画拟声字） */
+    @FXML
+    private void onPresetPopArt() {
+        TemplateModel loaded = loadPresetFromJson("波普漫画风");
+        template = (loaded != null) ? loaded : createPreset("波普漫画风");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 波普漫画风（粗黑描边 + POW! 拟声字）");
+    }
+
+    /** 潮流风格：极光渐变（深蓝底 + 青紫粉渐变边带 + 柔光） */
+    @FXML
+    private void onPresetAurora() {
+        TemplateModel loaded = loadPresetFromJson("极光渐变");
+        template = (loaded != null) ? loaded : createPreset("极光渐变");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 极光渐变（青紫粉渐变 + 霓虹柔光）");
+    }
+
+    /** 潮流风格：杂志大刊头（超大衬线刊名 + 日期页码） */
+    @FXML
+    private void onPresetMagazine() {
+        TemplateModel loaded = loadPresetFromJson("杂志大刊头");
+        template = (loaded != null) ? loaded : createPreset("杂志大刊头");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 杂志大刊头（超大刊名 + 细线版式）");
+    }
+
+    /** 潮流风格：暗夜星空（深蓝底 + 星字符 + 浅蓝细描边） */
+    @FXML
+    private void onPresetStarry() {
+        TemplateModel loaded = loadPresetFromJson("暗夜星空");
+        template = (loaded != null) ? loaded : createPreset("暗夜星空");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 暗夜星空（深蓝星夜 + 星点装饰）");
+    }
+
+    /** 潮流风格：复古登机牌（米色票根 + 齿孔 + 票面文字） */
+    @FXML
+    private void onPresetBoarding() {
+        TemplateModel loaded = loadPresetFromJson("复古登机牌");
+        template = (loaded != null) ? loaded : createPreset("复古登机牌");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 复古登机牌（票根齿孔 + 登机信息）");
+    }
+
+    /** 潮流风格：金箔奢华（金属纹理金边 + 深棕底 + 金色柔光） */
+    @FXML
+    private void onPresetGold() {
+        TemplateModel loaded = loadPresetFromJson("金箔奢华");
+        template = (loaded != null) ? loaded : createPreset("金箔奢华");
+        refreshUI();
+        renderPreview();
+        statusLabel.setText("已应用预设: 金箔奢华（金属金边 + 金色柔光）");
+    }
+
     @FXML
     private void onPresetCardLogoParam() {
         template.setPhotoFrameStyle("CARD_LOGO_PARAM");
@@ -1844,9 +2357,734 @@ public class MainController implements Initializable {
         onSettingChanged();
     }
 
+    // ══════════════════════════ 拼图 ══════════════════════════
+
+    /** 左侧拼图布局按钮：userData=布局类型 */
+    @FXML
+    private void onPuzzleLayout(javafx.event.ActionEvent e) {
+        int type = Integer.parseInt(((Button) e.getSource()).getUserData().toString());
+        enterPuzzleMode(type);
+    }
+
+    /** 进入拼图模式：设置样式 PUZZLE + 布局类型；按胶片框选中顺序填充空槽，不足用当前图补位 */
+    private void enterPuzzleMode(int type) {
+        PuzzlrConfig pc = template.getPuzzlrConfig();
+        pc.setLayoutType(type);
+        // 切换布局：绑定轴已消失的间隙字幕自动删除
+        pruneGapCaptions(pc);
+        closeCaptionEditor();
+        // 进入拼图：视图缩放复位 100%，顶部缩放控件切到拼图状态
+        puzzlePreviewZoom = 1.0;
+        puzzleViewTx = 0;
+        puzzleViewTy = 0;
+        syncTopZoomUI(1.0);
+        // 目标填充序列：胶片框选中顺序（按索引排序）优先，不足用当前图补位
+        List<String> want = new ArrayList<>();
+        List<Integer> sel = new ArrayList<>(selectedIndices);
+        Collections.sort(sel);
+        for (int idx : sel) {
+            if (idx >= 0 && idx < imageFiles.size() && want.size() < pc.getSlots().size()) {
+                want.add(imageFiles.get(idx).getAbsolutePath());
+            }
+        }
+        for (int j = want.size(); j < pc.getSlots().size(); j++) {
+            want.add(currentImageFile != null ? currentImageFile.getAbsolutePath() : null);
+        }
+        // 与现状不同才重填（相同则保留裁剪微调）；换图的格子重置缩放/偏移
+        for (int j = 0; j < pc.getSlots().size(); j++) {
+            String nw = want.get(j);
+            if (!Objects.equals(pc.getSlots().get(j).getImagePath(), nw)) {
+                pc.getSlots().get(j).setImagePath(nw);
+                pc.getSlots().get(j).setOffsetX(0.5);
+                pc.getSlots().get(j).setOffsetY(0.5);
+                pc.getSlots().get(j).setZoom(1.0);
+            }
+        }
+        template.setPhotoFrameStyle("PUZZLE");
+        puzzleMode = true;
+        puzzleSelectedSlot = 0;
+        previewCanvas.setVisible(false);
+        hScrollBar.setVisible(false);
+        vScrollBar.setVisible(false);
+        try {
+            rightTabPane.getSelectionModel().select(6);
+        } catch (Exception ignored) {}
+        updatePuzzleSlotUI();
+        refreshGapPicker();
+        schedulePuzzleRender();
+        statusLabel.setText("拼图: " + PuzzlrConfig.layoutName(type) + "（双击格子换图，拖动分割线调大小）");
+    }
+
+    @FXML
+    private void onPuzzleClearSlots() {
+        for (SlotConfig s : template.getPuzzlrConfig().getSlots()) s.setImagePath(null);
+        schedulePuzzleRender();
+        statusLabel.setText("已清空拼图格子");
+    }
+
+    private SlotConfig currentPuzzleSlot() {
+        List<SlotConfig> slots = template.getPuzzlrConfig().getSlots();
+        if (puzzleSelectedSlot < 0 || puzzleSelectedSlot >= slots.size()) {
+            puzzleSelectedSlot = slots.isEmpty() ? -1 : 0;
+            if (puzzleSelectedSlot < 0) return null;
+        }
+        return slots.get(puzzleSelectedSlot);
+    }
+
+    /** 拼接预览渲染：AWT 合成 → ImageView 显示，fit 到预览区（仅 FX 线程应用结果） */
+    private void applyPuzzlePreview(BufferedImage out) {
+        if (out == null) return;
+        WritableImage fx = SwingFXUtils.toFXImage(out, null);
+        puzzlePreviewView.setImage(fx);
+        puzzlePreviewView.setVisible(true);
+        placeholderView.setVisible(false);
+        updatePuzzleViewFit();
+        lblResolution.setText(String.format("拼图分辨率: %dx%d", out.getWidth(), out.getHeight()));
+        lblCanvasSize.setText("画布: 拼图合成");
+    }
+
+    /** 拼图合成：读每格图片（EXIF 方向 + sRGB + 按需降采样），按布局/间距/裁剪参数合成。edge=输出长边。
+     *  重活（解码数亿像素）只允许在后台线程调用，禁止在 FX 线程直接调用。 */
+    private BufferedImage renderPuzzleImage(int edge) {
+        PuzzlrConfig pc = template.getPuzzlrConfig();
+        List<BufferedImage> imgs = new ArrayList<>();
+        double[][] rel = pc.buildSlots();
+        for (int i = 0; i < pc.getSlots().size(); i++) {
+            SlotConfig s = pc.getSlots().get(i);
+            BufferedImage img = null;
+            if (s.getImagePath() != null) {
+                double frac = i < rel.length ? Math.max(rel[i][2], rel[i][3]) : 1.0;
+                int need = (int) Math.min(6000, Math.max(600, frac * edge * s.getZoom() * 1.15));
+                // 预览渲染（edge<4000）：限制原图分辨率上限，避免格子滚轮缩放时反复解码超大图
+                if (edge < 4000) need = Math.min(need, 2400);
+                img = loadPuzzleSlotImage(s.getImagePath(), need);
+            }
+            imgs.add(img);
+        }
+        return com.qingframe.core.PuzzlrRenderer.render(imgs, pc, edge);
+    }
+
+    /** 读取单格图片：EXIF 方向 + sRGB + 降采样到 needEdge 长边；带 LRU 缓存避免拖动时反复解码 */
+    private BufferedImage loadPuzzleSlotImage(String path, int needEdge) {
+        // 分辨率档位化：need 随滚轮缩放连续变化，按档缓存避免缓存频繁失效
+        int tier = 800;
+        if (needEdge > 1200) tier = 1200;
+        if (needEdge > 1600) tier = 1600;
+        if (needEdge > 2000) tier = 2000;
+        if (needEdge > 2400) tier = 2400;
+        if (needEdge > 3000) tier = 3000;
+        if (needEdge > 4000) tier = 4000;
+        if (needEdge > 5000) tier = 5000;
+        String key = path + "@" + tier;
+        BufferedImage cached = puzzleImageCache.get(key);
+        if (cached != null && Math.max(cached.getWidth(), cached.getHeight()) >= needEdge) return cached;
+        try {
+            File f = new File(path);
+            if (!f.exists()) return null;
+            int target = Math.max(needEdge, 800);
+            // 先缩略解码 + 降采样，再做方向旋转/色彩转换：
+            // 大图全尺寸逐像素旋转/转色会卡死数秒并占用数百 MB 内存，缩到目标尺寸后这些操作只需几十毫秒
+            BufferedImage img = decodePuzzleScaled(f, target);
+            if (img == null) return null;
+            ExifReader.ExifData ex = ExifReader.parse(f);
+            if (ex != null) img = applyOrientation(img, ex.orientation);
+            img = toSRGB(img);
+            // 超大图不进缓存（防内存膨胀），其余 LRU 缓存
+            if ((long) img.getWidth() * img.getHeight() <= 24_000_000L) {
+                puzzleImageCache.put(key, img);
+            }
+            return img;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 解码图片并按目标长边降采样：ImageIO 整数采样粗读（JPEG/PNG 解码层直接跳像素），再精确缩放。
+     *  避免对几千万像素大图全尺寸解码后再缩放（卡顿与内存峰值的主要来源） */
+    private BufferedImage decodePuzzleScaled(File f, int target) {
+        return decodePuzzleScaled(f, target, false);
+    }
+
+    /** keepAlpha=true 时缩放目标保留透明通道（供缩略图等可能含透明的场景） */
+    private BufferedImage decodePuzzleScaled(File f, int target, boolean keepAlpha) {
+        int rgbType = keepAlpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB;
+        try (javax.imageio.stream.ImageInputStream in = javax.imageio.ImageIO.createImageInputStream(f)) {
+            if (in != null) {
+                java.util.Iterator<javax.imageio.ImageReader> it = javax.imageio.ImageIO.getImageReaders(in);
+                if (it.hasNext()) {
+                    javax.imageio.ImageReader r = it.next();
+                    try {
+                        r.setInput(in, true, true);
+                        int w = r.getWidth(0), h = r.getHeight(0);
+                        int subs = 1;
+                        while (w / (subs * 2L) > target || h / (subs * 2L) > target) subs *= 2;
+                        javax.imageio.ImageReadParam p = r.getDefaultReadParam();
+                        if (subs > 1) p.setSourceSubsampling(subs, subs, 0, 0);
+                        BufferedImage img = r.read(0, p);
+                        // 整数采样后可能仍大于目标，精确缩放到目标长边
+                        int le = Math.max(img.getWidth(), img.getHeight());
+                        if (le > target) {
+                            double sc = (double) target / le;
+                            BufferedImage small = new BufferedImage(
+                                    Math.max(1, (int) Math.round(img.getWidth() * sc)),
+                                    Math.max(1, (int) Math.round(img.getHeight() * sc)),
+                                    keepAlpha && img.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB : rgbType);
+                            Graphics2D gg = small.createGraphics();
+                            gg.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                                    java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                            gg.drawImage(img, 0, 0, small.getWidth(), small.getHeight(), null);
+                            gg.dispose();
+                            img = small;
+                        }
+                        return img;
+                    } finally {
+                        r.dispose();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        // 无可用 reader 或读取异常：回退全量解码 + 缩放
+        try {
+            BufferedImage fallback = ImageIO.read(f);
+            if (fallback == null) return null;
+            int le = Math.max(fallback.getWidth(), fallback.getHeight());
+            if (le > target) {
+                double sc = (double) target / le;
+                BufferedImage small = new BufferedImage(
+                        Math.max(1, (int) Math.round(fallback.getWidth() * sc)),
+                        Math.max(1, (int) Math.round(fallback.getHeight() * sc)),
+                        keepAlpha && fallback.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB : rgbType);
+                Graphics2D gg = small.createGraphics();
+                gg.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                        java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                gg.drawImage(fallback, 0, 0, small.getWidth(), small.getHeight(), null);
+                gg.dispose();
+                return small;
+            }
+            return fallback;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 拼图渲染入口（线程安全）：置脏 + 后台合成，完成后回 FX 线程应用；渲染期间再有变更会自动补一轮 */
+    private void schedulePuzzleRender() {
+        puzzleDirty.set(true);
+        if (isWindowPaused()) return;
+        if (!puzzleRenderScheduled.compareAndSet(false, true)) return;
+        renderScheduler.schedule(() -> {
+            puzzleDirty.set(false);
+            BufferedImage out = null;
+            try {
+                // 预览分辨率：预览框显示尺寸有限，1600 长边足够，合成与转换更快
+                out = renderPuzzleImage(1600);
+            } catch (Exception ignored) {}
+            BufferedImage fin = out;
+            Platform.runLater(() -> {
+                puzzleRenderScheduled.set(false);
+                if (puzzleMode && fin != null) applyPuzzlePreview(fin);
+                if (puzzleDirty.get()) schedulePuzzleRender();
+            });
+        }, 150, TimeUnit.MILLISECONDS);
+    }
+
+    private void updatePuzzleSlotUI() {
+        if (lblPuzzleSlot == null) return;
+        List<SlotConfig> slots = template.getPuzzlrConfig().getSlots();
+        // -1 = 已取消选中（点击画布外），不自动回选
+        if (puzzleSelectedSlot < 0 || puzzleSelectedSlot >= slots.size()) {
+            lblPuzzleSlot.setText("未选中格子");
+            return;
+        }
+        SlotConfig s = slots.get(puzzleSelectedSlot);
+        String name = s.getImagePath() != null ? new File(s.getImagePath()).getName() : "（空）";
+        lblPuzzleSlot.setText("格子 " + (puzzleSelectedSlot + 1) + ": " + name);
+        isUpdating = true;
+        try {
+            slSlotOffsetX.setValue(s.getOffsetX());
+            slSlotOffsetY.setValue(s.getOffsetY());
+            slSlotZoom.setValue(s.getZoom());
+            cbSlotFill.setValue(s.getFillMode() == 1 ? "完整包含" : "填满裁切");
+        } finally {
+            isUpdating = false;
+        }
+        refreshPuzzleOverlay();
+    }
+
+    /** 拼图预览 fit 到预览区（整体缩放 puzzlePreviewZoom ≥1，不重渲染） */
+    private void updatePuzzleViewFit() {
+        Image img = puzzlePreviewView.getImage();
+        if (img == null || !puzzleMode) return;
+        double cw = puzzleViewport.getWidth();
+        double ch = puzzleViewport.getHeight();
+        if (!Double.isFinite(cw) || !Double.isFinite(ch) || cw <= 10 || ch <= 10) return;
+        double iw = img.getWidth(), ih = img.getHeight();
+        if (!Double.isFinite(iw) || !Double.isFinite(ih) || iw <= 0 || ih <= 0) return;
+        double s = Math.min(cw / iw, ch / ih) * puzzlePreviewZoom;
+        if (!Double.isFinite(s) || s <= 0) return;
+        // 硬上限：防止任何异常路径把显示尺寸推到纹理极限
+        if (iw * s > 16000 || ih * s > 16000) s = Math.min(16000 / iw, 16000 / ih);
+        puzzleViewScale = s;
+        puzzleFitW = img.getWidth() * s;
+        puzzleFitH = img.getHeight() * s;
+        puzzlePreviewView.setFitWidth(puzzleFitW);
+        puzzlePreviewView.setFitHeight(puzzleFitH);
+        // 非托管节点手动居中（不参与布局，避免反馈循环）
+        puzzlePreviewView.relocate((cw - puzzleFitW) / 2, (ch - puzzleFitH) / 2);
+        applyPuzzleViewTranslate();
+        refreshPuzzleOverlay();
+    }
+
+    /** 钳制并应用视图平移（放大后可平移，未放大归零） */
+    private void applyPuzzleViewTranslate() {
+        double ovfX = Math.max(0, puzzleFitW - puzzleViewport.getWidth()) / 2;
+        double ovfY = Math.max(0, puzzleFitH - puzzleViewport.getHeight()) / 2;
+        if (puzzlePreviewZoom <= 1.001) { puzzleViewTx = 0; puzzleViewTy = 0; }
+        puzzleViewTx = clamp(puzzleViewTx, -ovfX, ovfX);
+        puzzleViewTy = clamp(puzzleViewTy, -ovfY, ovfY);
+        puzzlePreviewView.setTranslateX(puzzleViewTx);
+        puzzlePreviewView.setTranslateY(puzzleViewTy);
+        if (puzzleOverlay != null) {
+            puzzleOverlay.setTranslateX(puzzleViewTx);
+            puzzleOverlay.setTranslateY(puzzleViewTy);
+        }
+    }
+
+    /** 高亮层：选中格粗描边 + 分割把手条（mouseTransparent，仅视觉；交互仍在 puzzlePreviewView） */
+    private void refreshPuzzleOverlay() {
+        if (puzzleOverlay == null) return;
+        Image img = puzzlePreviewView.getImage();
+        boolean show = puzzleMode && img != null && puzzlePreviewView.getFitWidth() > 0;
+        puzzlePreviewView.setVisible(show);
+        puzzleOverlay.setVisible(show);
+        if (!show) {
+            puzzleOverlay.getChildren().clear();
+            return;
+        }
+        double w = puzzlePreviewView.getFitWidth();
+        double h = puzzlePreviewView.getFitHeight();
+        // 非托管 overlay：手动调整大小并居中到视口（禁止设置 min/pref，会撑爆布局形成死循环）
+        puzzleOverlay.resize(w, h);
+        puzzleOverlay.relocate((puzzleViewport.getWidth() - w) / 2, (puzzleViewport.getHeight() - h) / 2);
+        puzzleOverlay.getChildren().clear();
+        PuzzlrConfig pc = template.getPuzzlrConfig();
+        double[][] rel = pc.buildSlots();
+        // 分割把手：轴位置画半透明细条，提示可拖拽
+        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
+        double[] av = pc.getAxisVals();
+        for (int i = 0; i < axes.length; i++) {
+            javafx.scene.shape.Rectangle hnd = axes[i][0] == 0
+                    ? new javafx.scene.shape.Rectangle(clamp(av[i] * w, 0, w) - 3, 0, 6, h)
+                    : new javafx.scene.shape.Rectangle(0, clamp(av[i] * h, 0, h) - 3, w, 6);
+            hnd.setFill(javafx.scene.paint.Color.web("#4FC3F7", 0.30));
+            hnd.setStroke(null);
+            puzzleOverlay.getChildren().add(hnd);
+        }
+        // 选中格高亮粗描边
+        if (puzzleSelectedSlot >= 0 && puzzleSelectedSlot < rel.length) {
+            double[] r = rel[puzzleSelectedSlot];
+            javafx.scene.shape.Rectangle sel = new javafx.scene.shape.Rectangle(
+                    r[0] * w + 1.5, r[1] * h + 1.5, Math.max(0, r[2] * w - 3), Math.max(0, r[3] * h - 3));
+            sel.setFill(null);
+            sel.setStroke(javafx.scene.paint.Color.web("#4FC3F7"));
+            sel.setStrokeWidth(3);
+            sel.setStrokeType(javafx.scene.shape.StrokeType.INSIDE);
+            puzzleOverlay.getChildren().add(sel);
+        }
+    }
+
+    /** 鼠标坐标 → 画布相对坐标（0-1） */
+    private double puzzleRelX(double x) {
+        double w = puzzlePreviewView.getFitWidth();
+        return w > 0 ? x / w : 0;
+    }
+
+    private double puzzleRelY(double y) {
+        double h = puzzlePreviewView.getFitHeight();
+        return h > 0 ? y / h : 0;
+    }
+
+    private int puzzleSlotAt(double rx, double ry) {
+        double[][] slots = template.getPuzzlrConfig().buildSlots();
+        for (int i = 0; i < slots.length; i++) {
+            double[] r = slots[i];
+            if (rx >= r[0] && rx <= r[0] + r[2] && ry >= r[1] && ry <= r[1] + r[3]) return i;
+        }
+        return -1;
+    }
+
+    private void setupPuzzleInteraction() {
+        // 悬浮反馈：近分割线 → 调整大小光标；格内 → 移动光标
+        puzzlePreviewView.setOnMouseMoved(e -> {
+            if (puzzlePreviewView.getImage() == null || puzzleDragging) return;
+            double rx = puzzleRelX(e.getX());
+            double ry = puzzleRelY(e.getY());
+            PuzzlrConfig pc = template.getPuzzlrConfig();
+            double[] av = pc.getAxisVals();
+            int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
+            Cursor c = null;
+            for (int i = 0; i < axes.length; i++) {
+                if (axes[i][0] == 0 && Math.abs(rx - av[i]) < 0.02) { c = Cursor.H_RESIZE; break; }
+                if (axes[i][0] == 1 && Math.abs(ry - av[i]) < 0.02) { c = Cursor.V_RESIZE; break; }
+            }
+            if (c == null && puzzleSlotAt(rx, ry) >= 0) c = Cursor.MOVE;
+            puzzlePreviewView.setCursor(c != null ? c : Cursor.DEFAULT);
+        });
+        puzzlePreviewView.setOnMousePressed(e -> {
+            if (puzzlePreviewView.getImage() == null) return;
+            // Shift+按下：平移预览视图（不干扰格子编辑）
+            if (e.isShiftDown()) {
+                panningView = true;
+                puzzleDragging = false;
+                panStartX = e.getSceneX();
+                panStartY = e.getSceneY();
+                panStartTx = puzzleViewTx;
+                panStartTy = puzzleViewTy;
+                e.consume();
+                return;
+            }
+            puzzleDragX = e.getX();
+            puzzleDragY = e.getY();
+            double rx = puzzleRelX(e.getX());
+            double ry = puzzleRelY(e.getY());
+            puzzleDragStartRelX = rx;
+            puzzleDragStartRelY = ry;
+            PuzzlrConfig pc = template.getPuzzlrConfig();
+            double[] av = pc.getAxisVals();
+            int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
+            puzzleDragAxis = false;
+            for (int i = 0; i < axes.length; i++) {
+                double pos = av[i];
+                boolean near = axes[i][0] == 0 ? Math.abs(rx - pos) < 0.03 : Math.abs(ry - pos) < 0.03;
+                if (near) {
+                    puzzleDragAxis = true;
+                    puzzleDragAxisIdx = i;
+                    break;
+                }
+            }
+            // 按下即选中所在格：高亮描边即时跟随
+            puzzlePressCell = puzzleSlotAt(rx, ry);
+            if (!puzzleDragAxis && puzzlePressCell >= 0 && puzzlePressCell != puzzleSelectedSlot) {
+                puzzleSelectedSlot = puzzlePressCell;
+                updatePuzzleSlotUI();
+                refreshPuzzleOverlay();
+            }
+            puzzleDragging = true;
+            e.consume();
+        });
+        puzzlePreviewView.setOnMouseDragged(e -> {
+            if (panningView) {
+                puzzleViewTx = panStartTx + (e.getSceneX() - panStartX);
+                puzzleViewTy = panStartTy + (e.getSceneY() - panStartY);
+                applyPuzzleViewTranslate();
+                e.consume();
+                return;
+            }
+            if (!puzzleDragging) return;
+            double rx = puzzleRelX(e.getX());
+            double ry = puzzleRelY(e.getY());
+            PuzzlrConfig pc = template.getPuzzlrConfig();
+            if (puzzleDragAxis) {
+                double[] av = pc.getAxisVals();
+                int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
+                double v = axes[puzzleDragAxisIdx][0] == 0 ? rx : ry;
+                v = clamp(v, 0.12, 0.88);
+                for (int i = 0; i < axes.length; i++) {
+                    if (i == puzzleDragAxisIdx || axes[i][0] != axes[puzzleDragAxisIdx][0]) continue;
+                    if (Math.abs(av[i] - v) < 0.12) {
+                        v = av[i] + (v > av[i] ? 0.12 : -0.12);
+                    }
+                }
+                av[puzzleDragAxisIdx] = clamp(v, 0.12, 0.88);
+                refreshPuzzleOverlay();
+                schedulePuzzleRender();
+            } else {
+                double[][] slots = pc.buildSlots();
+                int si = puzzleSlotAt(puzzleDragStartRelX, puzzleDragStartRelY);
+                if (si >= 0 && si < pc.getSlots().size()) {
+                    SlotConfig s = pc.getSlots().get(si);
+                    double[] r = slots[si];
+                    double dw = rx - puzzleDragStartRelX;
+                    double dh = ry - puzzleDragStartRelY;
+                    // 取景窗口与鼠标反向：内容跟随手部拖动方向（抓住图片拖拽的手感）
+                    s.setOffsetX(clamp(s.getOffsetX() - dw / r[2], 0, 1));
+                    s.setOffsetY(clamp(s.getOffsetY() - dh / r[3], 0, 1));
+                    puzzleDragStartRelX = rx;
+                    puzzleDragStartRelY = ry;
+                    puzzleSelectedSlot = si;
+                    updatePuzzleSlotUI();
+                    schedulePuzzleRender();
+                }
+            }
+            e.consume();
+        });
+        puzzlePreviewView.setOnMouseReleased(e -> {
+            if (panningView) {
+                panningView = false;
+                e.consume();
+                return;
+            }
+            if (!puzzleDragging) return;
+            puzzleDragging = false;
+            double dist = Math.hypot(e.getX() - puzzleDragX, e.getY() - puzzleDragY);
+            int over = puzzleSlotAt(puzzleRelX(e.getX()), puzzleRelY(e.getY()));
+            if (dist < 6) {
+                // 双击才更换图片；单击仅选中格子（间隙字幕改由拼图面板按钮进入，避免与分割线拖拽冲突）
+                if (over >= 0 && e.getClickCount() >= 2) choosePuzzleImage(over);
+            } else if (puzzlePressCell >= 0 && over >= 0 && over != puzzlePressCell) {
+                // 拖拽到另一格：交换两张图片（含裁剪参数）
+                swapPuzzleSlots(puzzlePressCell, over);
+                updatePuzzleSlotUI();
+                schedulePuzzleRender();
+                statusLabel.setText("已交换格子 " + (puzzlePressCell + 1) + " 与 " + (over + 1));
+            }
+            puzzlePressCell = -1;
+            e.consume();
+        });
+        puzzlePreviewView.setOnScroll(e -> {
+            // Alt+滚轮：整体缩放视图，交给 dropTarget 的统一处理（兼容旧交互）
+            if (e.isAltDown()) return;
+            List<SlotConfig> slots = template.getPuzzlrConfig().getSlots();
+            if (puzzleSelectedSlot >= 0 && puzzleSelectedSlot < slots.size()) {
+                // 选中格子：滚轮缩放格子内图片
+                SlotConfig s = slots.get(puzzleSelectedSlot);
+                double factor = e.getDeltaY() > 0 ? 1.1 : 1 / 1.1;
+                s.setZoom(clamp(s.getZoom() * factor, 0.2, 4.0));
+                updatePuzzleSlotUI();
+                schedulePuzzleRender();
+                e.consume();
+                return;
+            }
+            // 未选中格子（点击画布外已取消选中）：滚轮缩放整体图片，与普通画布一致（步进 ±10%）
+            double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
+            setZoom(puzzlePreviewZoom + delta);
+            e.consume();
+        });
+        // 鼠标停在图片外的预览区：按选中状态与图片上滚轮行为保持一致
+        puzzleViewport.setOnScroll(e -> {
+            if (e.isAltDown()) return; // Alt+滚轮仍交给 dropTarget 统一处理
+            List<SlotConfig> slots = template.getPuzzlrConfig().getSlots();
+            if (puzzleSelectedSlot >= 0 && puzzleSelectedSlot < slots.size()) {
+                SlotConfig s = slots.get(puzzleSelectedSlot);
+                double factor = e.getDeltaY() > 0 ? 1.1 : 1 / 1.1;
+                s.setZoom(clamp(s.getZoom() * factor, 0.2, 4.0));
+                updatePuzzleSlotUI();
+                schedulePuzzleRender();
+                e.consume();
+                return;
+            }
+            // 未选中：滚轮缩放整体图片
+            double delta = e.getDeltaY() > 0 ? 0.1 : -0.1;
+            setZoom(puzzlePreviewZoom + delta);
+            e.consume();
+        });
+    }
+
+    /** "3:4" → 0.75；"自动" → 0 */
+    private static double parseCanvasRatio(String label) {
+        if (label == null || "自动".equals(label)) return 0;
+        String[] p = label.split(":");
+        if (p.length != 2) return 0;
+        try {
+            double a = Double.parseDouble(p[0].trim());
+            double b = Double.parseDouble(p[1].trim());
+            return b > 0 ? a / b : 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    /** 比例值 → 最接近的预设标签（回显用） */
+    private static String ratioLabel(double r) {
+        String best = "自动";
+        double bestDiff = Double.MAX_VALUE;
+        for (String label : List.of("1:1", "3:4", "4:3", "9:16", "16:9", "2:3", "3:2")) {
+            double diff = Math.abs(parseCanvasRatio(label) - r);
+            if (diff < bestDiff) {
+                bestDiff = diff;
+                best = label;
+            }
+        }
+        return best;
+    }
+
+    /** 当前下拉框选中间隙对应的字幕（无则 null） */
+    private GapCaption currentGapCaption() {
+        if (!puzzleMode || template == null) return null;
+        int idx = cbPuzzleGapPick.getSelectionModel().getSelectedIndex();
+        PuzzlrConfig pc = template.getPuzzlrConfig();
+        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
+        if (idx < 0 || idx >= axes.length) return null;
+        String gid = (axes[idx][0] == 0 ? "V" : "H") + idx;
+        for (GapCaption c : pc.getGapCaptions()) {
+            if (gid.equals(c.getGapId())) return c;
+        }
+        return null;
+    }
+
+    /** 添加/编辑字幕按钮：对选中间隙创建（如无）并打开下方编辑器 */
+    @FXML
+    private void onEditGapCaption() {
+        if (!puzzleMode) return;
+        int idx = cbPuzzleGapPick.getSelectionModel().getSelectedIndex();
+        PuzzlrConfig pc = template.getPuzzlrConfig();
+        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
+        if (idx < 0 || idx >= axes.length) {
+            statusLabel.setText("请先在上方选择一条间隙");
+            return;
+        }
+        String gid = (axes[idx][0] == 0 ? "V" : "H") + idx;
+        GapCaption cap = currentGapCaption();
+        if (cap == null) {
+            cap = new GapCaption();
+            cap.setGapId(gid);
+            pc.getGapCaptions().add(cap);
+            statusLabel.setText("已在间隙 " + gid + " 创建字幕，输入文字即可");
+        } else {
+            statusLabel.setText("正在编辑间隙 " + gid + " 的字幕");
+        }
+        captionEditorGap = idx;
+        loadCaptionEditor(cap);
+        vbCaptionEditor.setVisible(true);
+        vbCaptionEditor.setManaged(true);
+        refreshGapPicker();
+        schedulePuzzleRender();
+    }
+
+    /** 删除字幕按钮：删除当前选中间隙绑定的字幕 */
+    @FXML
+    private void onDeleteGapCaption() {
+        if (!puzzleMode) return;
+        int idx = cbPuzzleGapPick.getSelectionModel().getSelectedIndex();
+        PuzzlrConfig pc = template.getPuzzlrConfig();
+        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
+        if (idx < 0 || idx >= axes.length) {
+            statusLabel.setText("请先在上方选择一条间隙");
+            return;
+        }
+        String gid = (axes[idx][0] == 0 ? "V" : "H") + idx;
+        boolean removed = pc.getGapCaptions().removeIf(c -> gid.equals(c.getGapId()));
+        if (captionEditorGap == idx) closeCaptionEditor();
+        refreshGapPicker();
+        schedulePuzzleRender();
+        statusLabel.setText(removed ? "已删除间隙 " + gid + " 的字幕" : "该间隙没有字幕");
+    }
+
+    /** 关闭字幕编辑器 */
+    private void closeCaptionEditor() {
+        captionEditorGap = -1;
+        if (vbCaptionEditor != null) {
+            vbCaptionEditor.setVisible(false);
+            vbCaptionEditor.setManaged(false);
+        }
+    }
+
+    /** 把字幕内容回显到编辑器控件（isUpdating 防回写） */
+    private void loadCaptionEditor(GapCaption c) {
+        isUpdating = true;
+        try {
+            tfCapLine1.setText(c.getTextContent());
+            tfCapLine2.setText(c.getTextContent2());
+            slCapSize1.setValue(clamp(c.getFontSize(), 8, 200));
+            slCapSize2.setValue(clamp(c.getFontSize2(), 8, 200));
+            lblCapSize1.setText(String.valueOf((int) Math.round(clamp(c.getFontSize(), 8, 200))));
+            lblCapSize2.setText(String.valueOf((int) Math.round(clamp(c.getFontSize2(), 8, 200))));
+            cbCapFont1.setValue(c.getFontFamily() != null ? c.getFontFamily() : "Microsoft YaHei");
+            cbCapFont2.setValue(c.getFontFamily2() != null ? c.getFontFamily2() : "Microsoft YaHei");
+            try {
+                cpCapColor.setValue(javafx.scene.paint.Color.web(c.getColorHex()));
+            } catch (Exception ignored) {}
+            cbCapBgBar.setSelected(c.isBgBar());
+            slCapSpacing.setValue(clamp(c.getLineSpacing() * 100, 0, 300));
+        } finally {
+            isUpdating = false;
+        }
+    }
+
+    /** 编辑器控件 → 当前字幕（内容变化即实时渲染） */
+    private void applyCaptionEditor() {
+        if (isUpdating || captionEditorGap < 0) return;
+        GapCaption c = currentGapCaption();
+        if (c == null) return;
+        c.setTextContent(tfCapLine1.getText() == null ? "" : tfCapLine1.getText().trim());
+        c.setTextContent2(tfCapLine2.getText() == null ? "" : tfCapLine2.getText().trim());
+        c.setFontSize(slCapSize1.getValue());
+        c.setFontSize2(slCapSize2.getValue());
+        if (cbCapFont1.getValue() != null) c.setFontFamily(cbCapFont1.getValue());
+        if (cbCapFont2.getValue() != null) c.setFontFamily2(cbCapFont2.getValue());
+        c.setColorHex(toHex(cpCapColor.getValue()));
+        c.setBgBar(cbCapBgBar.isSelected());
+        c.setLineSpacing(Math.max(0, slCapSpacing.getValue()) / 100.0);
+        schedulePuzzleRender();
+    }
+
+    /** 间隙下拉框：列出当前布局所有分割间隙，已绑定字幕的标记 ● */
+    private void refreshGapPicker() {
+        if (cbPuzzleGapPick == null || template == null) return;
+        PuzzlrConfig pc = template.getPuzzlrConfig();
+        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
+        javafx.collections.ObservableList<String> items = FXCollections.observableArrayList();
+        for (int i = 0; i < axes.length; i++) {
+            String gid = (axes[i][0] == 0 ? "V" : "H") + i;
+            boolean bound = false;
+            for (GapCaption c : pc.getGapCaptions()) {
+                if (gid.equals(c.getGapId())) { bound = true; break; }
+            }
+            items.add((axes[i][0] == 0 ? "竖向间隙 " : "横向间隙 ") + (i + 1)
+                    + (axes[i][0] == 0 ? "（左右格之间）" : "（上下格之间）") + (bound ? " ●" : ""));
+        }
+        int sel = cbPuzzleGapPick.getSelectionModel().getSelectedIndex();
+        cbPuzzleGapPick.setItems(items);
+        if (sel >= 0 && sel < items.size()) cbPuzzleGapPick.getSelectionModel().select(sel);
+    }
+
+    /** 添加/编辑字幕按钮：对当前选中的间隙创建或进入编辑 */
+    /** 布局切换后清理：绑定的分割轴已不存在的字幕自动删除 */
+    private void pruneGapCaptions(PuzzlrConfig pc) {
+        int[][] axes = PuzzlrConfig.axesOf(pc.getLayoutType());
+        pc.getGapCaptions().removeIf(c -> com.qingframe.core.PuzzlrRenderer.gapAxisOf(c.getGapId(), axes) == null);
+        if (captionEditorGap >= 0 && currentGapCaption() == null) closeCaptionEditor();
+        refreshGapPicker();
+    }
+
+    /** 交换两格内容：图片路径 + 偏移/缩放/填充参数整体互换 */
+    private void swapPuzzleSlots(int a, int b) {
+        List<SlotConfig> slots = template.getPuzzlrConfig().getSlots();
+        if (a < 0 || b < 0 || a >= slots.size() || b >= slots.size() || a == b) return;
+        SlotConfig sa = slots.get(a), sb = slots.get(b);
+        String p = sa.getImagePath(); sa.setImagePath(sb.getImagePath()); sb.setImagePath(p);
+        double ox = sa.getOffsetX(); sa.setOffsetX(sb.getOffsetX()); sb.setOffsetX(ox);
+        double oy = sa.getOffsetY(); sa.setOffsetY(sb.getOffsetY()); sb.setOffsetY(oy);
+        double z = sa.getZoom(); sa.setZoom(sb.getZoom()); sb.setZoom(z);
+        int f = sa.getFillMode(); sa.setFillMode(sb.getFillMode()); sb.setFillMode(f);
+    }
+
+    /** 点击格子换图 */
+    private void choosePuzzleImage(int si) {
+        javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+        fc.setTitle("选择拼图照片（格子 " + (si + 1) + "）");
+        fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter(
+                "图片", "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp"));
+        File lastDir = getLastExportDir();
+        if (lastDir != null) fc.setInitialDirectory(lastDir);
+        File f = fc.showOpenDialog(previewCanvas.getScene().getWindow());
+        if (f != null) {
+            template.getPuzzlrConfig().getSlots().get(si).setImagePath(f.getAbsolutePath());
+            saveLastOpenDir(f.getParentFile());
+            statusLabel.setText("已放入拼图: " + f.getName());
+            schedulePuzzleRender();
+        }
+    }
+
     @FXML
     private void onSaveImage() {
         if (isExporting) return;
+        // 拼图模式：只导出当前拼图合成图
+        if (puzzleMode && "PUZZLE".equals(template.getPhotoFrameStyle())) {
+            exportCurrentPuzzle();
+            return;
+        }
         // 统一导出逻辑：优先导出胶片条中选中的图片，否则导出当前打开的所有图片（一张或多张均可）
         List<File> files = new ArrayList<>();
         if (!selectedIndices.isEmpty()) {
@@ -1878,7 +3116,59 @@ public class MainController implements Initializable {
         statusLabel.setText("准备导出 " + files.size() + " 张图片…");
 
         String fmt = cbExportFormat.getValue();
-        exportImagesInParallel(files, exportDir, fmt, 0.9f);
+        exportImagesInParallel(files, exportDir, fmt, 0.95f);
+    }
+
+    /** 拼图导出：只导出当前拼图合成（长边 4000） */
+    private void exportCurrentPuzzle() {
+        if (isExporting) return;
+        javafx.stage.DirectoryChooser dc = new javafx.stage.DirectoryChooser();
+        dc.setTitle("选择导出目录");
+        File lastDir = getLastExportDir();
+        if (lastDir != null) dc.setInitialDirectory(lastDir);
+        File exportDir = dc.showDialog(btnSaveImage.getScene().getWindow());
+        if (exportDir == null) return;
+        saveLastExportDir(exportDir);
+        isExporting = true;
+        setExportUI(true);
+        progressBar.setVisible(true);
+        progressBar.setProgress(-1);
+        statusLabel.setText("正在导出拼图…");
+        String fmt = cbExportFormat.getValue();
+        String ext = "PNG".equalsIgnoreCase(fmt) ? "png" : "jpg";
+        File out = new File(exportDir, "puzzle_" + System.currentTimeMillis() + "." + ext);
+        // 后台线程合成大图，避免阻塞 UI
+        javafx.concurrent.Task<BufferedImage> task = new javafx.concurrent.Task<>() {
+            @Override
+            protected BufferedImage call() {
+                return renderPuzzleImage(4000);
+            }
+        };
+        task.setOnSucceeded(e -> {
+            try {
+                BufferedImage outImg = task.getValue();
+                if (outImg == null) throw new IOException("拼图渲染失败");
+                ImageExportUtil.export(SwingFXUtils.toFXImage(outImg, null), out.getAbsolutePath(), fmt, 0.95f);
+                statusLabel.setText("拼图已导出: " + out.getName());
+            } catch (Exception ex) {
+                statusLabel.setText("拼图导出失败: " + ex.getMessage());
+                logExport("拼图导出失败: " + ex.getMessage());
+            } finally {
+                isExporting = false;
+                setExportUI(false);
+                progressBar.setVisible(false);
+            }
+        });
+        task.setOnFailed(e -> {
+            Throwable ex = task.getException();
+            String msg = ex != null ? ex.getMessage() : "未知错误";
+            statusLabel.setText("拼图导出失败: " + msg);
+            logExport("拼图导出失败: " + msg);
+            isExporting = false;
+            setExportUI(false);
+            progressBar.setVisible(false);
+        });
+        new Thread(task, "puzzle-export").start();
     }
 
     /** 原"批量导出"的文件夹批量能力：没有打开图片时，选择任意文件夹统一套用当前边框导出 */
@@ -1909,7 +3199,7 @@ public class MainController implements Initializable {
         String fmt = cbExportFormat.getValue();
         List<File> files = new ArrayList<>();
         for (String p : images) files.add(new File(p));
-        exportImagesInParallel(files, exportDir, fmt, 0.9f);
+        exportImagesInParallel(files, exportDir, fmt, 0.95f);
     }
 
     @FXML
@@ -1962,6 +3252,22 @@ public class MainController implements Initializable {
                 onSettingChanged();
             }
         }
+    }
+
+    /** 字体名归一化：忽略大小写与空格/连字符/下划线，用于精选字体与系统字体匹配 */
+    private static String normFontName(String name) {
+        return name.toLowerCase(java.util.Locale.ROOT).replace(" ", "").replace("-", "").replace("_", "");
+    }
+
+    /** 参数位置中文名 → WatermarkRender 枚举 */
+    private static WatermarkRender.Position positionOf(String label) {
+        if (label == null) return WatermarkRender.Position.CENTER;
+        return switch (label) {
+            case "居左" -> WatermarkRender.Position.LEFT;
+            case "居右" -> WatermarkRender.Position.RIGHT;
+            case "分列" -> WatermarkRender.Position.SPLIT;
+            default -> WatermarkRender.Position.CENTER;
+        };
     }
 
     @FXML
@@ -2152,10 +3458,11 @@ public class MainController implements Initializable {
         // 与左侧栏边框按钮效果重复的预设，不再列入右侧内置预设列表
         // （JSON 文件保留，左侧按钮仍可加载；仅从右侧列表移除，避免双入口同效果）
         Set<String> duplicateWithSidebar = Set.of(
-                "极简白框", "拍立得",
+                "拍立得",
                 "浮影白框", "小红书3比4封面", "IG渐变光环",
-                "醒图奶油风", "Canva错位拼贴", "NOMO复古相机", "苹果深色圆角卡");
-        List<String> list = new ArrayList<>(List.of("复古胶片", "证件照", "电影宽屏"));
+                "醒图奶油风", "Canva错位拼贴", "NOMO复古相机", "苹果深色圆角卡",
+                "波普漫画风", "极光渐变", "杂志大刊头", "暗夜星空", "复古登机牌", "金箔奢华");
+        List<String> list = new ArrayList<>(List.of("复古胶片", "证件照"));
         for (String name : scanResourceDir("com/qingframe/presets")) {
             if (!duplicateWithSidebar.contains(name) && !list.contains(name)) list.add(name);
         }
@@ -2510,6 +3817,27 @@ public class MainController implements Initializable {
         }
         placeholderView.setVisible(false);
 
+        // 拼图模式：样式仍为 PUZZLE 则渲染拼图；点普通预设后样式变化即自动退出
+        if (puzzleMode && "PUZZLE".equals(template.getPhotoFrameStyle())) {
+            schedulePuzzleRender();
+            return;
+        } else if (puzzleMode) {
+            puzzleMode = false;
+            closeCaptionEditor();
+            puzzlePreviewView.setVisible(false);
+            if (puzzleOverlay != null) {
+                puzzleOverlay.getChildren().clear();
+                puzzleOverlay.setVisible(false);
+            }
+            previewCanvas.setVisible(true);
+            // 退出拼图：顶部缩放控件恢复普通画布缩放
+            syncTopZoomUI(zoomValue);
+            // Canvas 由隐藏恢复可见后纹理缓冲需重建，延迟一帧再绘制，
+            // 避免渲染缓冲未就绪时触发 NGCanvas RTTexture NPE
+            Platform.runLater(this::refreshView);
+            return;
+        }
+
         GraphicsContext gc = previewCanvas.getGraphicsContext2D();
         try {
             double zoom = getZoom();
@@ -2557,7 +3885,7 @@ public class MainController implements Initializable {
 
             updateScrollBars(cw, ch);
             lblResolution.setText(String.format("分辨率: %.0fx%.0f", originImage.getWidth(), originImage.getHeight()));
-            double[] csSize = engine.computeCanvasSize(originImage, template);
+            double[] csSize = engine.computeCanvasSize(originImage.getWidth(), originImage.getHeight(), template);
             lblCanvasSize.setText(String.format("画布: %.0fx%.0f", csSize[0], csSize[1]));
         } catch (Exception e) {
             statusLabel.setText("渲染错误: " + e.getClass().getSimpleName() + ": " + e.getMessage());
@@ -2635,16 +3963,6 @@ if (template.getCompareMode() == 1 && originImage != null) {
     private TemplateModel createPreset(String name) {
         TemplateModel t = new TemplateModel();
         switch (name) {
-            case "极简白框":
-                t.getBaseMargin().setMarginTop(60);
-                t.getBaseMargin().setMarginBottom(60);
-                t.getBaseMargin().setMarginLeft(60);
-                t.getBaseMargin().setMarginRight(60);
-                t.getBaseMargin().setImgScale(1.0);
-                t.getLayerList().get(0).getFillConfig().setFillHex("#ffffff");
-                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(2);
-                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#333333");
-                break;
             case "复古胶片":
                 t.getBaseMargin().setMarginTop(100);
                 t.getBaseMargin().setMarginBottom(140);
@@ -2677,14 +3995,6 @@ if (template.getCompareMode() == 1 && originImage != null) {
                 t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(1);
                 t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#cccccc");
                 break;
-            case "电影宽屏":
-                t.getBaseMargin().setMarginTop(120);
-                t.getBaseMargin().setMarginBottom(120);
-                t.getBaseMargin().setMarginLeft(0);
-                t.getBaseMargin().setMarginRight(0);
-                t.getBaseMargin().setImgScale(1.0);
-                t.getLayerList().get(0).getFillConfig().setFillHex("#000000");
-                break;
             case "无边框":
                 t.getBaseMargin().setMarginTop(0);
                 t.getBaseMargin().setMarginBottom(0);
@@ -2704,26 +4014,21 @@ if (template.getCompareMode() == 1 && originImage != null) {
                 t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(2);
                 t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#333333");
                 break;
-            case "复古边框":
-                t.getBaseMargin().setMarginTop(80);
-                t.getBaseMargin().setMarginBottom(80);
-                t.getBaseMargin().setMarginLeft(80);
-                t.getBaseMargin().setMarginRight(80);
-                t.getBaseMargin().setImgScale(0.92);
-                t.getLayerList().get(0).getFillConfig().setFillHex("#f5f0e8");
-                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(6);
-                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#8b7355");
-                break;
             case "圆角边框":
                 t.getBaseMargin().setMarginTop(60);
                 t.getBaseMargin().setMarginBottom(60);
                 t.getBaseMargin().setMarginLeft(60);
                 t.getBaseMargin().setMarginRight(60);
                 t.getBaseMargin().setImgScale(0.95);
+                // 普通边框渲染读取各角字段，必须与 all 一致才会真正生效
                 t.getCornerConfig().setCornerRadiusAll(250);
+                t.getCornerConfig().setCornerRadiusTL(250);
+                t.getCornerConfig().setCornerRadiusTR(250);
+                t.getCornerConfig().setCornerRadiusBL(250);
+                t.getCornerConfig().setCornerRadiusBR(250);
                 t.getLayerList().get(0).getFillConfig().setFillHex("#ffffff");
-                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(2);
-                t.getLayerList().get(0).getStrokeConfig().setStrokeColorHex("#999999");
+                // 不要四周细线：关闭描边
+                t.getLayerList().get(0).getStrokeConfig().setStrokeWidth(0);
                 break;
             case "双线边框":
                 t.getBaseMargin().setMarginTop(80);
@@ -2852,6 +4157,8 @@ if (template.getCompareMode() == 1 && originImage != null) {
         if (awtImg == null) throw new IOException("无法读取图片: " + src.getName());
         ExifReader.ExifData exif = ExifReader.parse(src);
         if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
+        // 统一 sRGB：原图带非 sRGB ICC（如 AdobeRGB）时读入即转换，保证导出色彩空间与原图解释一致
+        awtImg = toSRGB(awtImg);
         // 基础边框的 EXIF 参数行：同步边框只同步效果，参数行用本图 EXIF 重建
         TemplateModel renderTmpl = tmpl;
         if (tmpl.getDecorConfig() != null && tmpl.getDecorConfig().getExifAutoText() == 1) {
@@ -2892,6 +4199,7 @@ if (template.getCompareMode() == 1 && originImage != null) {
     private WritableImage renderAwtWithFallback(BufferedImage awt, TemplateModel tmpl) throws Exception {
         logExport("原始尺寸: " + awt.getWidth() + "x" + awt.getHeight());
         // 原画质优先：直接用原图全尺寸渲染，边框/文字比例与预览完全一致
+        // （应用已固定使用软件渲染管线，不受 D3D 大图分块渲染崩溃影响）
         WritableImage r = renderQuietly(awt, awt, tmpl);
         boolean firstBlank = r == null || ImageExportUtil.looksBlank(r);
         logExport("原画质渲染 " + awt.getWidth() + "x" + awt.getHeight() + " 空白=" + firstBlank);
@@ -2928,17 +4236,21 @@ if (template.getCompareMode() == 1 && originImage != null) {
         }
     }
 
-    /** 渲染前临时缩放 BorderProcessor 静态像素参数（圆角/EXIF 字号），渲染后恢复，保证降级导出与预览比例一致 */
+    /** 渲染前从模板应用相框静态参数并按比例缩放像素参数（圆角/EXIF 字号），渲染后恢复，保证降级导出与预览比例一致、每图独立 */
     private WritableImage renderAwtScaledWithStatic(BufferedImage renderImg, BufferedImage origImg, TemplateModel tmpl)
             throws Exception {
         double s = (double) renderImg.getWidth() / origImg.getWidth();
         int origCorner = BorderProcessor.getCornerRadius();
         int origExif = BorderProcessor.getExifFontSize();
+        int origBlur = BorderProcessor.getBlurIntensity();
+        int origType = BorderProcessor.getParamType();
+        WatermarkRender.Position origPos = WatermarkRender.getPosition();
         double origBlurScale = BorderProcessor.getBlurScale();
+        BorderEngine.applyTemplateStaticParams(tmpl);
         if (s != 1.0) {
-            BorderProcessor.setCornerRadius(Math.max(0, (int) Math.round(origCorner * s)));
+            BorderProcessor.setCornerRadius(Math.max(0, (int) Math.round(BorderProcessor.getCornerRadius() * s)));
             // 字号下限只保留可渲染的最小值：固定 8px 会让小字号在降级导出时相对照片偏大
-            BorderProcessor.setExifFontSize(Math.max(2, (int) Math.round(origExif * s)));
+            BorderProcessor.setExifFontSize(Math.max(2, (int) Math.round(BorderProcessor.getExifFontSize() * s)));
             BorderProcessor.setBlurScale(s);
         }
         try {
@@ -2946,6 +4258,9 @@ if (template.getCompareMode() == 1 && originImage != null) {
         } finally {
             BorderProcessor.setCornerRadius(origCorner);
             BorderProcessor.setExifFontSize(origExif);
+            BorderProcessor.setBlurIntensity(origBlur);
+            BorderProcessor.setParamType(origType);
+            WatermarkRender.setPosition(origPos);
             BorderProcessor.setBlurScale(origBlurScale);
         }
     }
@@ -3040,6 +4355,29 @@ if (template.getCompareMode() == 1 && originImage != null) {
     /** 导出诊断日志：写入用户目录 QingFrameShadow-export.log，用于定位导出失败原因；超过上限自动清空防止无限增长 */
     private static final int EXPORT_LOG_MAX_BYTES = 2 * 1024 * 1024;
 
+    /** 模板指纹摘要：用于诊断"同图重复点击效果漂移"（边距/图层/文字行/参数类型/比较模式等关键差异） */
+    private String templateFingerprint(TemplateModel t) {
+        if (t == null) return "null";
+        BaseMargin m = t.getBaseMargin();
+        StringBuilder sb = new StringBuilder();
+        sb.append("pf=").append(t.getPhotoFrameStyle());
+        sb.append(" pt=").append(t.getParamType()).append(" pos=").append(t.getParamPosition());
+        sb.append(" cmp=").append(t.getCompareMode()).append(" ratio=").append(t.getCanvasRatio());
+        sb.append(" M=").append(m.getMarginTop()).append('/').append(m.getMarginBottom()).append('/')
+                .append(m.getMarginLeft()).append('/').append(m.getMarginRight())
+                .append(" scale=").append(String.format("%.3f", m.getImgScale()));
+        sb.append(" bgblur=").append(m.getBgBlurEnable()).append('/').append(m.getBgBlurRadius());
+        for (LayerBorder l : t.getLayerList()) {
+            FillConfig f = l.getFillConfig();
+            sb.append(" [").append(l.getMarginTop()).append('/').append(l.getMarginBottom()).append('/')
+                    .append(l.getMarginLeft()).append('/').append(l.getMarginRight()).append(' ')
+                    .append(f.getFillType()).append(' ').append(f.getFillHex()).append(']');
+        }
+        sb.append(" txt=").append(t.getDecorConfig() != null && t.getDecorConfig().getTextLines() != null
+                ? t.getDecorConfig().getTextLines().size() : -1);
+        return sb.toString();
+    }
+
     private void logExport(String msg) {
         try {
             java.io.File logFile = new java.io.File(
@@ -3090,6 +4428,54 @@ if (template.getCompareMode() == 1 && originImage != null) {
     }
 
     /** 按 EXIF 方向旋转图像（与 JavaFX 预览自动应用方向保持一致） */
+    /** 按 EXIF 方向旋转 JavaFX 预览图（与导出/缩略图的 AWT applyOrientation 等效），需在 FX 线程调用 */
+    /**
+     * 按 EXIF 方向旋转 JavaFX 预览图（与导出/缩略图的 AWT applyOrientation 等效）。
+     * 用纯 AWT 实现而非 Canvas.snapshot：大尺寸照片的 Canvas 离屏纹理会大幅占用 GPU 显存，
+     * 叠加导出时的纹理分配容易触发 D3D 设备超时（TDR）导致"全部导出报错"。
+     */
+    private Image rotateFxImage(Image src, int orientation) {
+        if (src == null || orientation <= 1) return src;
+        int sw = (int) src.getWidth();
+        int sh = (int) src.getHeight();
+        boolean swap = orientation == 6 || orientation == 8;
+        int outW = swap ? sh : sw;
+        int outH = swap ? sw : sh;
+        BufferedImage in = SwingFXUtils.fromFXImage(src, null);
+        BufferedImage out = new BufferedImage(outW, outH, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        switch (orientation) {
+            case 3 -> { g.translate(outW, outH); g.rotate(Math.toRadians(180)); }
+            case 6 -> { g.translate(outW, 0); g.rotate(Math.toRadians(90)); }
+            case 8 -> { g.translate(0, outH); g.rotate(Math.toRadians(-90)); }
+            default -> { g.dispose(); return src; }
+        }
+        g.drawImage(in, 0, 0, null);
+        g.dispose();
+        return SwingFXUtils.toFXImage(out, null);
+    }
+
+    /** 非 sRGB 色彩空间的图转换到 sRGB；已是 sRGB 或无 ICC 的图原样返回（转换失败也回退原图） */
+    private BufferedImage toSRGB(BufferedImage img) {
+        try {
+            java.awt.color.ColorSpace cs = img.getColorModel().getColorSpace();
+            if (cs.getType() != java.awt.color.ColorSpace.TYPE_RGB) return img;
+            if (cs instanceof java.awt.color.ICC_ColorSpace) {
+                byte[] srcData = ((java.awt.color.ICC_ColorSpace) cs).getProfile().getData();
+                if (java.util.Arrays.equals(srcData,
+                        java.awt.color.ICC_Profile.getInstance(java.awt.color.ColorSpace.CS_sRGB).getData())) {
+                    return img;
+                }
+                java.awt.image.ColorConvertOp op = new java.awt.image.ColorConvertOp(
+                        cs, java.awt.color.ColorSpace.getInstance(java.awt.color.ColorSpace.CS_sRGB), null);
+                BufferedImage out = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_ARGB);
+                return op.filter(img, out);
+            }
+        } catch (Exception ignored) {
+        }
+        return img;
+    }
+
     private BufferedImage applyOrientation(BufferedImage img, int orientation) {
         if (img == null || orientation == 1 || orientation == 0) return img;
         int w = img.getWidth(), h = img.getHeight();
@@ -3151,7 +4537,8 @@ if (template.getCompareMode() == 1 && originImage != null) {
         Image cached = thumbCache.get(file);
         if (cached != null && cached.getWidth() > 0) return cached;
         try {
-            BufferedImage awtImg = ImageIO.read(file);
+            // 缩略图只需 1280 长边：用降采样解码替代全尺寸解码，大图耗时从秒级降到几十毫秒
+            BufferedImage awtImg = decodePuzzleScaled(file, THUMB_MAX_DIM, true);
             if (awtImg == null) return null;
             ExifReader.ExifData exif = ExifReader.parse(file);
             if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
@@ -3171,7 +4558,13 @@ if (template.getCompareMode() == 1 && originImage != null) {
             if (!latch.await(15, TimeUnit.SECONDS)) return null;
             if (result[0] != null) {
                 if (thumbCache.size() >= THUMB_CACHE_MAX) {
-                    thumbCache.clear();
+                    // 淘汰约一半而不是全部清空，避免大图库瞬间集体重新解码
+                    int toRemove = thumbCache.size() / 2;
+                    java.util.Iterator<File> it = thumbCache.keySet().iterator();
+                    while (toRemove-- > 0 && it.hasNext()) {
+                        it.next();
+                        it.remove();
+                    }
                 }
                 thumbCache.put(file, result[0]);
             }

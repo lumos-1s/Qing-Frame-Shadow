@@ -1,14 +1,14 @@
 {
-  "templateName": "电影字幕",
-  "templateTag": "电影感",
+  "templateName": "暗夜星空",
+  "templateTag": "星空",
   "exportDpi": 300,
   "baseMargin": {
     "marginLock": 0,
-    "marginTop": 260,
-    "marginBottom": 180,
-    "marginLeft": 30,
-    "marginRight": 30,
-    "imgScale": 0.98,
+    "marginTop": 140,
+    "marginBottom": 140,
+    "marginLeft": 120,
+    "marginRight": 120,
+    "imgScale": 0.94,
     "imgOffsetX": 0,
     "imgOffsetY": 0,
     "bgBlurEnable": 0,
@@ -24,19 +24,65 @@
       "marginRight": 0,
       "fillConfig": {
         "fillType": "solid",
-        "fillHex": "#050505",
+        "fillHex": "#0d1b3a",
         "fillOpacity": 100,
         "gradientType": "linear",
         "gradientAngle": 0,
         "gradientStops": [
-          {
-            "position": 0.0,
-            "color": "#ffffff"
-          },
-          {
-            "position": 1.0,
-            "color": "#cccccc"
-          }
+          {"position": 0.0, "color": "#ffffff"},
+          {"position": 1.0, "color": "#cccccc"}
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1.0,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 2,
+        "strokePos": "inside",
+        "strokeColorHex": "#60a5fa",
+        "strokeOpacity": 100,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0,
+        "strokeFillType": "solid",
+        "strokeGradientType": "linear",
+        "strokeGradientAngle": 0,
+        "strokeGradientStops": []
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 0,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 10,
+        "shadowSpread": 0,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 40,
+        "glowEnable": 0,
+        "glowColorHex": "#ffffff",
+        "glowBlur": 15,
+        "glowSpread": 0,
+        "glowOpacity": 60,
+        "glowType": "outer"
+      }
+    },
+    {
+      "visible": true,
+      "marginTop": -150,
+      "marginBottom": -150,
+      "marginLeft": -150,
+      "marginRight": -150,
+      "fillConfig": {
+        "fillType": "gradient",
+        "fillHex": "#16264d",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 135,
+        "gradientStops": [
+          {"position": 0.0, "color": "#16264d"},
+          {"position": 1.0, "color": "#2a1a4a"}
         ],
         "gradientOpacity": 100,
         "textureSrc": "",
@@ -49,7 +95,7 @@
       "strokeConfig": {
         "strokeWidth": 0,
         "strokePos": "inside",
-        "strokeColorHex": "#222222",
+        "strokeColorHex": "#ffffff",
         "strokeOpacity": 100,
         "strokeDashArray": [],
         "strokeDashOffset": 0,
@@ -77,11 +123,11 @@
   ],
   "cornerConfig": {
     "cornerLock": 1,
-    "cornerRadiusAll": 0,
-    "cornerRadiusTL": 0,
-    "cornerRadiusTR": 0,
-    "cornerRadiusBL": 0,
-    "cornerRadiusBR": 0,
+    "cornerRadiusAll": 12,
+    "cornerRadiusTL": 12,
+    "cornerRadiusTR": 12,
+    "cornerRadiusBL": 12,
+    "cornerRadiusBR": 12,
     "shapeType": "rect",
     "customShapeSvg": ""
   },
@@ -100,24 +146,37 @@
   },
   "lightEffect": {
     "vignetteEnable": 1,
-    "vignetteStrength": 45,
+    "vignetteStrength": 50,
     "vignetteFeather": 55,
     "lightLeakEnable": 0,
     "lightLeakType": "warm",
     "lightLeakOpacity": 20,
     "lightLeakAngle": 45,
     "filmGrainEnable": 1,
-    "filmGrainIntensity": 12
+    "filmGrainIntensity": 15
   },
   "decorConfig": {
     "textLines": [
       {
-        "text": "SOME FILM QUOTE",
+        "text": "✦ ⋆ ✧ ⋆ ✦",
         "fontFamily": "Microsoft YaHei",
-        "fontSize": 16,
+        "fontSize": 22,
+        "fontWeight": 400,
+        "letterSpacing": 14,
+        "colorHex": "#ffd700",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "top",
+        "enableShadow": 0
+      },
+      {
+        "text": "STARRY NIGHT · 2026",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 18,
         "fontWeight": 300,
-        "letterSpacing": 4,
-        "colorHex": "#f0f0f0",
+        "letterSpacing": 6,
+        "colorHex": "#93c5fd",
         "opacity": 100,
         "x": 0,
         "y": 0,

@@ -31,6 +31,7 @@ public class BorderProcessor {
 
     public static BufferedImage apply(Style style, BufferedImage src, int size) {
         if (src == null) return null;
+        lastRenderW = src.getWidth();
         int scaled = Math.max(5, (int) (size * 2.0));
         double ref = Math.min(src.getWidth(), src.getHeight());
         scaled = Math.max(5, (int) (scaled * ref / 1000.0));
@@ -171,7 +172,9 @@ public class BorderProcessor {
     private static volatile ExifReader.ExifData currentExif;
     private static volatile boolean useExifEnabled = true;
     private static volatile String manualLogoBrand;
-    private static volatile int exifFontSize = 35;
+    private static volatile int exifFontSizePx = 35;
+    /** 当前渲染照片的像素宽度：参数字号按照片大小自动缩放（基准 2000px 宽） */
+    private static volatile int lastRenderW = 0;
     private static volatile int cornerRadius = 30;
     private static volatile int blurIntensity = 50;
     /** 导出降级缩放系数：让模糊半径/边距/文字间距等像素参数随照片尺寸同比缩放，保证导出与预览一致 */
@@ -186,11 +189,19 @@ public class BorderProcessor {
     public static void setExifData(ExifReader.ExifData data) { currentExif = data; }
     public static ExifReader.ExifData getCurrentExif() { return currentExif; }
     public static void setUseExifEnabled(boolean enabled) { useExifEnabled = enabled; }
+    public static boolean isUseExifEnabled() { return useExifEnabled; }
     public static void clearExifData() { currentExif = null; }
     public static void setManualLogoBrand(String brand) { manualLogoBrand = brand; }
     public static String getManualLogoBrand() { return manualLogoBrand; }
-    public static void setExifFontSize(int size) { exifFontSize = Math.max(2, Math.min(160, size)); }
-    public static int getExifFontSize() { return exifFontSize; }
+    public static void setExifFontSize(int size) { exifFontSizePx = Math.max(2, Math.min(160, size)); }
+    public static int getExifFontSize() { return exifFontSizePx; }
+
+    /** 参数字号跟随照片大小自动调整：以 2000px 照片宽为基准，照片越大字越大（0.5~2.5 倍） */
+    private static int autoExifSize() {
+        if (lastRenderW <= 0) return exifFontSizePx;
+        double k = Math.max(0.5, Math.min(2.5, lastRenderW / 2000.0));
+        return Math.max(2, Math.min(200, (int) Math.round(exifFontSizePx * k)));
+    }
     public static void setCornerRadius(int v) {
         v = Math.max(0, Math.min(500, v));
         cornerRadius = v;
@@ -468,8 +479,12 @@ public class BorderProcessor {
             int centerY = topY + maskH / 2;
 
             boolean showModel = paramType == 0;
-            int modelSz = exifFontSize + scaledPx(4);
-            int paramSz = exifFontSize;
+            // 字号受照片下方模糊带高度约束：保证模型行+参数行完整露出，不超出画布被裁剪
+            int fitBase = Math.max(8, (int) Math.round((maskH - scaledPx(8)) / 4.0 + 20));
+            int fitSz = Math.max(6, (int) Math.round(fitBase * (exifFontSizePx / 100.0)));
+            int exifSz = Math.min(autoExifSize(), fitSz);
+            int modelSz = exifSz + scaledPx(4);
+            int paramSz = exifSz;
 
             Color bc = ColorSampler.sampleBottomDarkColor(src);
             g.setPaint(new GradientPaint(0, topY,
@@ -479,7 +494,7 @@ public class BorderProcessor {
             g.fillRect(0, topY, result.getWidth(), maskH);
 
             WatermarkRender.Position pos = WatermarkRender.getPosition();
-            int padX = Math.max(scaledPx(20), scaledPx(10) + exifFontSize);
+            int padX = Math.max(scaledPx(20), scaledPx(10) + exifSz);
 
             if (showModel) {
                 int gap = Math.min(scaledPx(6), Math.max(0, maskH - modelSz - paramSz));
@@ -568,8 +583,12 @@ public class BorderProcessor {
             int centerY = topY + maskH / 2;
 
             boolean showModel = paramType == 0;
-            int modelSz = exifFontSize + scaledPx(4);
-            int paramSz = exifFontSize;
+            // 字号受照片下方模糊带高度约束：保证模型行+参数行完整露出，不超出画布被裁剪
+            int fitBase = Math.max(8, (int) Math.round((maskH - scaledPx(8)) / 4.0 + 20));
+            int fitSz = Math.max(6, (int) Math.round(fitBase * (exifFontSizePx / 100.0)));
+            int exifSz = Math.min(autoExifSize(), fitSz);
+            int modelSz = exifSz + scaledPx(4);
+            int paramSz = exifSz;
 
             Color bc = ColorSampler.sampleBottomDarkColor(src);
             g.setPaint(new GradientPaint(0, topY,
@@ -579,7 +598,7 @@ public class BorderProcessor {
             g.fillRect(0, topY, result.getWidth(), maskH);
 
             WatermarkRender.Position pos = WatermarkRender.getPosition();
-            int padX = Math.max(scaledPx(20), scaledPx(10) + exifFontSize);
+            int padX = Math.max(scaledPx(20), scaledPx(10) + exifSz);
 
             if (showModel) {
                 int gap = Math.min(scaledPx(6), Math.max(0, maskH - modelSz - paramSz));
@@ -686,13 +705,13 @@ public class BorderProcessor {
         if (showParams) {
             if (dateLayout) {
                 int textY = cy + src.getHeight() - overlayH / 2;
-                int padX = Math.max(scaledPx(24), scaledPx(20) + exifFontSize);
+                int padX = Math.max(scaledPx(24), scaledPx(20) + autoExifSize());
 
                 boolean showModel = paramType == 0;
 
                 if (showModel) {
                     String date = new SimpleDateFormat("yyyy.MM.dd").format(new Date());
-                    Font df = fontMono(Font.PLAIN, exifFontSize).deriveFont(Map.of(TextAttribute.TRACKING, 0.10));
+                    Font df = fontMono(Font.PLAIN, autoExifSize()).deriveFont(Map.of(TextAttribute.TRACKING, 0.10));
                     g.setFont(df);
                     g.setColor(new Color(240, 240, 240, 230));
                     g.drawString(date, cx + padX, textY);
@@ -708,7 +727,7 @@ public class BorderProcessor {
                     }
                     String params = buildParamString(cam);
                     if (!params.isEmpty()) {
-                        Font pf = fontMono(Font.PLAIN, exifFontSize).deriveFont(Map.of(TextAttribute.TRACKING, 0.10));
+                        Font pf = fontMono(Font.PLAIN, autoExifSize()).deriveFont(Map.of(TextAttribute.TRACKING, 0.10));
                         g.setFont(pf);
                         FontMetrics pfm = g.getFontMetrics();
                         int infoX = rightX - pfm.stringWidth(params);
@@ -717,15 +736,15 @@ public class BorderProcessor {
                     }
 
                     String model = cam.brand + " " + cam.model;
-                    Font mf = fontSans(Font.BOLD, exifFontSize + scaledPx(6)).deriveFont(Map.of(TextAttribute.TRACKING, 0.08));
+                    Font mf = fontSans(Font.BOLD, autoExifSize() + scaledPx(6)).deriveFont(Map.of(TextAttribute.TRACKING, 0.08));
                     g.setFont(mf);
                     FontMetrics mfm = g.getFontMetrics();
                     g.setColor(new Color(255, 255, 255, 235));
-                    g.drawString(model, centerX(canvasW, mfm.stringWidth(model)), textY - exifFontSize);
+                    g.drawString(model, centerX(canvasW, mfm.stringWidth(model)), textY - autoExifSize());
                 } else {
                     String params = buildParamString(cam);
                     if (!params.isEmpty()) {
-                        Font pf = fontMono(Font.PLAIN, exifFontSize + scaledPx(2)).deriveFont(Map.of(TextAttribute.TRACKING, 0.10));
+                        Font pf = fontMono(Font.PLAIN, autoExifSize() + scaledPx(2)).deriveFont(Map.of(TextAttribute.TRACKING, 0.10));
                         g.setFont(pf);
                         FontMetrics pfm = g.getFontMetrics();
                         g.setColor(new Color(220, 220, 220, 210));
@@ -734,8 +753,8 @@ public class BorderProcessor {
                 }
             } else {
                 int textY = cy + src.getHeight() - overlayH / 2;
-                int modelSz = exifFontSize + scaledPx(4);
-                int paramSz = exifFontSize;
+                int modelSz = autoExifSize() + scaledPx(4);
+                int paramSz = autoExifSize();
                 int blockH = modelSz + scaledPx(6) + paramSz;
                 int modelY = textY - blockH / 2 + modelSz;
                 int paramsY = textY + blockH / 2;
@@ -788,7 +807,7 @@ public class BorderProcessor {
         g.fillRect(pad, barY, src.getWidth(), barH);
         drawBrandLogo(g, cam.brand, pad + 10, barY + barH / 2 + fs / 3, fontSans(Font.BOLD, fs));
         String line2 = cam.model + "  |  " + cam.focal + "  " + cam.aperture;
-        drawText(g, line2, pad + 10 + fs * 4, barY + barH / 2 + fs / 3, fontMono(Font.PLAIN, exifFontSize), new Color(180, 180, 180));
+        drawText(g, line2, pad + 10 + fs * 4, barY + barH / 2 + fs / 3, fontMono(Font.PLAIN, autoExifSize()), new Color(180, 180, 180));
         g.dispose();
         return result;
     }
@@ -809,7 +828,7 @@ public class BorderProcessor {
         int fs = Math.max(10, size / 3);
         String line = cam.focal + "  " + cam.aperture + "  " + cam.iso + "  " + cam.shutter;
         g.setColor(new Color(60, 60, 60));
-        g.setFont(fontMono(Font.PLAIN, exifFontSize));
+        g.setFont(fontMono(Font.PLAIN, autoExifSize()));
         FontMetrics fm = g.getFontMetrics();
         g.drawString(line, centerX(w, fm.stringWidth(line)), barY + barH / 2 + fm.getAscent() / 2);
         g.dispose();
@@ -832,13 +851,13 @@ public class BorderProcessor {
         int textCenterY = barY + barH / 2;
         boolean show = useExifEnabled;
         if (show) {
-            int logoFs = Math.max(14, exifFontSize + 4);
+            int logoFs = Math.max(14, autoExifSize() + 4);
             Font lf = fontSans(Font.BOLD, logoFs).deriveFont(Map.of(TextAttribute.TRACKING, 0.06));
             int logoX = pad + 16;
             drawBrandLogo(g, cam.brand, logoX, textCenterY + logoFs / 3, lf);
             String params = buildParamString(cam);
             if (!params.isEmpty()) {
-                Font pf = fontMono(Font.PLAIN, exifFontSize).deriveFont(Map.of(TextAttribute.TRACKING, 0.08));
+                Font pf = fontMono(Font.PLAIN, autoExifSize()).deriveFont(Map.of(TextAttribute.TRACKING, 0.08));
                 g.setFont(pf);
                 FontMetrics pfm = g.getFontMetrics(pf);
                 g.setColor(new Color(200, 200, 200));
@@ -859,7 +878,13 @@ public class BorderProcessor {
         Graphics2D g = result.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setColor(new Color(30, 30, 30)); g.fillRect(0, 0, w, h);
+        // 新颖磨砂：深石墨色纵向渐变背景（上深下浅），照片四周白色细衬边，与经典印象的纯色底区分
+        GradientPaint gp = new GradientPaint(0, 0, new Color(26, 26, 30), 0, h, new Color(60, 62, 68));
+        g.setPaint(gp);
+        g.fillRect(0, 0, w, h);
+        int inset = Math.max(2, pad / 12);
+        g.setColor(new Color(235, 235, 240));
+        g.fillRect(pad - inset, pad - inset, src.getWidth() + inset * 2, src.getHeight() + inset * 2);
         g.drawImage(src, pad, pad, null);
         if (useExifEnabled) {
             WatermarkRender.drawParamMask(g, result, cam.brand, cam.model,
@@ -1031,7 +1056,7 @@ public class BorderProcessor {
         }
         int fs = Math.max(9, size / 4);
         g.setColor(new Color(60, 60, 60));
-        g.setFont(fontMono(Font.PLAIN, exifFontSize));
+        g.setFont(fontMono(Font.PLAIN, autoExifSize()));
         String line = cam.focal + "  " + cam.aperture + "  " + cam.iso + "  " + cam.shutter;
         FontMetrics fm = g.getFontMetrics();
         g.drawString(line, 12, barY + swatchH + (barH - swatchH + fm.getAscent()) / 2);
@@ -1066,7 +1091,7 @@ public class BorderProcessor {
         g.setColor(Color.WHITE); g.fillRect(0, 0, w, h);
         g.drawImage(src, size, size, null);
         int fs = Math.max(9, size / 4);
-        g.setFont(fontMono(Font.PLAIN, exifFontSize));
+        g.setFont(fontMono(Font.PLAIN, autoExifSize()));
         g.setColor(new Color(100, 100, 100));
         String line = cam.focal + "  " + cam.aperture + "  " + cam.iso + "  " + cam.shutter;
         g.drawString(line, size + 8, size + fs + 4);
@@ -1085,7 +1110,7 @@ public class BorderProcessor {
         g.setColor(Color.WHITE); g.fillRect(0, 0, w, h);
         g.drawImage(src, size, size, null);
         int fs = Math.max(9, size / 4);
-        g.setFont(fontMono(Font.PLAIN, exifFontSize));
+        g.setFont(fontMono(Font.PLAIN, autoExifSize()));
         g.setColor(new Color(100, 100, 100));
         String line = cam.brand + " " + cam.model + "  |  " + cam.focal + "  " + cam.aperture + "  " + cam.iso + "  " + cam.shutter;
         g.drawString(line, size + 8, h - size - 4);
@@ -1104,7 +1129,7 @@ public class BorderProcessor {
         g.setColor(Color.WHITE); g.fillRect(0, 0, w, h);
         g.drawImage(src, size, size, null);
         int fs = Math.max(9, size / 4);
-        g.setFont(fontMono(Font.PLAIN, exifFontSize));
+        g.setFont(fontMono(Font.PLAIN, autoExifSize()));
         g.setColor(new Color(140, 140, 140));
         String info = cam.focal + "  " + cam.aperture;
         FontMetrics fm = g.getFontMetrics();
@@ -1276,7 +1301,7 @@ public class BorderProcessor {
         int barY = src.getHeight() + pad;
         int fs = Math.max(11, size / 3);
         Font fuji = fontSans(Font.BOLD, fs);
-        Font para = fontMono(Font.PLAIN, exifFontSize);
+        Font para = fontMono(Font.PLAIN, autoExifSize());
         String line1 = "FUJIFILM " + cam.model;
         drawText(g, line1, centerX(w, g.getFontMetrics(fuji).stringWidth(line1)), barY + fs, fuji, new Color(40, 40, 40));
         String line2 = cam.focal + "  " + cam.aperture + "  " + cam.iso + "  " + cam.shutter;
@@ -1301,7 +1326,7 @@ public class BorderProcessor {
         g.drawImage(src, sidePad, topPad, null);
         int barY = src.getHeight() + topPad;
         int fs = Math.max(10, size / 4);
-        Font pf = fontMono(Font.PLAIN, exifFontSize);
+        Font pf = fontMono(Font.PLAIN, autoExifSize());
         g.setColor(new Color(240, 240, 240));
         g.fillRect(sidePad, barY, src.getWidth(), barH);
         String[][] btns = {{"焦距", cam.focal}, {"光圈", cam.aperture}, {"ISO", cam.iso}, {"快门", cam.shutter}};
@@ -1363,7 +1388,7 @@ public class BorderProcessor {
         g.setColor(Color.WHITE); g.fillRect(0, 0, w, h);
         g.drawImage(src, size, size, null);
         int fs = Math.max(9, size / 4);
-        Font sf = fontMono(Font.PLAIN, exifFontSize);
+        Font sf = fontMono(Font.PLAIN, autoExifSize());
         String info = cam.focal + "  " + cam.aperture;
         g.setColor(new Color(140, 140, 140));
         FontMetrics fm = g.getFontMetrics(sf);

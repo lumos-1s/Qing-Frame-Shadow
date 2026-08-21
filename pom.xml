@@ -12,7 +12,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
-        <javafx.version>17.0.2</javafx.version>
+        <javafx.version>17.0.20</javafx.version>
     </properties>
 
     <dependencies>
@@ -88,7 +88,9 @@
                     <option>-Xmx4g</option>
                     <option>-Dprism.maxvram=1g</option>
                     <option>-Dprism.targetvram=768m</option>
-                    </options>
+                    <!-- Intel 核显 D3D 驱动缺陷（Illegal texture dimensions 刷屏）：强制软件渲染绕开 -->
+                    <option>-Dprism.order=sw</option>
+                </options>
                 </configuration>
             </plugin>
             <plugin>

@@ -42,7 +42,14 @@ public class ExifTextParser {
             Directory ifd0 = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
             if (ifd0 != null) {
                 putIf(exifData, ifd0, "相机", TAG_MAKE, "");
-                putIf(exifData, ifd0, "镜头", TAG_MODEL, "");
+                if (ifd0.containsTag(TAG_MODEL)) {
+                    String modelRaw = ifd0.getString(TAG_MODEL);
+                    if (modelRaw != null && !modelRaw.isEmpty()) {
+                        // 型号经品牌库规范化为俗称（如 ILCE-7M4 → A7M4），与相机参数区显示一致
+                        String brandId = CameraDatabase.getInstance().resolveBrand(exifData.get("相机"));
+                        exifData.put("镜头", CameraDatabase.getInstance().resolveModel(brandId, modelRaw));
+                    }
+                }
             }
 
         } catch (Exception e) {

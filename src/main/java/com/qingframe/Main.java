@@ -75,6 +75,41 @@ public class Main extends Application {
     }
 
     public static void main(String[] args) {
+        // 渲染管线智能选择：仅核显的机器上 D3D 硬件加速对 4000px+ 大图分块渲染会触发显卡驱动崩溃，
+        // 自动切换软件渲染；检测到独立显卡（NVIDIA/AMD 独显）则保持默认硬件加速
+        String order = detectPrismOrder();
+        if ("sw".equals(order)) {
+            System.setProperty("prism.order", "sw");
+        }
         launch(args);
+    }
+
+    /** 探测显卡类型：无独立显卡（仅核显）返回 "sw"；有独显或检测失败返回 null（保持 JavaFX 默认） */
+    private static String detectPrismOrder() {
+        try {
+            Process p = new ProcessBuilder("powershell", "-NoProfile", "-Command",
+                    "Get-CimInstance win32_VideoController | Select-Object -ExpandProperty Name")
+                    .redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            if (!out.trim().isEmpty()) {
+                boolean hasDiscrete = false;
+                boolean hasIgorOnly = false;
+                for (String line : out.split("\\r?\\n")) {
+                    String v = line.trim().toLowerCase();
+                    if (v.contains("nvidia") || v.contains("geforce") || v.contains("rtx")
+                            || v.contains("quadro") || v.contains("radeon rx")) {
+                        hasDiscrete = true;
+                    }
+                    if (v.contains("intel") || (v.contains("radeon") && !v.contains("rx"))) {
+                        hasIgorOnly = true;
+                    }
+                }
+                // 有独立显卡 → 硬件加速；仅核显 → 软件渲染
+                if (hasDiscrete) return null;
+                if (hasIgorOnly) return "sw";
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 }

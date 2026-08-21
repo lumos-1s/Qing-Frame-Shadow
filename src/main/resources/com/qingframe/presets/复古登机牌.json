@@ -1,0 +1,141 @@
+{
+  "templateName": "复古登机牌",
+  "templateTag": "票根",
+  "exportDpi": 300,
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 140,
+    "marginBottom": 180,
+    "marginLeft": 60,
+    "marginRight": 60,
+    "imgScale": 0.94,
+    "imgOffsetX": 0,
+    "imgOffsetY": 0,
+    "bgBlurEnable": 0,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 0
+  },
+  "layerList": [
+    {
+      "visible": true,
+      "marginTop": 0,
+      "marginBottom": 0,
+      "marginLeft": 0,
+      "marginRight": 0,
+      "fillConfig": {
+        "fillType": "solid",
+        "fillHex": "#f7f2e7",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 0,
+        "gradientStops": [
+          {"position": 0.0, "color": "#ffffff"},
+          {"position": 1.0, "color": "#cccccc"}
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1.0,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 2,
+        "strokePos": "inside",
+        "strokeColorHex": "#8a7a60",
+        "strokeOpacity": 100,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0,
+        "strokeFillType": "solid",
+        "strokeGradientType": "linear",
+        "strokeGradientAngle": 0,
+        "strokeGradientStops": []
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 0,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 10,
+        "shadowSpread": 0,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 40,
+        "glowEnable": 0,
+        "glowColorHex": "#ffffff",
+        "glowBlur": 15,
+        "glowSpread": 0,
+        "glowOpacity": 60,
+        "glowType": "outer"
+      }
+    }
+  ],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 6,
+    "cornerRadiusTL": 6,
+    "cornerRadiusTR": 6,
+    "cornerRadiusBL": 6,
+    "cornerRadiusBR": 6,
+    "shapeType": "rect",
+    "customShapeSvg": ""
+  },
+  "filmTearConfig": {
+    "tearEnable": 0,
+    "tearStrength": 10,
+    "tearDensity": 50,
+    "filmPerforationEnable": 1,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 10,
+    "filmPerforationSpacing": 18,
+    "dustScratchEnable": 0,
+    "dustScratchIntensity": 12,
+    "yellowingEnable": 0,
+    "yellowingStrength": 12
+  },
+  "lightEffect": {
+    "vignetteEnable": 0,
+    "vignetteStrength": 30,
+    "vignetteFeather": 50,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 1,
+    "filmGrainIntensity": 6
+  },
+  "decorConfig": {
+    "textLines": [
+      {
+        "text": "BOARDING PASS",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 24,
+        "fontWeight": 700,
+        "letterSpacing": 6,
+        "colorHex": "#c62828",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "top",
+        "enableShadow": 0
+      },
+      {
+        "text": "B42 · 12A · JFK → PVG",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 18,
+        "fontWeight": 600,
+        "letterSpacing": 2,
+        "colorHex": "#4a3b2a",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  }
+}

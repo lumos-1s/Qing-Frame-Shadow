@@ -1,0 +1,194 @@
+{
+  "templateName": "极光渐变",
+  "templateTag": "潮流",
+  "exportDpi": 300,
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 150,
+    "marginBottom": 150,
+    "marginLeft": 120,
+    "marginRight": 120,
+    "imgScale": 0.94,
+    "imgOffsetX": 0,
+    "imgOffsetY": 0,
+    "bgBlurEnable": 0,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 0
+  },
+  "layerList": [
+    {
+      "visible": true,
+      "marginTop": 0,
+      "marginBottom": 0,
+      "marginLeft": 0,
+      "marginRight": 0,
+      "fillConfig": {
+        "fillType": "solid",
+        "fillHex": "#0b1026",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 0,
+        "gradientStops": [
+          {"position": 0.0, "color": "#ffffff"},
+          {"position": 1.0, "color": "#cccccc"}
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1.0,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 0,
+        "strokePos": "inside",
+        "strokeColorHex": "#ffffff",
+        "strokeOpacity": 100,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0,
+        "strokeFillType": "solid",
+        "strokeGradientType": "linear",
+        "strokeGradientAngle": 0,
+        "strokeGradientStops": []
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 0,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 10,
+        "shadowSpread": 0,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 40,
+        "glowEnable": 1,
+        "glowColorHex": "#a855f7",
+        "glowBlur": 50,
+        "glowSpread": 0,
+        "glowOpacity": 50,
+        "glowType": "outer"
+      }
+    },
+    {
+      "visible": true,
+      "marginTop": -150,
+      "marginBottom": -150,
+      "marginLeft": -150,
+      "marginRight": -150,
+      "fillConfig": {
+        "fillType": "gradient",
+        "fillHex": "#22d3ee",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 135,
+        "gradientStops": [
+          {"position": 0.0, "color": "#22d3ee"},
+          {"position": 0.5, "color": "#a855f7"},
+          {"position": 1.0, "color": "#ec4899"}
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1.0,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 0,
+        "strokePos": "inside",
+        "strokeColorHex": "#ffffff",
+        "strokeOpacity": 100,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0,
+        "strokeFillType": "solid",
+        "strokeGradientType": "linear",
+        "strokeGradientAngle": 0,
+        "strokeGradientStops": []
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 0,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 10,
+        "shadowSpread": 0,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 40,
+        "glowEnable": 0,
+        "glowColorHex": "#ffffff",
+        "glowBlur": 15,
+        "glowSpread": 0,
+        "glowOpacity": 60,
+        "glowType": "outer"
+      }
+    }
+  ],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 30,
+    "cornerRadiusTL": 30,
+    "cornerRadiusTR": 30,
+    "cornerRadiusBL": 30,
+    "cornerRadiusBR": 30,
+    "shapeType": "rect",
+    "customShapeSvg": ""
+  },
+  "filmTearConfig": {
+    "tearEnable": 0,
+    "tearStrength": 10,
+    "tearDensity": 50,
+    "filmPerforationEnable": 0,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 15,
+    "filmPerforationSpacing": 30,
+    "dustScratchEnable": 0,
+    "dustScratchIntensity": 20,
+    "yellowingEnable": 0,
+    "yellowingStrength": 15
+  },
+  "lightEffect": {
+    "vignetteEnable": 1,
+    "vignetteStrength": 30,
+    "vignetteFeather": 55,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 1,
+    "filmGrainIntensity": 8
+  },
+  "decorConfig": {
+    "textLines": [
+      {
+        "text": "✦ AURORA ✦",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 24,
+        "fontWeight": 300,
+        "letterSpacing": 10,
+        "colorHex": "#ffffff",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "top",
+        "enableShadow": 0
+      },
+      {
+        "text": "BOREALIS · 2026",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 18,
+        "fontWeight": 300,
+        "letterSpacing": 6,
+        "colorHex": "#67e8f9",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  }
+}
