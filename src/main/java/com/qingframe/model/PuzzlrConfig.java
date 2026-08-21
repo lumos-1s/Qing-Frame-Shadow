@@ -68,6 +68,32 @@ public class PuzzlrConfig {
     }
     public void setGapCaptions(List<GapCaption> gapCaptions) { this.gapCaptions = gapCaptions; }
     public List<SlotConfig> getSlots() { return slots; }
+
+    /** 交换两格内容：图片路径 + 偏移/缩放/填充参数整体互换（下标越界或相同则不动） */
+    public void swapSlots(int a, int b) {
+        if (a < 0 || b < 0 || a >= slots.size() || b >= slots.size() || a == b) return;
+        SlotConfig sa = slots.get(a), sb = slots.get(b);
+        String p = sa.getImagePath(); sa.setImagePath(sb.getImagePath()); sb.setImagePath(p);
+        double ox = sa.getOffsetX(); sa.setOffsetX(sb.getOffsetX()); sb.setOffsetX(ox);
+        double oy = sa.getOffsetY(); sa.setOffsetY(sb.getOffsetY()); sb.setOffsetY(oy);
+        double z = sa.getZoom(); sa.setZoom(sb.getZoom()); sb.setZoom(z);
+        int f = sa.getFillMode(); sa.setFillMode(sb.getFillMode()); sb.setFillMode(f);
+    }
+
+    /** 用有序图片路径填充格子：不足用 fallbackPath 补位；与现状相同路径的格子保留裁剪微调，
+     *  仅换图的格子重置偏移(0.5,0.5)与缩放(1.0)。orderedPaths 超出格数的部分忽略。 */
+    public void fillSlotPaths(List<String> orderedPaths, String fallbackPath) {
+        java.util.List<String> want = new ArrayList<>(orderedPaths);
+        for (int j = want.size(); j < slots.size(); j++) want.add(fallbackPath);
+        for (int j = 0; j < slots.size(); j++) {
+            if (!java.util.Objects.equals(slots.get(j).getImagePath(), want.get(j))) {
+                slots.get(j).setImagePath(want.get(j));
+                slots.get(j).setOffsetX(0.5);
+                slots.get(j).setOffsetY(0.5);
+                slots.get(j).setZoom(1.0);
+            }
+        }
+    }
     public void setSlots(List<SlotConfig> slots) { this.slots = slots; }
     public double[] getAxisVals() { return axisVals; }
     public void setAxisVals(double[] axisVals) { this.axisVals = axisVals; }

@@ -2348,28 +2348,16 @@ public class MainController implements Initializable {
         puzzleViewTx = 0;
         puzzleViewTy = 0;
         syncTopZoomUI(1.0);
-        // 目标填充序列：胶片框选中顺序（按索引排序）优先，不足用当前图补位
+        // 目标填充序列：胶片框选中顺序（按索引排序）优先，不足用当前图补位（逻辑见 PuzzlrConfig.fillSlotPaths）
         List<String> want = new ArrayList<>();
         List<Integer> sel = new ArrayList<>(selectedIndices);
         Collections.sort(sel);
         for (int idx : sel) {
-            if (idx >= 0 && idx < imageFiles.size() && want.size() < pc.getSlots().size()) {
+            if (idx >= 0 && idx < imageFiles.size()) {
                 want.add(imageFiles.get(idx).getAbsolutePath());
             }
         }
-        for (int j = want.size(); j < pc.getSlots().size(); j++) {
-            want.add(currentImageFile != null ? currentImageFile.getAbsolutePath() : null);
-        }
-        // 与现状不同才重填（相同则保留裁剪微调）；换图的格子重置缩放/偏移
-        for (int j = 0; j < pc.getSlots().size(); j++) {
-            String nw = want.get(j);
-            if (!Objects.equals(pc.getSlots().get(j).getImagePath(), nw)) {
-                pc.getSlots().get(j).setImagePath(nw);
-                pc.getSlots().get(j).setOffsetX(0.5);
-                pc.getSlots().get(j).setOffsetY(0.5);
-                pc.getSlots().get(j).setZoom(1.0);
-            }
-        }
+        pc.fillSlotPaths(want, currentImageFile != null ? currentImageFile.getAbsolutePath() : null);
         template.setPhotoFrameStyle("PUZZLE");
         puzzleMode = true;
         puzzleSelectedSlot = 0;
@@ -2808,15 +2796,9 @@ public class MainController implements Initializable {
     }
 
     /** 交换两格内容：图片路径 + 偏移/缩放/填充参数整体互换 */
+    /** 交换两格内容（逻辑见 PuzzlrConfig.swapSlots） */
     private void swapPuzzleSlots(int a, int b) {
-        List<SlotConfig> slots = template.getPuzzlrConfig().getSlots();
-        if (a < 0 || b < 0 || a >= slots.size() || b >= slots.size() || a == b) return;
-        SlotConfig sa = slots.get(a), sb = slots.get(b);
-        String p = sa.getImagePath(); sa.setImagePath(sb.getImagePath()); sb.setImagePath(p);
-        double ox = sa.getOffsetX(); sa.setOffsetX(sb.getOffsetX()); sb.setOffsetX(ox);
-        double oy = sa.getOffsetY(); sa.setOffsetY(sb.getOffsetY()); sb.setOffsetY(oy);
-        double z = sa.getZoom(); sa.setZoom(sb.getZoom()); sb.setZoom(z);
-        int f = sa.getFillMode(); sa.setFillMode(sb.getFillMode()); sb.setFillMode(f);
+        template.getPuzzlrConfig().swapSlots(a, b);
     }
 
     /** 点击格子换图 */

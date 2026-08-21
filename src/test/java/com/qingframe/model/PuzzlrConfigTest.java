@@ -84,4 +84,48 @@ class PuzzlrConfigTest {
         assertEquals(6, cfg.getSlots().size());
         assertEquals("D:/photos/a.jpg", cfg.getSlots().get(0).getImagePath(), "切布局应保留已填图片");
     }
+
+    @Test
+    void swapSlotsExchangesAllFieldsAndIgnoresBadIndices() {
+        PuzzlrConfig cfg = new PuzzlrConfig();
+        cfg.getSlots().get(0).setImagePath("a.jpg");
+        cfg.getSlots().get(0).setZoom(2.0);
+        cfg.getSlots().get(1).setImagePath("b.jpg");
+        cfg.getSlots().get(1).setFillMode(1);
+
+        cfg.swapSlots(0, 1);
+        assertEquals("b.jpg", cfg.getSlots().get(0).getImagePath());
+        assertEquals(1, cfg.getSlots().get(0).getFillMode());
+        assertEquals("a.jpg", cfg.getSlots().get(1).getImagePath());
+        assertEquals(2.0, cfg.getSlots().get(1).getZoom(), 1e-9);
+
+        // 越界/相同下标不动
+        cfg.swapSlots(-1, 0);
+        cfg.swapSlots(0, 99);
+        cfg.swapSlots(1, 1);
+        assertEquals("b.jpg", cfg.getSlots().get(0).getImagePath());
+    }
+
+    @Test
+    void fillSlotPathsPadsFallbackAndKeepsTweaksForUnchangedCells() {
+        PuzzlrConfig cfg = new PuzzlrConfig();
+        cfg.setLayoutType(PuzzlrConfig.LAYOUT_4_GRID); // 4 格
+        cfg.getSlots().get(0).setImagePath("keep.jpg");
+        cfg.getSlots().get(0).setZoom(1.8);
+        cfg.getSlots().get(0).setOffsetX(0.3);
+
+        cfg.fillSlotPaths(java.util.Arrays.asList("keep.jpg", "new.jpg"), "fallback.jpg");
+
+        // 未换图：保留裁剪微调
+        assertEquals("keep.jpg", cfg.getSlots().get(0).getImagePath());
+        assertEquals(1.8, cfg.getSlots().get(0).getZoom(), 1e-9);
+        assertEquals(0.3, cfg.getSlots().get(0).getOffsetX(), 1e-9);
+        // 换图：重置偏移与缩放
+        assertEquals("new.jpg", cfg.getSlots().get(1).getImagePath());
+        assertEquals(1.0, cfg.getSlots().get(1).getZoom(), 1e-9);
+        assertEquals(0.5, cfg.getSlots().get(1).getOffsetX(), 1e-9);
+        // 不足补位
+        assertEquals("fallback.jpg", cfg.getSlots().get(2).getImagePath());
+        assertEquals("fallback.jpg", cfg.getSlots().get(3).getImagePath());
+    }
 }
