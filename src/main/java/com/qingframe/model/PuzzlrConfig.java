@@ -121,7 +121,9 @@ public class PuzzlrConfig {
     public static double[] defaultAxes(int type) {
         return switch (type) {
             case LAYOUT_2_SIDE, LAYOUT_2_STACK, LAYOUT_3_MAIN,
-                 LAYOUT_4_GRID, LAYOUT_6_23 -> new double[]{0.5, 0.5, 0.5};
+                 LAYOUT_4_GRID -> new double[]{0.5, 0.5, 0.5};
+            // 6 宫格三行两列：行分割默认三等分（此前误用 0.5/0.5 导致中间行高度为 0）
+            case LAYOUT_6_23 -> new double[]{0.5, 1.0 / 3.0, 2.0 / 3.0};
             case LAYOUT_2_BIG -> new double[]{0.62};
             case LAYOUT_3_H, LAYOUT_3_V -> new double[]{1.0 / 3.0, 2.0 / 3.0, 0.5};
             case LAYOUT_4_MAIN -> new double[]{0.5, 1.0 / 3.0, 2.0 / 3.0};

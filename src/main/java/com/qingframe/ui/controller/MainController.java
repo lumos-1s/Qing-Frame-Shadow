@@ -888,15 +888,9 @@ public class MainController implements Initializable {
     /** 窗口最小化/不可见时暂停重绘：Canvas 在退化渲染状态下保持脏区会每帧重试创建纹理，
      *  触发 Intel 核显 D3D 驱动的 "Illegal texture dimensions" 已知缺陷（恢复可见后补一次渲染） */
     private volatile boolean windowRenderPaused = false;
-    /** 拼图图片缓存：path@分辨率档 → 解码+方向+sRGB+降采样后的图（LRU 上限 16 张，超大图不缓存）。
-     *  按分辨率档位缓存后，滚轮连续缩放格子时各档复用，避免反复解码大图卡顿 */
-    private final Map<String, BufferedImage> puzzleImageCache =
-            Collections.synchronizedMap(new LinkedHashMap<String, BufferedImage>(16, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(Map.Entry<String, BufferedImage> eldest) {
-                    return size() > 16;
-                }
-            });
+    /** 拼图图片服务：格子图片解码/缓存与整幅拼图合成（逻辑见 PuzzleImageService） */
+    private final com.qingframe.service.PuzzleImageService puzzleImages =
+            new com.qingframe.service.PuzzleImageService();
 
     private final ExecutorService thumbExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "thumb-worker");
@@ -2446,126 +2440,12 @@ public class MainController implements Initializable {
     /** 拼图合成：读每格图片（EXIF 方向 + sRGB + 按需降采样），按布局/间距/裁剪参数合成。edge=输出长边。
      *  重活（解码数亿像素）只允许在后台线程调用，禁止在 FX 线程直接调用。 */
     private BufferedImage renderPuzzleImage(int edge) {
-        PuzzlrConfig pc = template.getPuzzlrConfig();
-        List<BufferedImage> imgs = new ArrayList<>();
-        double[][] rel = pc.buildSlots();
-        for (int i = 0; i < pc.getSlots().size(); i++) {
-            SlotConfig s = pc.getSlots().get(i);
-            BufferedImage img = null;
-            if (s.getImagePath() != null) {
-                double frac = i < rel.length ? Math.max(rel[i][2], rel[i][3]) : 1.0;
-                int need = (int) Math.min(6000, Math.max(600, frac * edge * s.getZoom() * 1.15));
-                // 预览渲染（edge<4000）：限制原图分辨率上限，避免格子滚轮缩放时反复解码超大图
-                if (edge < 4000) need = Math.min(need, 2400);
-                img = loadPuzzleSlotImage(s.getImagePath(), need);
-            }
-            imgs.add(img);
-        }
-        return com.qingframe.core.PuzzlrRenderer.render(imgs, pc, edge);
+        return puzzleImages.renderPuzzle(template.getPuzzlrConfig(), edge);
     }
 
-    /** 读取单格图片：EXIF 方向 + sRGB + 降采样到 needEdge 长边；带 LRU 缓存避免拖动时反复解码 */
+    /** 读取单格图片：EXIF 方向 + sRGB + 降采样 + 档位 LRU 缓存（逻辑见 PuzzleImageService） */
     private BufferedImage loadPuzzleSlotImage(String path, int needEdge) {
-        // 分辨率档位化：need 随滚轮缩放连续变化，按档缓存避免缓存频繁失效
-        int tier = 800;
-        if (needEdge > 1200) tier = 1200;
-        if (needEdge > 1600) tier = 1600;
-        if (needEdge > 2000) tier = 2000;
-        if (needEdge > 2400) tier = 2400;
-        if (needEdge > 3000) tier = 3000;
-        if (needEdge > 4000) tier = 4000;
-        if (needEdge > 5000) tier = 5000;
-        String key = path + "@" + tier;
-        BufferedImage cached = puzzleImageCache.get(key);
-        if (cached != null && Math.max(cached.getWidth(), cached.getHeight()) >= needEdge) return cached;
-        try {
-            File f = new File(path);
-            if (!f.exists()) return null;
-            int target = Math.max(needEdge, 800);
-            // 先缩略解码 + 降采样，再做方向旋转/色彩转换：
-            // 大图全尺寸逐像素旋转/转色会卡死数秒并占用数百 MB 内存，缩到目标尺寸后这些操作只需几十毫秒
-            BufferedImage img = decodePuzzleScaled(f, target);
-            if (img == null) return null;
-            ExifReader.ExifData ex = ExifReader.parse(f);
-            if (ex != null) img = applyOrientation(img, ex.orientation);
-            img = toSRGB(img);
-            // 超大图不进缓存（防内存膨胀），其余 LRU 缓存
-            if ((long) img.getWidth() * img.getHeight() <= 24_000_000L) {
-                puzzleImageCache.put(key, img);
-            }
-            return img;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /** 解码图片并按目标长边降采样：ImageIO 整数采样粗读（JPEG/PNG 解码层直接跳像素），再精确缩放。
-     *  避免对几千万像素大图全尺寸解码后再缩放（卡顿与内存峰值的主要来源） */
-    private BufferedImage decodePuzzleScaled(File f, int target) {
-        return decodePuzzleScaled(f, target, false);
-    }
-
-    /** keepAlpha=true 时缩放目标保留透明通道（供缩略图等可能含透明的场景） */
-    private BufferedImage decodePuzzleScaled(File f, int target, boolean keepAlpha) {
-        int rgbType = keepAlpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB;
-        try (javax.imageio.stream.ImageInputStream in = javax.imageio.ImageIO.createImageInputStream(f)) {
-            if (in != null) {
-                java.util.Iterator<javax.imageio.ImageReader> it = javax.imageio.ImageIO.getImageReaders(in);
-                if (it.hasNext()) {
-                    javax.imageio.ImageReader r = it.next();
-                    try {
-                        r.setInput(in, true, true);
-                        int w = r.getWidth(0), h = r.getHeight(0);
-                        int subs = 1;
-                        while (w / (subs * 2L) > target || h / (subs * 2L) > target) subs *= 2;
-                        javax.imageio.ImageReadParam p = r.getDefaultReadParam();
-                        if (subs > 1) p.setSourceSubsampling(subs, subs, 0, 0);
-                        BufferedImage img = r.read(0, p);
-                        // 整数采样后可能仍大于目标，精确缩放到目标长边
-                        int le = Math.max(img.getWidth(), img.getHeight());
-                        if (le > target) {
-                            double sc = (double) target / le;
-                            BufferedImage small = new BufferedImage(
-                                    Math.max(1, (int) Math.round(img.getWidth() * sc)),
-                                    Math.max(1, (int) Math.round(img.getHeight() * sc)),
-                                    keepAlpha && img.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB : rgbType);
-                            Graphics2D gg = small.createGraphics();
-                            gg.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
-                                    java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                            gg.drawImage(img, 0, 0, small.getWidth(), small.getHeight(), null);
-                            gg.dispose();
-                            img = small;
-                        }
-                        return img;
-                    } finally {
-                        r.dispose();
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        // 无可用 reader 或读取异常：回退全量解码 + 缩放
-        try {
-            BufferedImage fallback = ImageIO.read(f);
-            if (fallback == null) return null;
-            int le = Math.max(fallback.getWidth(), fallback.getHeight());
-            if (le > target) {
-                double sc = (double) target / le;
-                BufferedImage small = new BufferedImage(
-                        Math.max(1, (int) Math.round(fallback.getWidth() * sc)),
-                        Math.max(1, (int) Math.round(fallback.getHeight() * sc)),
-                        keepAlpha && fallback.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB : rgbType);
-                Graphics2D gg = small.createGraphics();
-                gg.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
-                        java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                gg.drawImage(fallback, 0, 0, small.getWidth(), small.getHeight(), null);
-                gg.dispose();
-                return small;
-            }
-            return fallback;
-        } catch (Exception e) {
-            return null;
-        }
+        return puzzleImages.loadSlotImage(path, needEdge);
     }
 
     /** 拼图渲染入口（线程安全）：置脏 + 后台合成，完成后回 FX 线程应用；渲染期间再有变更会自动补一轮 */
@@ -4156,9 +4036,9 @@ if (template.getCompareMode() == 1 && originImage != null) {
         BufferedImage awtImg = ImageIO.read(src);
         if (awtImg == null) throw new IOException("无法读取图片: " + src.getName());
         ExifReader.ExifData exif = ExifReader.parse(src);
-        if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
+        if (exif != null) awtImg = com.qingframe.service.PuzzleImageService.applyOrientation(awtImg, exif.orientation);
         // 统一 sRGB：原图带非 sRGB ICC（如 AdobeRGB）时读入即转换，保证导出色彩空间与原图解释一致
-        awtImg = toSRGB(awtImg);
+        awtImg = com.qingframe.service.PuzzleImageService.toSRGB(awtImg);
         // 基础边框的 EXIF 参数行：同步边框只同步效果，参数行用本图 EXIF 重建
         TemplateModel renderTmpl = tmpl;
         if (tmpl.getDecorConfig() != null && tmpl.getDecorConfig().getExifAutoText() == 1) {
@@ -4456,68 +4336,6 @@ if (template.getCompareMode() == 1 && originImage != null) {
     }
 
     /** 非 sRGB 色彩空间的图转换到 sRGB；已是 sRGB 或无 ICC 的图原样返回（转换失败也回退原图） */
-    private BufferedImage toSRGB(BufferedImage img) {
-        try {
-            java.awt.color.ColorSpace cs = img.getColorModel().getColorSpace();
-            if (cs.getType() != java.awt.color.ColorSpace.TYPE_RGB) return img;
-            if (cs instanceof java.awt.color.ICC_ColorSpace) {
-                byte[] srcData = ((java.awt.color.ICC_ColorSpace) cs).getProfile().getData();
-                if (java.util.Arrays.equals(srcData,
-                        java.awt.color.ICC_Profile.getInstance(java.awt.color.ColorSpace.CS_sRGB).getData())) {
-                    return img;
-                }
-                java.awt.image.ColorConvertOp op = new java.awt.image.ColorConvertOp(
-                        cs, java.awt.color.ColorSpace.getInstance(java.awt.color.ColorSpace.CS_sRGB), null);
-                BufferedImage out = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_INT_ARGB);
-                return op.filter(img, out);
-            }
-        } catch (Exception ignored) {
-        }
-        return img;
-    }
-
-    private BufferedImage applyOrientation(BufferedImage img, int orientation) {
-        if (img == null || orientation == 1 || orientation == 0) return img;
-        int w = img.getWidth(), h = img.getHeight();
-        switch (orientation) {
-            case 3:
-            {
-                BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-                for (int y = 0; y < h; y++) {
-                    int[] row = img.getRGB(0, y, w, 1, null, 0, w);
-                    int[] rev = new int[w];
-                    for (int x = 0; x < w; x++) rev[x] = row[w - 1 - x];
-                    out.setRGB(0, h - 1 - y, w, 1, rev, 0, w);
-                }
-                return out;
-            }
-            case 6: {
-                // 顺时针 90°：源 (x,y) -> 目标 (h-1-y, x)
-                BufferedImage out = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
-                for (int y = 0; y < h; y++) {
-                    int[] row = img.getRGB(0, y, w, 1, null, 0, w);
-                    for (int x = 0; x < w; x++) {
-                        out.setRGB(h - 1 - y, x, row[x]);
-                    }
-                }
-                return out;
-            }
-            case 8: {
-                // 逆时针 90°：源 (x,y) -> 目标 (y, w-1-x)
-                BufferedImage out = new BufferedImage(h, w, BufferedImage.TYPE_INT_ARGB);
-                for (int y = 0; y < h; y++) {
-                    int[] row = img.getRGB(0, y, w, 1, null, 0, w);
-                    for (int x = 0; x < w; x++) {
-                        out.setRGB(y, w - 1 - x, row[x]);
-                    }
-                }
-                return out;
-            }
-            default:
-                return img;
-        }
-    }
-
     private BufferedImage downscaleIfNeeded(BufferedImage img) {
         int w = img.getWidth();
         int h = img.getHeight();
@@ -4538,10 +4356,10 @@ if (template.getCompareMode() == 1 && originImage != null) {
         if (cached != null && cached.getWidth() > 0) return cached;
         try {
             // 缩略图只需 1280 长边：用降采样解码替代全尺寸解码，大图耗时从秒级降到几十毫秒
-            BufferedImage awtImg = decodePuzzleScaled(file, THUMB_MAX_DIM, true);
+            BufferedImage awtImg = com.qingframe.service.PuzzleImageService.decodeScaled(file, THUMB_MAX_DIM, true);
             if (awtImg == null) return null;
             ExifReader.ExifData exif = ExifReader.parse(file);
-            if (exif != null) awtImg = applyOrientation(awtImg, exif.orientation);
+            if (exif != null) awtImg = com.qingframe.service.PuzzleImageService.applyOrientation(awtImg, exif.orientation);
             awtImg = downscaleIfNeeded(awtImg);
             CountDownLatch latch = new CountDownLatch(1);
             Image[] result = new Image[1];
