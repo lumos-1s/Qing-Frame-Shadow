@@ -174,9 +174,15 @@ window.App = Object.assign(window.App || {}, {
             // 导出按逻辑像素渲染(不乘 devicePixelRatio),保证导出分辨率与该选项/“原图尺寸”一致
             this.uiDprOverride = 1;
             this._exportAbort = false;
+            // 每次开导出先收掉上一轮的「打开位置 / 重试」入口，避免点了旧按钮写进旧目录
+            this._lastExportDest = null;
+            this._exportRetry = null;
+            this._syncExportActions();
             if (btnCancel) btnCancel.style.display = '';
             this.setStatus(`正在导出 ${jobs.length} 张…`);
-            let okCount = 0, failCount = 0, aborted = false;
+            let okCount = 0, aborted = false;
+            // 失败数以 failures 清单为唯一真相：数字与清单各自累加，很容易对不上
+            const failures = [], retryFiles = [], wroteDirect = new Set();
             for (let n = 0; n < jobs.length; n++) {
                 if (this._exportAbort) { aborted = true; break; }
                 const { im, puzzle } = jobs[n];
@@ -263,24 +269,42 @@ window.App = Object.assign(window.App || {}, {
                 }
                 // 目录模式多张时逐张写盘并及时释放内存,避免全部编码结果同时驻留
                 if ((files[n].bytes || files[n].data) && loc.mode === 'dir' && jobs.length > 1) {
+                    // 记下「这张已经单独写过了」：失败的会留着编码结果供重试，
+                    // 下面的 pending 若把它的 data 再收一遍，就会重复写盘并在
+                    // pending.forEach 里把重试数据清空（状态栏还会显示失败 2）。
+                    wroteDirect.add(n);
                     const wr = await window.qingframe.writeExportFiles({ location: loc, files: [files[n]] }) || {};
-                    if (wr.ok) okCount++; else failCount++;
-                    files[n].data = null;
-                    files[n].bytes = null;
+                    if (wr.ok) okCount++;
+                    if (wr.failures) failures.push(...wr.failures);
+                    else if (!wr.ok) failures.push({ name: files[n].filename || files[n].stem || im.name,
+                                                     reason: wr.error || '写入失败' });
+                    if (wr.ok) { files[n].data = null; files[n].bytes = null; }
+                    else retryFiles.push(files[n]);   // 失败项留着编码结果，供「只重试失败项」
                 } else if (!files[n].bytes && !files[n].data) {
-                    failCount++;
+                    failures.push({ name: files[n].filename || files[n].stem || im.name,
+                                    reason: '渲染失败，没有生成图像数据' });
                 }
                 this.showExportProgress(n, jobs.length, im.name);
             }
             // 剩余文件(单文件模式 / 目录模式仅一张)统一写出;已取消导出则丢弃未写盘的结果
-            const pending = files.filter(f => !!(f.bytes || f.data));
+            const pending = files.filter((f, i) => !!(f.bytes || f.data) && !wroteDirect.has(i));
             if (pending.length && !aborted) {
                 const r = await window.qingframe.writeExportFiles({ location: loc, files: pending }) || {};
-                okCount += r.ok || 0; failCount += r.fail || 0;
+                okCount += r.ok || 0;
+                if (r.failures) failures.push(...r.failures);
+                if (r.error && !(r.failures && r.failures.length)) {
+                    failures.push({ name: (files[0] && files[0].filename) || '照片', reason: r.error });
+                }
+                pending.forEach(f => { f.data = null; f.bytes = null; });
             }
+            const failN = failures.length;
+            const failNote = failN
+                ? `（${failures.slice(0, 2).map(f => f.name).join('、')}`
+                  + `${failN > 2 ? ` 等 ${failN} 张` : ''}：${failures[0].reason}）`
+                : '';
             const m = aborted
-                ? `已取消导出：完成 ${okCount}${failCount ? `，失败 ${failCount}` : ''}`
-                : `导出完成：成功 ${okCount}${failCount ? `，失败 ${failCount}` : ''}${useBaseCount ? `（${useBaseCount} 张沿用当前设计）` : ''}`;
+                ? `已取消导出：完成 ${okCount}${failN ? `，失败 ${failN}` : ''}`
+                : `导出完成：成功 ${okCount}${failN ? `，失败 ${failN}${failNote}` : ''}${useBaseCount ? `（${useBaseCount} 张沿用当前设计）` : ''}`;
             // RAW 没补齐就是「成品只有 1600px」：不能只默默写成成功，用户会在看图软件里发现
             const rawNote = rawShort ? ` · ${rawShort} 张 RAW 未按全尺寸显影，成品为 1600px 代理` : '';
             // 设了「默认导出位置」时不再弹保存框,状态栏补一句落到哪个文件夹,否则用户不知道文件去哪了
@@ -288,6 +312,13 @@ window.App = Object.assign(window.App || {}, {
                 : (loc.filePath ? String(loc.filePath).replace(/[\\/][^\\/]+$/, '') : ''));
             const destName = destDir ? String(destDir).split(/[\\/]/).filter(Boolean).pop() : '';
             this.setStatus((!aborted && destName ? `${m} · 已存到 ${destName}` : m) + rawNote);
+            // 成功产物可一键定位；失败项留着编码结果供「只重试失败项」。
+            // 失败太多就不缓存位图了(几十张 4K 成品常驻会吃掉几百 MB),只留清单。
+            this._lastExportDest = (!aborted && okCount > 0) ? destDir : null;
+            const canRetry = !aborted && retryFiles.length > 0 && retryFiles.length <= 20;
+            if (!canRetry) retryFiles.forEach(f => { f.data = null; f.bytes = null; });
+            this._exportRetry = canRetry ? { loc, files: retryFiles } : null;
+            this._syncExportActions();
         } finally {
             if (btnCancel) btnCancel.style.display = 'none';
             delete this.uiDprOverride;
@@ -704,6 +735,13 @@ window.App = Object.assign(window.App || {}, {
     // ── 更新下载源(镜像)：清单与校验值始终来自 GitHub，这里只换二进制下载地址 ──
     // 下拉预设与输入框共用同一个值：下拉=快捷选择，输入框=可查看/手改的真实地址。
     MIRROR_CUSTOM: '__custom__',
+    // 「自定义」才展开输入框；直连/预设镜像只保留下拉，减少常驻表单。
+    _syncMirrorCustomVisible() {
+        const sel = document.getElementById('selUpdateMirror');
+        const wrap = document.getElementById('updateMirrorCustom');
+        if (!wrap) return;
+        wrap.hidden = !(sel && sel.value === this.MIRROR_CUSTOM);
+    },
     // 把「已存的镜像地址」映射回下拉框：命中预设就选中它，空=直连，其余=自定义。
     // 保存后主进程可能做归一化（r.mirror 与输入值不同），所以读值与保存后都要回调这里。
     _syncMirrorSelect(value) {
@@ -715,6 +753,7 @@ window.App = Object.assign(window.App || {}, {
             if (opt.value && opt.value !== this.MIRROR_CUSTOM && opt.value === v) { sel.value = opt.value; hit = true; break; }
         }
         if (!hit) sel.value = v ? this.MIRROR_CUSTOM : '';
+        this._syncMirrorCustomVisible();
     },
     // 手动改输入框：下拉跟着回到对应项（改到无法识别的值就落到「自定义」）。
     onMirrorInput() {
@@ -728,11 +767,13 @@ window.App = Object.assign(window.App || {}, {
         const el = document.getElementById('tfUpdateMirror');
         if (!sel || !el) return;
         if (sel.value === this.MIRROR_CUSTOM) {
+            this._syncMirrorCustomVisible();
             el.focus();
             if (el.select) el.select();
             return;
         }
         el.value = sel.value;
+        this._syncMirrorCustomVisible();
         this.saveUpdateMirror();
     },
     async syncUpdateMirrorField() {
@@ -748,6 +789,7 @@ window.App = Object.assign(window.App || {}, {
                 hint.className = 'about-status about-mirror-hint';
             }
         } catch (_) { /* 读不到 prefs 就当直连 */ }
+        this._syncMirrorSelect(el.value);
     },
     async saveUpdateMirror() {
         const el = document.getElementById('tfUpdateMirror');
@@ -1235,6 +1277,47 @@ window.App = Object.assign(window.App || {}, {
     },
 
     // 导出进度:进度条 + 底部“第 n / N 张”标签
+    /* 导出完成后的两个补救入口：只重试写盘失败的那几张、在资源管理器打开产物目录。
+       showItemInFolder 的 IPC 早就在主进程注册好了(目录走 shell.openPath)，
+       以前渲染层零调用，用户只知道「成功 30」，不知道文件落在哪。 */
+    _syncExportActions() {
+        const open = document.getElementById('btnExportOpen');
+        const retry = document.getElementById('btnExportRetry');
+        if (open) open.style.display = this._lastExportDest ? '' : 'none';
+        if (retry) {
+            retry.style.display = this._exportRetry ? '' : 'none';
+            if (this._exportRetry) retry.textContent = `重试失败 ${this._exportRetry.files.length} 张`;
+        }
+    },
+
+    async _retryFailedExport() {
+        const r = this._exportRetry;
+        if (!r || !r.files || !r.files.length) return;
+        this._exportRetry = null;
+        this._syncExportActions();
+        this.setStatus(`正在重试 ${r.files.length} 张…`);
+        let res;
+        try { res = await window.qingframe.writeExportFiles({ location: r.loc, files: r.files }) || {}; }
+        catch (e) { res = { ok: 0, fail: r.files.length, error: String((e && e.message) || e) }; }
+        const ok = res.ok || 0, fail = res.fail || 0;
+        // 写完就释放位图：重试是补救动作，不无限留着，也避免反复重试写出 _1 副本
+        r.files.forEach(f => { f.data = null; f.bytes = null; });
+        const why = (res.failures && res.failures[0] && res.failures[0].reason) || res.error || '写入失败';
+        const names = (res.failures || []).slice(0, 2).map(f => f.name).join('、');
+        this.setStatus(fail
+            ? `重试完成：成功 ${ok}，仍失败 ${fail}${names ? `（${names}：${why}）` : ''}，请检查磁盘空间后重新导出`
+            : `重试完成：${ok} 张已写入`);
+    },
+
+    _openExportDest() {
+        const d = this._lastExportDest;
+        const api = window.qingframe;
+        if (!d || !api || !api.showItemInFolder) return;
+        Promise.resolve(api.showItemInFolder(d)).then((r) => {
+            if (!r || r.ok === false) this.setStatus('打开导出位置失败：' + ((r && r.message) || '路径不存在'));
+        }).catch((e) => this.setStatus('打开导出位置失败：' + ((e && e.message) || e)));
+    },
+
     showExportProgress(n, total, name) {
         const pct = Math.round(((n + 1) / total) * 100);
         const bar = document.getElementById('progressBar');

@@ -106,26 +106,32 @@ async function main() {
     check(setup.presets > 0 && setup.rows > 0, '预设库与列表已就绪',
         JSON.stringify(setup));
 
-    // ── 密度：行高、纯文字行、组头 ──
+    // ── 密度：行高、缩略图、组头 ──
     const density = await exec(`(() => {
         const rows = [...document.querySelectorAll('#presetTree .preset-item')]
             .filter((r) => r.offsetParent !== null);
         const one = rows[0] || document.querySelector('#presetTree .preset-item');
         const head = document.querySelector('#presetTree .group-name');
+        const thumb = one && one.querySelector('.preset-thumb');
+        const img = thumb && thumb.querySelector('img');
         return {
             rowH: one ? one.getBoundingClientRect().height : 0,
-            imgs: document.querySelectorAll('#presetTree .preset-item img').length,
-            icon: one && one.querySelector('.dot') ? one.querySelector('.dot').textContent : '',
+            thumbs: rows.filter((r) => r.querySelector('.preset-thumb img')).length,
+            thumbSrc: img ? (img.getAttribute('src') || '') : '',
+            thumbIcon: thumb && !img ? thumb.textContent : '',
+            giconSvg: !!(head && head.querySelector('.g-icon svg')),
             name: one && one.querySelector('.preset-name') ? one.querySelector('.preset-name').textContent : '',
             headH: head ? head.getBoundingClientRect().height : 0,
             visible: rows.length,
         };
     })()`);
-    check(density.rowH > 0 && density.rowH <= 30,
-        '预设行收到 26px 上下（原来 50）', JSON.stringify(density));
-    check(density.imgs === 0 && !!density.icon && !!density.name,
-        '每行只有图标和名字，没有封面缩略图',
-        `imgs=${density.imgs} icon=${density.icon} name=${density.name}`);
+    check(density.rowH > 0 && density.rowH <= 34,
+        '预设行保持紧凑（缩略图 24px，行高 ≤ 34）', JSON.stringify(density));
+    check(density.visible > 0 && density.thumbs === density.visible && /covers\/c\d+\.webp/.test(density.thumbSrc),
+        '每行都有封面缩略图（复用风格墙封面）',
+        `thumbs=${density.thumbs}/${density.visible} src=${density.thumbSrc}`);
+    check(!!density.name && density.giconSvg,
+        '预设名保留，分类图标已换成统一 SVG', JSON.stringify({ name: density.name, svg: density.giconSvg }));
     check(density.headH > 0 && density.headH <= 30, '组头跟着收紧', density.headH + 'px');
 
     // ── 悬停预览：换画面但不落盘 ──

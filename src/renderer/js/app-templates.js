@@ -772,11 +772,62 @@ window.App = Object.assign(window.App || {}, {
         if (!order || !order.length) order = DEFAULT_ORDER.slice();
         else for (const g of DEFAULT_ORDER) if (!order.includes(g)) order.push(g);
         const merge = { 创意: '潮流', 奢华: '高级感', 现代: '极简', 排版: '极简', 影院: '胶片', 星空: '氛围' };
-        // 分类图标用单色几何符：彩色 emoji 在灰字分类标题里太跳，会把视线从预设名上带走。
-        const groupIcons = {
-            潮流: '◇', 高级感: '◆', 艺术: '✦', 极简: '○', 胶片: '▤', 质感: '▦', 手作: '✂',
-            复古: '◷', 杂志: '▥', 水印: '◌', 氛围: '☾', 光影: '✧', 比例: '▭', 个性: '◉',
-            票根: '▣', 其他: '▢'
+        // 分类图标统一用一套线性 SVG：比 emoji 稳（不随系统字体变彩色/变粗），
+        // 也比几何字符更容易一眼看出分类。路径都按 16×16 画。
+        const GROUP_ICONS = {
+            光影: ['M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M12.2 3.8l-1 1M4.8 11.2l-1 1', 'M8 5.3a2.7 2.7 0 1 0 0 5.4A2.7 2.7 0 1 0 8 5.3z'],
+            水印: ['M8 2.2c2.2 2.5 3.4 4.2 3.4 6a3.4 3.4 0 0 1-6.8 0c0-1.8 1.2-3.5 3.4-6z'],
+            票根: ['M2.5 5.5h11v1.8a1.4 1.4 0 0 0 0 2.8v1.8h-11v-1.8a1.4 1.4 0 0 0 0-2.8z', 'M9.8 5.5v7.2'],
+            邮票: ['M3.5 3.5h9v9h-9z', 'M5.6 5.6h4.8v4.8H5.6z'],
+            个性: ['M8 3.1a2.1 2.1 0 1 0 0 4.2A2.1 2.1 0 1 0 8 3.1z', 'M3.7 13c.4-2.4 2.1-3.8 4.3-3.8s3.9 1.4 4.3 3.8'],
+            潮流: ['M9.1 2.2 4.4 9.1h3.1L6.9 13.8 11.6 6.9H8.5z'],
+            高级感: ['M8 2.2 13.2 6 8 13.8 2.8 6z', 'M2.8 6h10.4'],
+            艺术: ['M8 13.2a5.2 5.2 0 1 1 0-10.4c2.9 0 5.2 1.9 5.2 4.1 0 1.3-1 2.1-2.2 2.1h-1.1c-.8 0-1.4.6-1.4 1.3 0 .3.1.6.3.9.2.3.3.6.3.9 0 .6-.4 1.1-1.1 1.1z', 'M5.9 6.2h.01M9.6 5.5h.01M5.2 9.2h.01'],
+            极简: ['M8 3a5 5 0 1 0 0 10A5 5 0 1 0 8 3z'],
+            胶片: ['M3 3.5h10v9H3z', 'M5.2 3.5v9M10.8 3.5v9', 'M3 6.1h2.2M3 9.9h2.2M10.8 6.1H13M10.8 9.9H13'],
+            质感: ['M8 2.5 13.5 5.5 8 8.5 2.5 5.5z', 'M2.5 8.6 8 11.6l5.5-3', 'M2.5 11.4 8 14.4l5.5-3'],
+            手作: ['M4.1 3.6 11.9 12.4M11.9 3.6 4.1 12.4', 'M3 12.4a1.5 1.5 0 1 0 2.4-1.9M13 12.4a1.5 1.5 0 1 1-2.4-1.9'],
+            复古: ['M8 3a5 5 0 1 0 0 10A5 5 0 1 0 8 3z', 'M8 5.2V8l2 1.4'],
+            杂志: ['M3 3h10v10H3z', 'M5.2 5.2h5.6M5.2 7.6h5.6M5.2 10h3.4'],
+            氛围: ['M10.8 2.8a5.3 5.3 0 1 0 2.4 8.8 4.4 4.4 0 0 1-2.4-8.8z'],
+            比例: ['M5 2.5v8.5h8.5', 'M2.5 5h8.5v8.5'],
+            收藏: ['M8 2.6l1.7 3.5 3.8.5-2.8 2.7.7 3.8L8 11.3l-3.4 1.8.7-3.8L2.5 6.6l3.8-.5z'],
+            最近使用: ['M8 3a5 5 0 1 0 0 10A5 5 0 1 0 8 3z', 'M8 5.2V8l2 1.4'],
+            其他: ['M3.5 3.5h9v9h-9z']
+        };
+        const GROUP_GLYPHS = { 光影: '✧', 水印: '◌', 票根: '▣', 邮票: '▤', 个性: '◉', 潮流: '◇', 高级感: '◆', 艺术: '✦', 极简: '○', 胶片: '▥', 质感: '▦', 手作: '✂', 复古: '◷', 杂志: '▥', 氛围: '☾', 比例: '▭', 其他: '▢', 收藏: '★', 最近使用: '◷' };
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+        const makeGroupIcon = (key) => {
+            const wrap = document.createElement('span');
+            wrap.className = 'g-icon';
+            const paths = GROUP_ICONS[key];
+            if (!paths) { wrap.textContent = GROUP_GLYPHS[key] || '▢'; return wrap; }
+            const svg = document.createElementNS(SVG_NS, 'svg');
+            svg.setAttribute('viewBox', '0 0 16 16');
+            svg.setAttribute('fill', 'none');
+            svg.setAttribute('stroke', 'currentColor');
+            svg.setAttribute('stroke-width', '1.4');
+            svg.setAttribute('stroke-linecap', 'round');
+            svg.setAttribute('stroke-linejoin', 'round');
+            svg.setAttribute('aria-hidden', 'true');
+            for (const d of paths) {
+                const p = document.createElementNS(SVG_NS, 'path');
+                p.setAttribute('d', d);
+                svg.appendChild(p);
+            }
+            wrap.appendChild(svg);
+            return wrap;
+        };
+        // 侧栏缩略图复用风格墙已经生成好的 90 张封面，不额外造资源；
+        // 用户换过墙封面且开着自定义封面时，侧栏也跟着用同一张。
+        const wallItems = (window.PRESET_WALL && Array.isArray(window.PRESET_WALL.items)) ? window.PRESET_WALL.items : [];
+        const coverByName = new Map();
+        for (const it of wallItems) if (it && it.name && it.cover) coverByName.set(it.name, it.cover);
+        const customCoversOn = typeof this.wallCoversEnabled === 'function' && this.wallCoversEnabled();
+        const coverFor = (name) => {
+            const custom = customCoversOn && this._wallCovers && this._wallCovers[name];
+            if (custom && typeof this.coverUrl === 'function') return this.coverUrl(custom);
+            return coverByName.get(name) || '';
         };
         const iconFor = name => {
             const kw = [
@@ -818,11 +869,21 @@ window.App = Object.assign(window.App || {}, {
             const item = document.createElement('div');
             item.className = 'preset-item' + (p.templateName === curName ? ' active' : '');
             item.dataset.name = p.templateName;
-            const dot = document.createElement('span');
-            dot.className = 'dot';
-            dot.textContent = iconFor(p.templateName);
-            // 只留「图标 + 名字」:26px 的小封面看不清边框细节，效果交给悬停预览在照片上看。
-            item.appendChild(dot);
+            const thumb = document.createElement('span');
+            thumb.className = 'preset-thumb';
+            const cover = coverFor(p.templateName);
+            if (cover) {
+                const img = document.createElement('img');
+                img.loading = 'lazy';
+                img.decoding = 'async';
+                img.alt = '';
+                img.src = cover;
+                thumb.appendChild(img);
+            } else {
+                // 没有封面（例如用户自存的模板）时回落到单色图标，保持行首对齐。
+                thumb.textContent = iconFor(p.templateName);
+            }
+            item.appendChild(thumb);
             const label = document.createElement('span');
             label.className = 'preset-name';
             label.textContent = p.templateName;
@@ -853,7 +914,14 @@ window.App = Object.assign(window.App || {}, {
                 gEl.className = 'preset-group' + ((f || isOpen('收藏', true)) ? ' open' : '');
                 const nm = document.createElement('div');
                 nm.className = 'group-name';
-                nm.innerHTML = '<span class="caret">▸</span><span class="g-icon">★</span><span>收藏 · ' + favPresets.length + '</span>';
+                const favCaret = document.createElement('span');
+                favCaret.className = 'caret';
+                favCaret.textContent = '\u25B8';
+                nm.appendChild(favCaret);
+                nm.appendChild(makeGroupIcon('收藏'));
+                const favLabel = document.createElement('span');
+                favLabel.textContent = '收藏 · ' + favPresets.length;
+                nm.appendChild(favLabel);
                 nm.addEventListener('click', () => { gEl.classList.toggle('open'); remember(gEl, '收藏'); });
                 gEl.appendChild(nm);
                 favPresets.forEach(p => gEl.appendChild(renderItem(p, '收藏')));
@@ -872,7 +940,14 @@ window.App = Object.assign(window.App || {}, {
                 const nm = document.createElement('div');
                 nm.className = 'group-name';
                 nm.title = '只显示最近 4 个 · 点击展开/收起';
-                nm.innerHTML = '<span class="caret">▸</span><span class="g-icon">◷</span><span>最近使用 · ' + recPresets.length + '</span>';
+                const recCaret = document.createElement('span');
+                recCaret.className = 'caret';
+                recCaret.textContent = '\u25B8';
+                nm.appendChild(recCaret);
+                nm.appendChild(makeGroupIcon('最近使用'));
+                const recLabel = document.createElement('span');
+                recLabel.textContent = '最近使用 · ' + recPresets.length;
+                nm.appendChild(recLabel);
                 nm.addEventListener('click', () => { gEl.classList.toggle('open'); remember(gEl, '最近使用'); });
                 gEl.appendChild(nm);
                 recPresets.forEach(p => gEl.appendChild(renderItem(p, '最近使用')));
@@ -890,9 +965,7 @@ window.App = Object.assign(window.App || {}, {
             caret.className = 'caret';
             caret.textContent = '\u25B8';
             name.appendChild(caret);
-            const gic = document.createElement('span');
-            gic.className = 'g-icon';
-            gic.textContent = groupIcons[grp] || '▢';
+            const gic = makeGroupIcon(grp);
             name.appendChild(gic);
             const tag = document.createElement('span');
             tag.textContent = `${grp} · ${groups.get(grp).length}`;
@@ -933,8 +1006,26 @@ window.App = Object.assign(window.App || {}, {
             tree.appendChild(groupEl);
             for (const p of groups.get(grp)) groupEl.appendChild(renderItem(p, grp));
         }
+        // 搜索无结果时给一句明确的话，别只留一片空白
+        if (!tree.querySelector('.preset-item')) {
+            const empty = document.createElement('div');
+            empty.className = 'empty';
+            empty.textContent = '没有匹配的预设';
+            tree.appendChild(empty);
+        }
     },
     filterTree(v) { this.buildTree(v); },
+
+    // 会走默认图层管线（因此「边框参数」真正生效）的预设：
+    // 没有 photoFrameStyle，也不是 bgBlurEnable 的卡片 / 模糊底。
+    // 与 app.js 的 applyModeControls 判定保持同一口径，供空态说明里的数量使用。
+    isEditablePreset(p) {
+        if (!p) return false;
+        const pf = String(p.photoFrameStyle || '').toUpperCase();
+        const frame = !!(pf && pf !== 'NONE');
+        const card = !frame && (((p.baseMargin || {}).bgBlurEnable) || 0) === 1;
+        return !frame && !card;
+    },
 
     /* ══ 分组展开状态 ══
        原来只存分组顺序、不存展开态：每次 buildTree 都把「最近使用」和当前组一起

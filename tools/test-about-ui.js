@@ -101,16 +101,20 @@ app.whenReady().then(async () => {
     })()`);
     await exec('window.App.openSettings()');
     await new Promise(r => setTimeout(r, 300));
+    await exec(`window.App.switchSettingsTab('about')`);
+    await new Promise(r => setTimeout(r, 100));
 
     const state = await exec(`(() => {
         const modal = document.getElementById('settingsModal');
         const image = document.querySelector('.about-logo');
+        const panel = document.getElementById('settingsPanelAbout');
         return {
             dialogRole: modal.getAttribute('role'),
             ariaModal: modal.getAttribute('aria-modal'),
             labelled: modal.getAttribute('aria-labelledby'),
             titleId: document.getElementById('settingsTitle') ? document.getElementById('settingsTitle').id : '',
             aboutSec: !!document.getElementById('aboutSec'),
+            aboutVisible: !!panel && panel.getClientRects().length > 0,
             focus: document.activeElement && document.activeElement.id,
             version: document.getElementById('aboutInfo').textContent,
             packageType: document.getElementById('aboutPackageType').textContent,
@@ -132,6 +136,7 @@ app.whenReady().then(async () => {
     check(state.ariaModal === 'true', 'ARIA aria-modal=true');
     check(state.labelled === 'settingsTitle' && state.titleId === 'settingsTitle', 'ARIA labelledby/title');
     check(state.aboutSec, '设置里有「关于」区');
+    check(state.aboutVisible, '「关于」页签下关于区可见', String(state.aboutVisible));
     check(state.focus === 'settingsClose', '打开时焦点在关闭按钮', state.focus);
     check(state.version.includes('Windows x64') && state.version.includes('安装版'), '版本行含平台/安装类型', state.version);
     check(state.packageType === '安装版', '安装类型行', state.packageType);

@@ -291,9 +291,14 @@ window.App = Object.assign(window.App || {}, {
         this.diagLog && this.diagLog('状态: ' + msg);
         if (this.dom.stCanvas) {
             const m = String(msg || '');
-            let level = '';
-            if (/失败|错误|不支持|不可用|无法|未找到|未加载|请先|请输入|至少保留|没有可|不存在|异常|缺失|未知原因/.test(m)) level = ' st-err';
-            else if (/已|完成|成功/.test(m)) level = ' st-ok';
+            // 引导语和「批量导入结果」都是过程性提示，不是需要庆祝的操作结果：
+            // 一律用中性灰，导入后让白色文件信息 (#stInfo) 接过主视线。
+            // 文字完整保留 —— 跳过数 / ICC / 内存警告都在这句话里，只是不抢颜色。
+            // 其它「已导入模板 / 已导入配置 / 已导入 LR 预设」仍是实打实的操作结果，保持成功绿。
+            const guide = /已进入工作台|从左侧工具栏导入|导入照片开始|^已导入\s*\d+\s*张图片/.test(m);
+            let level = ' st-hint';
+            if (!guide && /失败|错误|不支持|不可用|无法|未找到|未加载|请先|请输入|至少保留|没有可|不存在|异常|缺失|未知原因/.test(m)) level = ' st-err';
+            else if (!guide && /已|完成|成功/.test(m)) level = ' st-ok';
             this.dom.stCanvas.className = 'st-item grow' + level;
             this.dom.stCanvas.textContent = `画布 ${this.canvasW()}×${this.canvasH()}` + (m ? ` · ${m}` : '');
         }
@@ -391,12 +396,18 @@ window.App = Object.assign(window.App || {}, {
         return isDark;
     },
 
-    // 应用主题:theme 为 'dark' | 'light'。启动恢复与手动切换统一走这里,并同步设置里的开关标签。
+    // 应用主题:theme 为 'dark' | 'light'。启动恢复与手动切换统一走这里,并同步设置里的分段控件。
     applyTheme(theme) {
         const root = document.documentElement;
         root.classList.toggle('dark', theme === 'dark');
-        const btn = document.getElementById('btnThemeToggle');
-        if (btn) btn.textContent = (theme === 'dark') ? '当前：深色（点此切浅色）' : '当前：浅色（点此切深色）';
+        const seg = document.getElementById('segTheme');
+        if (seg) {
+            seg.querySelectorAll('[data-theme]').forEach((b) => {
+                const on = b.dataset.theme === theme;
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+        }
     },
 
     /* ── 用户资料(仅本地,用于签名/头像) ── */

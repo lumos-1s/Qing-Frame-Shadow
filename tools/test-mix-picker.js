@@ -227,6 +227,10 @@ async function main() {
     /* ⑦ 切到饱和度页再拖 +60px → r.s = +30，r.h 不变 */
     const dragS = await exec(`(async () => {
         const A = window.App, cv = A.dom.canvas, st = A._mixPick;
+        // ⑥ 把红色色相推到了 +50，画面里那块已经偏橙；吸管按「看到的颜色」取样，
+        // 再点同一处会命中橙色带。先清零，让 ⑦ 从原始红色重新开始。
+        A.setGrade({ mix: null });
+        await new Promise((r) => setTimeout(r, 700));
         document.querySelector('#mixMetrics [data-m="s"]').click();
         await new Promise((r) => setTimeout(r, 40));
         const ptOf = (nx, ny) => {
@@ -239,14 +243,17 @@ async function main() {
         };
         const p = ptOf(0.125, 0.5);
         cv.dispatchEvent(new MouseEvent('mousedown', Object.assign({ button: 0, bubbles: true, cancelable: true }, p)));
+        // 色带已锁定，再把色相设回 +50：验证拖饱和度不会把色相覆盖掉
+        A.setGrade({ mix: { r: { h: 50, s: 0, l: 0 } } });
         document.dispatchEvent(new MouseEvent('mousemove', { clientX: p.clientX, clientY: p.clientY - 60, bubbles: true, cancelable: true }));
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
         document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
         const mix = A.gradeOf(A.image).mix || {};
         return { h: mix.r ? mix.r.h : 0, s: mix.r ? mix.r.s : 0, metric: st.metric,
+                 band: st.band ? st.band.k : null, hue: Math.round(st.hue || 0),
                  sliderS: document.getElementById('slMixRS').value };
     })()`);
-    check(dragS.s === 30, '⑦ 饱和度页上拖 +60px → 红色饱和 +30', `s=${dragS.s} metric=${dragS.metric}`);
+    check(dragS.s === 30, '⑦ 饱和度页上拖 +60px → 红色饱和 +30', `s=${dragS.s} metric=${dragS.metric} band=${dragS.band} hue=${dragS.hue}`);
     check(dragS.h === 50, '⑦ 色相数值未被覆盖', `h=${dragS.h}`);
     check(dragS.sliderS === '30', '⑦ 饱和度滑块同步到 +30', `slider=${dragS.sliderS}`);
 

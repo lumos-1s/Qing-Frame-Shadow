@@ -1,11 +1,13 @@
 // 主进程 IO 不变量回归测试(纯 node,不需要 Electron)
 //   node tools/test-main-io.js
 //
-// 覆盖两处为性能而改、且**行为必须与改动前完全一致**的逻辑:
+// 覆盖不依赖 Electron 的主进程不变量:
 //   ① src/main/exif-read.js  — 只读文件头部解析 EXIF,结果必须与"整读 + parseExif"逐字段一致
 //   ② src/main/state.js      — freeFilePath 用一次 readdirSync 取代逐个 existsSync,选名必须一致
+//   ⑦ shared/marks           — 内置标记的尺寸与安全约束
+//   ⑧ src/main/index.js      — IPC 注册必须统一经过 handleIpc/onIpc(静态检查)
 //
-// 为什么单独一个文件:这两处都在主进程,Electron 的那批用例(走真实 renderer)覆盖不到它们;
+// 为什么单独一个文件:这些逻辑都在主进程,Electron 的那批用例(走真实 renderer)覆盖不到;
 // 而它们又都是纯 node 可测的,放进来就能进 npm run check,不依赖 GUI。
 'use strict';
 
@@ -224,6 +226,20 @@ async function oldReadExif(p) {
             if (!files.includes(n + '_White.svg') || !files.includes(n + '_Black.svg')) pairBad = n;
         }
         ok(!pairBad && shapes.length >= 8, `⑦ ${shapes.length} 种造型各有 White/Black 两版(深/浅照片都能用)`, pairBad);
+    }
+
+    /* ⑧ IPC 注册:必须统一经过 handleIpc/onIpc,直接写 ipcMain.handle/on 会漏掉来源校验 */
+    {
+        const mainDir = path.join(__dirname, '..', 'src', 'main');
+        const raw = [];
+        for (const f of fs.readdirSync(mainDir).filter(x => x.endsWith('.js'))) {
+            const src = fs.readFileSync(path.join(mainDir, f), 'utf-8');
+            const n = (src.match(/ipcMain\.(handle|on)\(/g) || []).length;
+            if (n) raw.push(`${f}:${n}`);
+        }
+        // 唯一允许出现的地方是 index.js 里的两个包装器定义(handle + on 各一处)
+        ok(raw.length === 1 && raw[0] === 'index.js:2',
+            '⑧ IPC 注册只经过统一包装器（raw ipcMain.handle/on 仅包装器内 2 处）', raw.join(', '));
     }
 
     fs.rmSync(tmpDir, { recursive: true, force: true });

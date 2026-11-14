@@ -157,7 +157,13 @@ const NEW_ROWS = new Set(['rowCornerRadius', 'rowGlobalMargin', 'rowImgScale', '
     // 2026-11 苹果信息卡专属组(CARD_APPLE):晚于冻结基线,按新增行记账
     'rowAppleHint', 'rowAppleDate', 'rowAppleFont', 'rowAppleShow',
     'rowAppleModelSize', 'rowAppleParamSize', 'rowAppleDateSize',
-    'rowAppleLogoSize', 'rowAppleLogoOpacity', 'rowAppleLineWidth', 'rowAppleColors']);
+    'rowAppleLogoSize', 'rowAppleLogoOpacity', 'rowAppleLineWidth', 'rowAppleColors',
+    // 2026-11 背景模糊·经典/日期的专属自由度：晚于冻结基线，且只对
+    // BLUR_CLASSIC / BLUR_DATE 显示（updatePersonalVisibility 手工控制），按新增行记账。
+    // 「主体大小」因与通用「图片缩放」是同一个乘数而移除；「留白宽度」因会连画布
+    // 尺寸一起改、与「边距大小」打架而移除，换成三根文字排版滑块。
+    'rowBlurBackdropDim', 'rowBlurBackdropZoom', 'rowBlurSubjectShadow',
+    'rowBlurTextOffset', 'rowBlurTextGap', 'rowBlurBrandGap']);
 
 function drawKeys() {
     const src = fs.readFileSync(ENGINE, 'utf8');

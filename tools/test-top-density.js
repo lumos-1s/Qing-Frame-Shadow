@@ -1,5 +1,6 @@
-// 顶栏维持原状 + 左侧预设树收拢回归。
-// 顶栏的「⋯」收拢版已按用户要求撤回，这里把恢复后的形态冻结成断言。
+// 顶栏收纳 + 左侧预设树收拢 + 边框参数空态回归。
+// 2026-11 布局收口后，顶栏保留「导入 / 导出 / 复制 / 撤销 / 重做 / ⋯ / 适应」，
+// 文件夹入口收进「导入 ▾」，同步 / 重置 / 随机收进「⋯」。这里冻结这套形态。
 // 用法：node tools/run-electron.js tools/test-top-density.js
 'use strict';
 
@@ -55,20 +56,36 @@ const PROBE = `(async () => {
         localStorage.removeItem('qfs_side_mode');
     } catch (_) {}
     A.setSideMode('border');
+    // 「最近使用」分组只在 localStorage 里真有记录时才渲染，而记录来自启动后的
+    // 异步副作用（一会儿有一条、一会儿没有）。显式造一条，让断言不再看运气。
+    try {
+        const names = (A.presets || []).map(p => p.templateName).filter(Boolean).slice(0, 1);
+        if (names.length) localStorage.setItem('qfs_recent_presets', JSON.stringify(names));
+    } catch (_) {}
     A.buildTree('');
     await wait(120);
 
-    // ── 1. 顶栏恢复原样：13 个入口常驻，没有 ⋯ 弹出菜单 ──
-    // 用户看过收拢版后选择恢复，这里把「原样」写成断言，免得以后又被顺手收走。
+    // ── 1. 顶栏收纳：主操作常驻，文件夹进「导入 ▾」，同步/重置/随机进「⋯」──
     const allBtns = Array.prototype.slice.call(document.querySelectorAll('#toolbar button'));
     const visible = allBtns.filter((b) => b.offsetParent !== null);
     const labels = visible.map((b) => (b.textContent || '').trim()).filter(Boolean);
-    const barIds = ['btnOpenFolder', 'btnCopy', 'btnSyncSel', 'btnReset', 'btnRandom', 'btnTheme'];
-    const allInBar = barIds.every((id) => {
+    const folderInPop = !!($('btnOpenFolder') && $('btnOpenFolder').closest('#importPop'));
+    const moreItems = ['btnSyncSel', 'btnReset', 'btnRandom'].every((id) => {
         const el = $(id);
-        return !!el && !!el.closest('#toolbar .toolbar-group') && !el.closest('[hidden]');
+        return !!el && !!el.closest('#toolbarMoreMenu');
     });
-    const noMore = !$('btnToolbarMore') && !$('toolbarMoreMenu');
+    const moreMenu = $('toolbarMoreMenu'), importPop = $('importPop');
+    const moreHidden = !!(moreMenu && moreMenu.hidden);
+    $('btnToolbarMore').click();
+    const moreOpened = !!(moreMenu && !moreMenu.hidden)
+        && $('btnToolbarMore').getAttribute('aria-expanded') === 'true';
+    $('btnToolbarMore').click();
+    const moreClosed = !!(moreMenu && moreMenu.hidden);
+    const importHidden = !!(importPop && importPop.hidden);
+    $('btnImportMore').click();
+    const importOpened = !!(importPop && !importPop.hidden);
+    document.body.click();
+    const menusClosed = !!(importPop && importPop.hidden) && !!(moreMenu && moreMenu.hidden);
     const themeInRight = !!($('btnTheme') && $('btnTheme').closest('.toolbar-group.right'));
     const g = document.querySelector('.toolbar-group');
     const cs = g ? getComputedStyle(g) : null;
@@ -109,12 +126,62 @@ const PROBE = `(async () => {
     const searchOpen = Array.prototype.slice.call(tree.querySelectorAll('.preset-group.open')).length;
     const searchVisible = visibleItems();
     A.filterTree('');
+
+    // ── 4. 左侧栏不再有「可编辑边框」筛选：DOM / 状态 / 方法三处都不能剩 ──
+    // 用户明确要求不要这个入口。它原来是常驻在搜索框下方的一枚 chip，
+    // 现在左侧栏只留「搜索 + 预设树」，所以这里反向守着：万一哪天又长回来，测试会先红。
+    try { localStorage.removeItem('qfs_recent_presets'); localStorage.removeItem('qfs_fav_presets'); } catch (_) {}
+    A.buildTree('');
+    const editableExpected = A.presets.filter(p => A.isEditablePreset(p)).length;
+    const filterGone = {
+        row: !!document.getElementById('sideFilterRow'),
+        btn: !!$('btnPresetEditable'),
+        label: !!$('presetEditableCount'),
+        fn: typeof A.togglePresetEditable,
+        allVisible: tree.querySelectorAll('.preset-item').length
+    };
     try { localStorage.removeItem('qfs_preset_groups'); } catch (_) {}
 
+    // ── 5. 边框参数页按渲染管线切换：图层组 / 预设说明卡 ──
+    const findPreset = (fn) => (A.presets || []).find(fn);
+    const styleP = findPreset(p => {
+        const pf = String(p.photoFrameStyle || '').toUpperCase();
+        return !!pf && pf !== 'NONE';
+    });
+    const layerP = findPreset(p => A.isEditablePreset(p));
+    const cardP = findPreset(p => (((p.baseMargin || {}).bgBlurEnable) || 0) === 1);
+    const savedTpl = A.template;
+    const clone = (p) => JSON.parse(JSON.stringify(p));
+    const layerGroupsVisible = () => Array.prototype.slice.call(document.querySelectorAll('#panel-border .ctl-grp-layers'))
+        .filter(el => el.style.display !== 'none').length;
+    const stateInfo = () => ({
+        visible: !!$('borderPresetState') && !$('borderPresetState').hidden,
+        kind: $('borderPresetState') ? ($('borderPresetState').dataset.kind || '') : '',
+        title: $('borderPresetTitle') ? $('borderPresetTitle').textContent : '',
+        text: $('borderPresetText') ? $('borderPresetText').textContent : '',
+        count: ($('borderEditableCount') || {}).textContent || ''
+    });
+    A.template = clone(styleP); A.applyModeControls();
+    const styleState = Object.assign(stateInfo(), { groups: layerGroupsVisible() });
+    A.template = clone(layerP); A.applyModeControls();
+    const layerState = Object.assign(stateInfo(), { groups: layerGroupsVisible() });
+    A.template = clone(cardP); A.applyModeControls();
+    const cardState = Object.assign(stateInfo(), { groups: layerGroupsVisible() });
+    // 空态只剩「去风格墙挑选」：原来那枚「筛出可编辑边框」的按钮随筛选一起移除
+    A.template = clone(styleP); A.applyModeControls();
+    const ctaState = {
+        cta: !!$('btnBorderBackWall'),
+        pick: !!$('btnBorderPickEditable')
+    };
+    A.template = savedTpl; A.applyModeControls();
+
     return {
-        labels, allInBar, noMore, themeInRight, pillBack,
+        labels, folderInPop, moreItems, moreHidden, moreOpened, moreClosed,
+        importHidden, importOpened, menusClosed, themeInRight, pillBack,
         openNames, defaultVisible, recentCollapsed, recentCount,
-        persisted, rebuiltOpen, searchOpen, searchVisible, groupCount: groups.length
+        persisted, rebuiltOpen, searchOpen, searchVisible, groupCount: groups.length,
+        filterGone, editableExpected, styleState, layerState, cardState, ctaState,
+        hasStyleP: !!styleP, hasLayerP: !!layerP, hasCardP: !!cardP
     };
 })()`;
 
@@ -141,12 +208,18 @@ async function main() {
     catch (e) { check(false, '探针执行', String(e && e.message)); }
     if (res) {
         if (res.missing) check(false, '模块已加载', 'App 未定义');
-        check(res.labels.length >= 10 && /导入文件夹/.test(res.labels.join(''))
-            && /重置/.test(res.labels.join('')) && /随机/.test(res.labels.join('')),
-            '顶栏恢复常驻入口（含导入文件夹 / 重置 / 随机）', JSON.stringify(res.labels));
-        check(res.allInBar && res.noMore,
-            '六个按钮回到工具组，⋯ 溢出菜单已移除',
-            JSON.stringify({ inBar: res.allInBar, noMore: res.noMore }));
+        check(res.labels.some((l) => l.includes('导入')) && /导出/.test(res.labels.join(''))
+            && /撤销/.test(res.labels.join('')) && /⋯/.test(res.labels.join('')),
+            '顶栏常驻主操作（导入 / 导出 / 撤销 / 更多）', JSON.stringify(res.labels));
+        check(res.folderInPop && res.moreItems,
+            '文件夹入口在「导入 ▾」内，同步/重置/随机在「⋯」内',
+            JSON.stringify({ folderInPop: res.folderInPop, moreItems: res.moreItems }));
+        check(res.moreHidden && res.moreOpened && res.moreClosed,
+            '「⋯」默认收起，点开/再点收起且 aria-expanded 同步',
+            JSON.stringify({ hidden: res.moreHidden, opened: res.moreOpened, closed: res.moreClosed }));
+        check(res.importHidden && res.importOpened && res.menusClosed,
+            '「导入 ▾」默认收起，点开后可再次点空白处关闭',
+            JSON.stringify({ hidden: res.importHidden, opened: res.importOpened, closed: res.menusClosed }));
         check(res.pillBack, '工具组 pill 底色与边框已恢复');
         check(res.themeInRight, '主题按钮回到右侧工具组（设置里那个也仍在）');
         check(res.openNames.filter((n) => !/最近使用|收藏/.test(n)).length <= 1,
@@ -161,12 +234,41 @@ async function main() {
         check(res.searchOpen > 0 && res.searchVisible > 0,
             '搜索时命中组强制展开，结果不会被折叠藏住',
             JSON.stringify({ open: res.searchOpen, visible: res.searchVisible }));
+        check(res.hasStyleP && res.hasLayerP && res.hasCardP,
+            '三类预设（相框 / 图层 / 卡片）都能在预设池里找到',
+            JSON.stringify({ style: res.hasStyleP, layer: res.hasLayerP, card: res.hasCardP }));
+        check(res.filterGone.row === false && res.filterGone.btn === false
+            && res.filterGone.label === false && res.filterGone.fn === 'undefined'
+            && res.filterGone.allVisible > res.editableExpected,
+            '「可编辑边框」筛选已从左侧栏移除（DOM / 文案 / 方法都不再存在）',
+            JSON.stringify(res.filterGone));
+        check(res.styleState.visible && res.styleState.groups === 0
+            && res.styleState.kind === 'frame' && /预设绘制/.test(res.styleState.title)
+            && /填充、描边、圆角、阴影/.test(res.styleState.text)
+            && res.styleState.count === String(res.editableExpected),
+            '相框预设：图层组隐藏，空态说明 + 可编辑数量出现',
+            JSON.stringify(res.styleState));
+        check(!res.layerState.visible && res.layerState.groups >= 5
+            && res.layerState.kind === 'layer',
+            '图层预设：5 个边框参数组正常显示，空态卡片隐藏',
+            JSON.stringify(res.layerState));
+        check(res.cardState.visible && res.cardState.groups === 0
+            && res.cardState.kind === 'card' && /卡片/.test(res.cardState.title),
+            '卡片预设：也给出对应说明，不留空面板',
+            JSON.stringify(res.cardState));
+        check(res.ctaState.cta && !res.ctaState.pick,
+            '空态只留「去风格墙挑选」，不再出现已移除的筛选按钮',
+            JSON.stringify(res.ctaState));
     }
 
     // 静态检查：状态栏引导语别再指错方向
     const appSrc = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'js', 'app.js'), 'utf8');
     check(!/点右上角「导入照片」/.test(appSrc) && /点工具栏左侧「导入照片」/.test(appSrc),
         '示例照片提示改为「工具栏左侧」（按钮本来就在左上）');
+    // 四角装饰括号已没有 UI；只保留预设自带值（「杂志大刊头」）。
+    const htmlSrc = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'index.html'), 'utf8');
+    check(!/cbCornerDecorType|四角装饰括号/.test(htmlSrc) && !/syncCornerDecorState/.test(appSrc),
+        '四角装饰括号的控件与联动代码已移除');
 
     console.log('─'.repeat(72));
     win.destroy();

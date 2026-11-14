@@ -412,21 +412,22 @@ async function main() {
     check(coverOn.src.indexOf('&v=') > 0,
         '自定义封面 URL 带版本号(同名文件替换不会命中旧缓存)', coverOn.src.slice(-16));
 
-    // 编辑页侧栏只留「图标 + 名字」：墙换过封面也不在窄栏里塞缩略图（效果交给悬停预览）。
+    // 编辑页侧栏：缩略图复用风格墙封面，名字照旧；没开自定义封面时用内置图。
     const sideCoverOn = await exec(`(() => {
         App.buildTree('');
         const item = Array.from(document.querySelectorAll('#presetTree .preset-item'))
             .find((x) => x.dataset.name === '3D卡片');
-        const dot = item && item.querySelector('.dot');
+        const thumb = item && item.querySelector('.preset-thumb');
+        const img = thumb && thumb.querySelector('img');
         const name = item && item.querySelector('.preset-name');
         return {
-            img: !!(item && item.querySelector('img')),
-            icon: dot ? dot.textContent : '',
+            img: !!(img && img.getAttribute('src')),
+            src: img ? img.getAttribute('src') : '',
             name: name ? name.textContent : '',
         };
     })()`);
-    check(sideCoverOn.img === false && !!sideCoverOn.icon && sideCoverOn.name === '3D卡片',
-        '编辑页侧栏只有图标和名字，不再渲染封面图', JSON.stringify(sideCoverOn));
+    check(!!sideCoverOn.img && /covers\/c\d+\.webp/.test(sideCoverOn.src) && sideCoverOn.name === '3D卡片',
+        '编辑页侧栏显示封面缩略图与名字', JSON.stringify(sideCoverOn));
 
     wallCovers = {};
     const coverOff = await exec(`(async () => {

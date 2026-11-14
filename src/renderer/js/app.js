@@ -14,6 +14,21 @@ const ROTATE_CURSOR = 'url("data:image/svg+xml,' + encodeURIComponent(ROTATE_CUR
 // 认 data:image/svg+xml 前缀即可可靠区分「旋转专用光标」。
 const isRotateCursor = (c) => String(c).indexOf('data:image/svg+xml') >= 0;
 
+// 「背景模糊·经典/日期」专属自由度：模板字段 / 滑块 id / 标签 id / 面板默认值。
+// 默认值就是引擎的缺省行为；只有用户拖过滑块才把字段写进模板，
+// 所以旧预设、草稿、.qfs 工程不会平白多出一堆字段。
+// 主体大小不在此列：引擎里它与通用滑块「图片缩放」是同一个乘数，重复了。
+const BLUR_ADV_CONTROLS = [
+    ['blurBackdropDim', 'slBlurBackdropDim', 'lblBlurBackdropDim', 40],
+    ['blurBackdropZoom', 'slBlurBackdropZoom', 'lblBlurBackdropZoom', 100],
+    ['blurSubjectShadow', 'slBlurSubjectShadow', 'lblBlurSubjectShadow', 100],
+    ['blurTextOffset', 'slBlurTextOffset', 'lblBlurTextOffset', 0],
+    ['blurTextGap', 'slBlurTextGap', 'lblBlurTextGap', 100],
+    ['blurBrandGap', 'slBlurBrandGap', 'lblBlurBrandGap', 100],
+];
+// 只对这两个风格露出进阶参数（它们共用 styleBlurCommon，别的风格读不到这些字段）。
+const BLUR_ADV_STYLES = ['BLUR_CLASSIC', 'BLUR_DATE'];
+
 window.App = {
     image: null,          // 当前图片 {el, name, w, h, exif, customSettings}
     images: [],
@@ -297,6 +312,15 @@ window.App = {
             if (p && p.exportFormat && this.dom.selFormat) {
                 this.dom.selFormat.value = p.exportFormat;
             }
+            // 尺寸也要跨会话记忆：以前只有质量/格式/EXIF/GPS 四项存了，
+            // 习惯导 2048px 的人重开后整批又变回 6000px 原图。
+            // 只接受下拉里真实存在的值，避免旧 prefs 里的脏值把 select 变成空选。
+            if (p && p.exportSize != null && this.dom.selExportSize) {
+                const v = String(p.exportSize);
+                if (Array.from(this.dom.selExportSize.options).some(o => o.value === v)) {
+                    this.dom.selExportSize.value = v;
+                }
+            }
             if (p && typeof p.keepExif === 'boolean' && this.dom.chkKeepExif) this.dom.chkKeepExif.checked = p.keepExif;
             if (p && typeof p.keepGps === 'boolean' && this.dom.chkKeepGps) this.dom.chkKeepGps.checked = p.keepGps;
             if (this.dom.chkKeepGps) this.dom.chkKeepGps.disabled = !(this.dom.chkKeepExif && this.dom.chkKeepExif.checked);
@@ -322,6 +346,26 @@ window.App = {
         const d = this.dom || {};
         if (d.slFontScale) d.slFontScale.value = String(s);
         if (d.lblFontScale) d.lblFontScale.textContent = Math.round(s * 100) + '%';
+        // 字号变化会改变顶栏实际内容宽度；测量放到下一帧，避免拿到旧布局。
+        this._scheduleToolbarOverflow();
+    },
+
+    // 顶栏宽度只看「内容是否溢出」，不按视口断点猜。140% 界面缩放下按钮字变宽时，
+    // 自动退成图标模式，保证主题 / 设置 / 账户永远留在屏幕内。
+    syncToolbarOverflow() {
+        const tb = this.dom && this.dom.toolbar;
+        if (!tb) return;
+        tb.classList.remove('toolbar-tight');
+        if (tb.scrollWidth > tb.clientWidth + 1) tb.classList.add('toolbar-tight');
+    },
+
+    // resize / 字号 / 面板宽度变化都可能在同一帧里连发，合并成一次测量。
+    _scheduleToolbarOverflow() {
+        if (this._toolbarOverflowRaf) return;
+        this._toolbarOverflowRaf = requestAnimationFrame(() => {
+            this._toolbarOverflowRaf = 0;
+            this.syncToolbarOverflow();
+        });
     },
 
     _saveFontScale() {
@@ -344,9 +388,13 @@ window.App = {
         this._previewFull = !!full;
         if (full) this.displayMax = this._previewMaxFull();
         else delete this.displayMax; // 回到 setupCanvas 的默认 1800
-        const d = this.dom || {};
-        if (d.btnPreviewQualityToggle) {
-            d.btnPreviewQualityToggle.textContent = full ? '当前：原图 1:1（点此切标准）' : '当前：标准（点此切原图 1:1）';
+        const seg = this.dom && this.dom.segPreview;
+        if (seg) {
+            seg.querySelectorAll('[data-preview]').forEach((b) => {
+                const on = (b.dataset.preview === 'full') === this._previewFull;
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
         }
         // 没图时不触发渲染:启动恢复阶段还没载入照片,后续正常渲染自然会用到新的 displayMax。
         if (this.image && typeof this.scheduleRender === 'function') this.scheduleRender(true);
@@ -366,6 +414,7 @@ window.App = {
         window.qingframe.savePrefs({
             exportQuality: d.slExportQuality ? d.slExportQuality.value : undefined,
             exportFormat: d.selFormat ? d.selFormat.value : undefined,
+            exportSize: d.selExportSize ? d.selExportSize.value : undefined,
             keepExif: !!(d.chkKeepExif && d.chkKeepExif.checked),
             keepGps: !!(d.chkKeepGps && d.chkKeepGps.checked)
         }).catch(() => {});
@@ -395,6 +444,7 @@ window.App = {
             body.classList.toggle('inspector-collapsed', ic);
             if (this.dom.sidebarRail) this.dom.sidebarRail.hidden = !sc;
             if (this.dom.inspectorRail) this.dom.inspectorRail.hidden = !ic;
+            this._scheduleToolbarOverflow();
             fit();
         };
         const toggle = (key) => { localStorage.setItem(key, localStorage.getItem(key) === '1' ? '0' : '1'); sync(); };
@@ -455,7 +505,37 @@ window.App = {
             if (e.key === '[') { e.preventDefault(); toggle(K_SIDE); }
             else if (e.key === ']') { e.preventDefault(); toggle(K_INSP); }
         });
+        // 窄窗口优先收左侧素材栏（<1200），把画面让给照片；用户手动展开/收起后尊重用户选择。
+        let autoSide = false;
+        const applyResponsive = () => {
+            const narrow = window.innerWidth < 1200;
+            const manual = localStorage.getItem(K_SIDE);
+            if (narrow && manual === null) {
+                autoSide = true;
+                body.classList.add('sidebar-collapsed');
+                if (this.dom.sidebarRail) this.dom.sidebarRail.hidden = false;
+                fit();
+            } else if (!narrow && autoSide) {
+                autoSide = false;
+                const collapse = localStorage.getItem(K_SIDE) === '1';
+                body.classList.toggle('sidebar-collapsed', collapse);
+                if (this.dom.sidebarRail) this.dom.sidebarRail.hidden = !collapse;
+                fit();
+            }
+        };
+        let resizeT = 0;
+        window.addEventListener('resize', () => {
+            // 先量一次顶栏：等 120ms 去抖结束再量，用户会看到按钮被裁一下。
+            this._scheduleToolbarOverflow();
+            clearTimeout(resizeT);
+            resizeT = setTimeout(() => {
+                applyResponsive();
+                this.syncToolbarOverflow();
+            }, 120);
+        });
         sync();
+        applyResponsive();
+        this._scheduleToolbarOverflow();
     },
 
     cacheDom() {
@@ -468,8 +548,11 @@ window.App = {
             btnEpPickDir: $('btnEpPickDir'), btnEpClearDir: $('btnEpClearDir'), epExportDirPath: $('epExportDirPath'),
             btnSyncSel: $('btnSyncSel'), btnUndo: $('btnUndo'), btnRedo: $('btnRedo'),
             btnReset: $('btnReset'), btnRandom: $('btnRandom'), btnFit: $('btnFit'),
-            btnPreviewQualityToggle: $('btnPreviewQualityToggle'),
             zoomInput: $('zoomInput'), zoomRange: $('zoomRange'), btnTheme: $('btnTheme'),
+            toolbar: $('toolbar'), btnImportMore: $('btnImportMore'), importPop: $('importPop'),
+            btnToolbarMore: $('btnToolbarMore'), toolbarMoreMenu: $('toolbarMoreMenu'),
+            segTheme: $('segTheme'), segPreview: $('segPreview'),
+            btnSettingsResetAll: $('btnSettingsResetAll'), updateMirrorCustom: $('updateMirrorCustom'),
             presetTree: $('presetTree'), presetSearch: $('presetSearch'),
             canvas: $('previewCanvas'), canvasPane: $('canvasPane'), placeholder: $('placeholder'), inspector: $('inspector'),
             stage: document.querySelector('.stage'),
@@ -497,8 +580,35 @@ window.App = {
 
     $(id) { return document.getElementById(id); },
 
+    /* 顶栏两个弹出菜单：导入方式 / 更多编辑操作。同一时间只开一个。 */
+    _bindToolbarMenus() {
+        const closeAll = () => {
+            for (const [btn, pop] of [[this.dom.btnImportMore, this.dom.importPop],
+                [this.dom.btnToolbarMore, this.dom.toolbarMoreMenu]]) {
+                if (pop) pop.hidden = true;
+                if (btn) btn.setAttribute('aria-expanded', 'false');
+            }
+        };
+        const wire = (btn, pop) => {
+            if (!btn || !pop) return;
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const wantOpen = pop.hidden;
+                closeAll();
+                pop.hidden = !wantOpen;
+                btn.setAttribute('aria-expanded', wantOpen ? 'true' : 'false');
+            });
+            pop.addEventListener('click', (e) => { if (e.target.closest('button')) closeAll(); });
+        };
+        wire(this.dom.btnImportMore, this.dom.importPop);
+        wire(this.dom.btnToolbarMore, this.dom.toolbarMoreMenu);
+        document.addEventListener('click', (e) => { if (!e.target.closest('.tool-split')) closeAll(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(); });
+    },
+
     bind() {
         const d = this.dom;
+        this._bindToolbarMenus();
         d.btnOpen.addEventListener('click', () => this.openImages());
         const pick = this.$('btnPickPhoto');
         if (pick) pick.addEventListener('click', () => this.openImages());
@@ -548,7 +658,10 @@ window.App = {
         }
         if (d.chkKeepGps) d.chkKeepGps.addEventListener('change', () => this._saveExportPrefs());
         // 尺寸提示依赖「所选档位 × 当前照片 × 当前相框样式」,三者任一变化都要重算
-        if (d.selExportSize) d.selExportSize.addEventListener('change', () => this.updateExportSizeNote());
+        if (d.selExportSize) d.selExportSize.addEventListener('change', () => {
+            this.updateExportSizeNote();
+            this._saveExportPrefs();
+        });
         d.btnSyncSel.addEventListener('click', () => this.syncToSelected());
         d.btnUndo.addEventListener('click', () => this.undo());
         d.btnRedo.addEventListener('click', () => this.redo());
@@ -576,6 +689,14 @@ window.App = {
             if (!isNaN(v)) this.setZoom(Math.min(3, Math.max(0.1, v / 100)));
         });
         d.presetSearch.addEventListener('input', () => this.filterTree(d.presetSearch.value.trim()));
+        const borderBackWall = this.$('btnBorderBackWall');
+        if (borderBackWall) {
+            borderBackWall.addEventListener('click', () => {
+                if (typeof this.openPresetWall === 'function') {
+                    this.openPresetWall(!!(this.image && this.image.el));
+                }
+            });
+        }
         d.tabs.addEventListener('click', e => {
             // 只认带 data-tab 的页签:工具栏分隔符后的收起按钮也带 .tab 样式,
             // 若把它当成页签会 switchTab(undefined),六个面板会一起被隐藏。
@@ -603,6 +724,10 @@ window.App = {
         window.addEventListener('blur', () => { if (this.draggingCompare) this.setCompare(false); });
         const btnCancel = document.getElementById('btnExportCancel');
         if (btnCancel) btnCancel.addEventListener('click', () => { this._exportAbort = true; });
+        const btnExportOpen = document.getElementById('btnExportOpen');
+        if (btnExportOpen) btnExportOpen.addEventListener('click', () => this._openExportDest());
+        const btnExportRetry = document.getElementById('btnExportRetry');
+        if (btnExportRetry) btnExportRetry.addEventListener('click', () => this._retryFailedExport());
         this.updateTopBar();
             d.loginStatus.addEventListener('click', () => this.openLoginModal());
         d.loginModalClose.addEventListener('click', () => this.closeLoginModal());
@@ -771,14 +896,29 @@ window.App = {
                 this.onSettingChanged();
             });
         }
+        // 背景模糊·经典/日期专属自由度：字段名 → 滑块 → 标签。
+        // 只有用户真的拖过才把字段写进模板（见 resetBlurAdvanced 删除字段），
+        // 没拖过的模板保持原样，旧预设 / 工程文件渲染逐像素不变。
+        for (const [field, sid, lid] of BLUR_ADV_CONTROLS) {
+            const sl = document.getElementById(sid);
+            if (!sl) continue;
+            this.updateLabel(lid, sl.value + '%');
+            sl.addEventListener('input', () => {
+                this.template[field] = Number(sl.value);
+                this.updateLabel(lid, sl.value + '%');
+                this.onSettingChanged();
+            });
+        }
+        const btnBlurReset = document.getElementById('btnBlurReset');
+        if (btnBlurReset) btnBlurReset.addEventListener('click', () => this.resetBlurAdvanced());
+        const btnGotoBlurText = document.getElementById('btnGotoBlurText');
+        if (btnGotoBlurText) btnGotoBlurText.addEventListener('click', () => this.gotoBlurTextGroup());
+
         const cbPC = document.getElementById('cbParamColor');
         if (cbPC) cbPC.addEventListener('change', () => {
             this.template.paramColor = cbPC.value;
             this.onSettingChanged();
         });
-        // 角饰没有独立开关了:样式选「无」即关闭,此时「大小」调了也不画,直接禁用。
-        const selDecor = document.getElementById('cbCornerDecorType');
-        if (selDecor) selDecor.addEventListener('change', () => this.syncCornerDecorState());
         // 头像上传(存全局)
         const btnAv = document.getElementById('btnUploadAvatar'), fileAv = document.getElementById('fileAvatar');
         if (btnAv && fileAv) {
@@ -1735,11 +1875,8 @@ window.App = {
         if ($('cbFocalEq')) this.template.focalEq = $('cbFocalEq').checked ? 1 : 0;
         this.updateFocalEqHint();
         this.updateExifTextHint();
-        // 角饰：样式里有「无」，它就是关闭状态，不需要再配一个开关
-        const decType = $('cbCornerDecorType') ? $('cbCornerDecorType').value : 'line';
-        decor.cornerDecorType = decType;
-        decor.cornerDecorEnable = decType && decType !== 'none' ? 1 : 0;
-        decor.cornerDecorSize = $('slCornerDecorSize') ? parseInt($('slCornerDecorSize').value, 10) : 30;
+        // 四角装饰（cornerDecor）不再提供 UI：只有「杂志大刊头」等预设自带该效果，
+        // 这里绝不回写 enable，否则任何一次参数改动都会把所有预设的角饰打开。
 
         this.syncPuzzleFromUI();
         // 晕影 / 颗粒已并入「效果」段：拖动它们也要点亮该段的「已改」标记，
@@ -1903,7 +2040,53 @@ window.App = {
             const pf = String(this.template.photoFrameStyle || '').toUpperCase();
             exifRow.style.display = (pf && pf !== 'NONE') ? 'none' : '';
         }
+        // 背景模糊·经典/日期的进阶参数：能力表只收录「引擎是否读通用滑块」，
+        // 这些行是按风格手工放出来的，得自己管显隐，别让别的风格看到拖了没反应的滑块。
+        const advStyle = String(this.template.photoFrameStyle || '').toUpperCase();
+        const advOn = BLUR_ADV_STYLES.indexOf(advStyle) !== -1;
+        // 单行模式（仅参数 / 日期）没有品牌行与型号行：行间距、品牌间距拖了不会变，收起。
+        const twoLine = advOn && Number(this.template.paramType || 0) === 0;
+        for (const id of ['rowBlurBackdropDim', 'rowBlurBackdropZoom', 'rowBlurSubjectShadow',
+            'rowBlurTextOffset', 'btnBlurReset', 'hintBlurAdvanced', 'hintBlurTextWhere']) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = advOn ? '' : 'none';
+        }
+        for (const id of ['rowBlurTextGap', 'rowBlurBrandGap']) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = twoLine ? '' : 'none';
+        }
         this.syncEmptyGroups();
+    },
+
+    // 一键回到预设默认：把这些字段从模板里删掉，而不是写成 40/100/100/0/100/100。
+    // 删掉后引擎走原硬编码分支，渲染与「从未调过」完全一致，工程文件也更干净。
+    resetBlurAdvanced() {
+        if (!this.template) return;
+        for (const [field, sid, lid, def] of BLUR_ADV_CONTROLS) {
+            delete this.template[field];
+            const sl = document.getElementById(sid);
+            if (sl) sl.value = def;
+            this.updateLabel(lid, def + '%');
+        }
+        this.onSettingChanged();
+        this.setStatus('已恢复背景模糊默认参数');
+    },
+
+    // 文字栏里的「去调」入口：那三根滑块在画布栏，这里负责把人送过去。
+    // 只切页签不够 —— 参数栏是长列表，切过去仍停在原来的滚动位置，所以还要滚到组 + 闪一下，
+    // 否则用户到了画布页签还是看不到目标，等于没跳。
+    gotoBlurTextGroup() {
+        this.switchTab('canvas');
+        const grp = document.getElementById('grpBlurText');
+        if (!grp) return;
+        grp.classList.remove('collapsed');
+        if (typeof grp.scrollIntoView === 'function') {
+            grp.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+        grp.classList.remove('grp-flash');
+        void grp.offsetWidth; // 读一次布局，让动画能被重新触发
+        grp.classList.add('grp-flash');
+        setTimeout(() => grp.classList.remove('grp-flash'), 1200);
     },
 
     // 行全被能力表隐藏时,把整组一起收起 —— 否则右侧只剩一个光标题的空卡片。
@@ -1942,21 +2125,9 @@ window.App = {
         }
     },
 
-    // 角饰样式为「无」时,「大小」调了也不会画:直接禁用,避免"滑了没反应"。
-    // 样式下拉本身不禁用 —— 禁了就没法再选回来了。
-    syncCornerDecorState() {
-        const sel = document.getElementById('cbCornerDecorType');
-        const on = !!(sel && sel.value && sel.value !== 'none');
-        ['slCornerDecorSize'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.disabled = !on;
-            const row = el && el.closest('.param-row');
-            if (row) row.classList.toggle('row-disabled', !on);
-        });
-    },
-
     // 回显:模板 -> 控件
     refreshUI() {
+        this.refreshPhotoMeta();
         if (!this.template) return;
         this.isUpdating = true;
         try {
@@ -2093,6 +2264,13 @@ window.App = {
             const biV = this.template.blurIntensity != null ? this.template.blurIntensity : 50;
             if ($('slBgBlurInt')) $('slBgBlurInt').value = biV;
             this.updateLabel('lblBgBlurInt', biV + '%');
+            // 进阶参数：模板里有就回显用户值，没有就显示引擎默认行为对应的数值。
+            for (const [field, sid, lid, def] of BLUR_ADV_CONTROLS) {
+                const v = this.template[field] != null ? Number(this.template[field]) : def;
+                const sl = document.getElementById(sid);
+                if (sl) sl.value = v;
+                this.updateLabel(lid, v + '%');
+            }
             const rowBI2 = document.getElementById('rowBgBlurInt');
             if (rowBI2) rowBI2.style.display = $('chkBgBlur') && $('chkBgBlur').checked ? '' : 'none';
             if ($('cbParamColor')) $('cbParamColor').value = this.template.paramColor || 'auto';
@@ -2188,11 +2366,6 @@ window.App = {
             if ($('slFilmGrain')) $('slFilmGrain').value = fgVal;
             this.updateLabel('lblFilmGrain', String(fgVal));
 
-            if ($('cbCornerDecorType')) $('cbCornerDecorType').value = decor.cornerDecorType || 'line';
-            if ($('slCornerDecorSize')) $('slCornerDecorSize').value = decor.cornerDecorSize || 30;
-            this.updateLabel('lblCornerDecorSize', decor.cornerDecorSize || 30);
-            this.syncCornerDecorState();
-
             if ($('cbExifText')) $('cbExifText').checked = (decor.exifAutoText || 0) === 1;
             if ($('cbFocalEq')) $('cbFocalEq').checked = (this.template.focalEq || 0) === 1;
             this.updateFocalEqHint();
@@ -2218,6 +2391,34 @@ window.App = {
         const showLayers = !frame && !card;
         const q = (sel) => Array.prototype.slice.call(document.querySelectorAll(sel));
         q('.ctl-grp-layers').forEach(el => { el.style.display = showLayers ? '' : 'none'; });
+        // 预设自带边框时，5 个图层组全部不适用。整页留空会让人以为面板坏了，
+        // 这里只说明原因和下一步（去风格墙换个图层边框预设），不在左侧素材库加筛选。
+        const bps = document.getElementById('borderPresetState');
+        if (bps) {
+            bps.hidden = showLayers;
+            bps.dataset.kind = frame ? 'frame' : (card ? 'card' : 'layer');
+            if (!showLayers) {
+                const name = t.templateName || '当前预设';
+                const title = document.getElementById('borderPresetTitle');
+                const text = document.getElementById('borderPresetText');
+                if (title) {
+                    title.textContent = frame
+                        ? `「${name}」的边框由预设绘制`
+                        : `「${name}」是卡片 / 模糊底样式`;
+                }
+                if (text) {
+                    text.textContent = frame
+                        ? '填充、描边、圆角、阴影都写在预设里，不能在这里单独微调。换用「圆角卡片」「极简细线」这类图层边框预设，就能逐项调整。'
+                        : '边框与背景模糊由预设和「画布与照片」里的参数控制，这里没有可单独调节的图层。换用图层边框预设即可逐项调整。';
+                }
+                const n = Array.isArray(this.presets) && typeof this.isEditablePreset === 'function'
+                    ? this.presets.filter(p => this.isEditablePreset(p)).length : 0;
+                const count = document.getElementById('borderEditableCount');
+                if (count) count.textContent = String(n);
+                const total = document.getElementById('borderPresetTotal');
+                if (total) total.textContent = String(Array.isArray(this.presets) ? this.presets.length : 0);
+            }
+        }
         // 「晕影 / 羽化 / 颗粒 / 漏光」不再按管线隐藏：engine-styles 的相框分支已经补上
         // applyGlobalLight（叠在成片之上、文字/Logo 之下），这几档在所有管线里都真的生效，
         // 藏起来只会让人以为没有这个功能。图层组仍然只服务默认模板管线，保持隐藏。
@@ -3296,7 +3497,7 @@ window.App = {
             'slParamFontSize', 'slBrandSize', 'slParamScale', 'slGlassSize', 'slFillOpacity', 'slGradientAngle', 'slTextureScale', 'slStrokeWidth', 'slStrokeOpacity',
             'slShadowX', 'slShadowY', 'slShadowBlur', 'slShadowOpacity', 'slGlowBlur', 'slGlowOpacity',
             'slVignetteStrength', 'slVignetteFeather', 'slLeakOpacity', 'slLeakAngle', 'slFilmGrain',
-            'slCornerDecorSize', 'slActiveIconOpacity', 'slElementRotation', 'slPuzzleGap', 'slPuzzleCorner',
+            'slActiveIconOpacity', 'slElementRotation', 'slPuzzleGap', 'slPuzzleCorner',
             'slCapSize1', 'slCapSize2', 'slCapSpacing', 'slSlotOffsetX', 'slSlotOffsetY', 'slSlotZoom',
             'slAppleModelSize', 'slAppleParamSize', 'slAppleDateSize',
             'slAppleLogoSize', 'slAppleLogoOpacity', 'slAppleLineWidth',
@@ -3347,12 +3548,17 @@ window.App = {
 
         // select 变更 -> commit
         const sels = ['cbCanvasRatio', 'cbParamPosition', 'cbParamType', 'cbFillType', 'cbGradientType', 'cbTextureBlend',
-            'cbStrokePos', 'cbLeakType', 'cbCornerDecorType', 'cbPuzzleBg', 'cbPuzzleCanvas',
+            'cbStrokePos', 'cbLeakType', 'cbPuzzleBg', 'cbPuzzleCanvas',
             'cbSlotFill', 'cbCapFont1', 'cbCapFont2'];
         sels.forEach(id => {
             const el = $(id);
             if (el) el.addEventListener('change', () => this.onSelectCustom(id));
         });
+        // 参数类型切到「仅参数 / 日期」时，底部文字只剩一行：
+        // 行间距 / 品牌间距要立刻收起，不能等下一次 refreshUI 才更新。
+        if ($('cbParamType')) {
+            $('cbParamType').addEventListener('change', () => this.updatePersonalVisibility());
+        }
 
         // 数字/文本输入:input 即时同步(防抖),change 提交
         const nums = ['tfImgOffsetX', 'tfImgOffsetY'];
@@ -3490,19 +3696,42 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
         });
         bindBtn('btnSettings', () => this.openSettings());
         bindBtn('settingsClose', () => this.closeSettings());
+        const settingsTabs = Array.from(document.querySelectorAll('#settingsModal .settings-tab'));
+        settingsTabs.forEach((b) => {
+            b.addEventListener('click', () => this.switchSettingsTab(b.dataset.settingsTab));
+            b.addEventListener('keydown', (e) => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                e.preventDefault();
+                const i = settingsTabs.indexOf(b);
+                const next = settingsTabs[(i + (e.key === 'ArrowRight' ? 1 : settingsTabs.length - 1)) % settingsTabs.length];
+                next.focus();
+                this.switchSettingsTab(next.dataset.settingsTab);
+            });
+        });
         const slFontScale = $('slFontScale'), btnFontScaleReset = $('btnFontScaleReset');
         if (slFontScale) {
             slFontScale.addEventListener('input', () => this.applyFontScale(parseFloat(slFontScale.value)));
             slFontScale.addEventListener('change', () => this._saveFontScale());
         }
         if (btnFontScaleReset) btnFontScaleReset.addEventListener('click', () => { this.applyFontScale(1); this._saveFontScale(); });
-        const btnThemeToggle = $('btnThemeToggle');
-        if (btnThemeToggle) btnThemeToggle.addEventListener('click', () => this.toggleTheme());
-        const btnPreviewQualityToggle = $('btnPreviewQualityToggle');
-        if (btnPreviewQualityToggle) btnPreviewQualityToggle.addEventListener('click', () => {
-            this.applyPreviewQuality(!this._previewFull);
+        const segTheme = $('segTheme');
+        if (segTheme) segTheme.addEventListener('click', (e) => {
+            const b = e.target.closest('[data-theme]');
+            if (!b) return;
+            const theme = b.dataset.theme === 'light' ? 'light' : 'dark';
+            this.applyTheme(theme);
+            if (window.qingframe && window.qingframe.savePrefs) {
+                window.qingframe.savePrefs({ theme }).catch(() => {});
+            }
+        });
+        const segPreview = $('segPreview');
+        if (segPreview) segPreview.addEventListener('click', (e) => {
+            const b = e.target.closest('[data-preview]');
+            if (!b) return;
+            this.applyPreviewQuality(b.dataset.preview === 'full');
             this._savePreviewQuality();
         });
+        bindBtn('btnSettingsResetAll', () => this.resetAllSettings());
         bindBtn('btnPickExportDir', () => this.chooseDefaultExportDir());
         bindBtn('btnClearExportDir', () => this.clearDefaultExportDir());
         bindBtn('btnAboutCheck', () => this.checkUpdatesFromAbout());
@@ -4232,7 +4461,6 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
             slAppleLineWidth: ['lblAppleLineWidth', v + '%'],
             slLeakOpacity: ['lblLeakOpacity', v + '%'], slLeakAngle: ['lblLeakAngle', v + '°'],
             slFilmGrain: ['lblFilmGrain', v],
-            slCornerDecorSize: ['lblCornerDecorSize', v],
             slPuzzleGap: ['lblPuzzleGap', v], slPuzzleCorner: ['lblPuzzleCorner', v + '%'], slCapSize1: ['lblCapSize1', v], slCapSize2: ['lblCapSize2', v],
             slCapSpacing: ['lblCapSpacing', v + '%'], slSlotOffsetX: ['lblSlotOffsetX', v], slSlotOffsetY: ['lblSlotOffsetY', v],
             slSlotZoom: ['lblSlotZoom', v + '%'],
@@ -4495,7 +4723,7 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
     // 从更新横幅「下载慢？」直接跳到下载源设置:打开设置弹窗并把光标放进输入框,
     // 省得用户自己去设置里找(输入框在设置「更新」区)。
     async openAboutMirror() {
-        await this.openSettings({ focus: 'tfUpdateMirror', select: true });
+        await this.openSettings({ tab: 'update', focus: 'tfUpdateMirror', select: true, revealMirror: true });
     },
     // 把 Tab 焦点限制在弹窗内;关闭后由 closeSettings 把焦点还给触发按钮。
     trapFocus(container, e) {
@@ -4529,13 +4757,76 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
         return r || { ok: false, message: '打开链接失败' };
     },
 
-    /* ══ 设置（默认导出位置 / 更新下载源 / 关于） ══ */
+    /* ══ 设置（常规 / 更新 / 关于） ══ */
+    // 设置页签：记住上次停留位置；从「下载慢？」进来时强制切到更新页。
+    settingsTab() {
+        const valid = ['general', 'update', 'about'];
+        let t = '';
+        try { t = localStorage.getItem('qfs_settings_tab') || ''; } catch (_) { /* 忽略 */ }
+        return valid.indexOf(t) >= 0 ? t : 'general';
+    },
+
+    switchSettingsTab(name, opts) {
+        const tab = ['general', 'update', 'about'].indexOf(name) >= 0 ? name : 'general';
+        const root = this.$('settingsModal');
+        if (!root) return tab;
+        root.querySelectorAll('.settings-tab').forEach((b) => {
+            const on = b.dataset.settingsTab === tab;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        root.querySelectorAll('[data-settings-panel]').forEach((p) => {
+            const on = p.dataset.settingsPanel === tab;
+            p.classList.toggle('active', on);
+            p.hidden = !on;
+        });
+        if (!opts || opts.persist !== false) {
+            try { localStorage.setItem('qfs_settings_tab', tab); } catch (_) { /* 忽略 */ }
+        }
+        if (!opts || opts.resetScroll !== false) {
+            const body = root.querySelector('.settings-body');
+            if (body) body.scrollTop = 0;
+        }
+        return tab;
+    },
+
+    // 恢复默认设置：只动偏好，不碰照片、模板和用户保存的预设。
+    async resetAllSettings() {
+        const ask = (typeof window.confirm === 'function')
+            ? window.confirm('恢复默认设置？\n\n界面缩放、主题、预览画质、参数栏密度、自动检查更新和默认导出位置都会回到初始值。照片、模板与已保存预设不受影响。')
+            : true;
+        if (!ask) return false;
+        this.applyFontScale(1);
+        this._saveFontScale();
+        this.applyTheme('dark');
+        this.applyPreviewQuality(false);
+        if (window.QfsPanelDensity) window.QfsPanelDensity.setPrefs({ panelDensity: 'auto' });
+        const api = window.qingframe;
+        if (api && api.savePrefs) {
+            api.savePrefs({ theme: 'dark', previewQuality: 'standard', panelDensity: 'auto', autoCheck: 'startup' }).catch(() => {});
+        }
+        const ac = this.$('selAutoCheck');
+        if (ac) ac.value = 'startup';
+        await this.clearDefaultExportDir();
+        this.switchSettingsTab('general');
+        this.setStatus('已恢复默认设置');
+        return true;
+    },
+
     async openSettings(opts) {
         this._settingsReturnFocus = document.activeElement;
+        const tab = (opts && opts.tab) || this.settingsTab();
+        this.switchSettingsTab(tab, { persist: false, resetScroll: false });
         await this.refreshSettingsExportDir();
-        // 关于区已并入设置最底部,打开设置时顺带把版本/系统信息填上
+        // 关于区已并入设置,打开设置时顺带把版本/系统信息填上
         await this.refreshAboutInfo();
-        this.syncUpdateMirrorField();
+        await this.syncUpdateMirrorField();
+        // 「下载慢？」进来时强制定位到自定义输入框；放在读 prefs 之后，避免被空值重新收起。
+        if (opts && opts.revealMirror) {
+            const sel = this.$('selUpdateMirror');
+            if (sel) sel.value = '__custom__';
+            if (this._syncMirrorCustomVisible) this._syncMirrorCustomVisible();
+        }
         const m = this.$('settingsModal');
         if (m) m.style.display = 'flex';
         const focusId = (opts && opts.focus) || 'settingsClose';
@@ -4765,10 +5056,33 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
         }
     },
 
+    // 「画布」页顶部的照片信息。宽高用当前载入尺寸（RAW 代理/裁切后也跟着变），
+    // 比例用最大公约数化简；无图时给一句中性占位，不再留一大块空白。
+    refreshPhotoMeta() {
+        const el = this.$('photoMetaText');
+        if (!el) return;
+        const im = this.image;
+        if (!im) { el.textContent = '未导入照片'; return; }
+        const w = Math.max(0, Math.round(im.w || (im.el && im.el.naturalWidth) || 0));
+        const h = Math.max(0, Math.round(im.h || (im.el && im.el.naturalHeight) || 0));
+        let ratio = '';
+        if (w > 0 && h > 0) {
+            const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+            const g = gcd(w, h) || 1;
+            ratio = (w / g) + ':' + (h / g);
+            // 化简后数字过大时改显示两位小数，避免 5472:3648 这种读不出比例的行
+            if (w / g > 40 || h / g > 40) ratio = (w / h).toFixed(2) + ':1';
+        }
+        const raw = im.raw ? (im.raw.error ? ' · RAW 显影失败'
+            : (im.raw.fullPending ? ' · RAW 显影中' : (im.raw.full ? ' · RAW 全尺寸' : ' · RAW 代理'))) : '';
+        el.textContent = (w && h ? `${w} × ${h} px` : '尺寸未知') + (ratio ? ` · ${ratio}` : '') + raw;
+    },
+
     // 空状态: 没有照片时右侧面板置灰并显示中央提示; 导入照片后恢复
     // 注意: "继续上次会话"按钮的显隐由 checkDraftRestore 负责,这里不碰它
     updateEmptyState() {
         const empty = !this.images || this.images.length === 0;
+        this.refreshPhotoMeta();
         const ins = this.dom.inspector;
         if (ins) ins.classList.toggle('no-image', empty);
         if (this.dom.placeholder) this.dom.placeholder.style.display = empty ? 'flex' : 'none';
@@ -4776,6 +5090,12 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
         // 样式条同时收起:无照片时它还写着上一张图的样式,空态下是假信息(有图后由 applyModeControls 重写)
         const ms = document.getElementById('modeStatus');
         if (ms && empty) ms.style.display = 'none';
+        // 无照片时这几个顶栏动作会静默 return，点了像按钮坏了一样。
+        // 置灰由这里统一管：导入 / 删除 / 换图都会经过 updateEmptyState，自动恢复。
+        for (const id of ['btnReset', 'btnRandom', 'btnSyncSel']) {
+            const b = document.getElementById(id);
+            if (b) b.disabled = empty;
+        }
     },
 
     /* ══ armLogoPlacement(logo) { … → app-elements.js ══ */

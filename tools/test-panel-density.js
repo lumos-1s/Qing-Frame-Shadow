@@ -77,6 +77,17 @@ const PROBE = `(async () => {
     const menu = $('tabMoreMenu');
     moreBtn.click();
     const opened = !menu.hidden && moreBtn.getAttribute('aria-expanded') === 'true';
+    // 「弹层没 hidden」不等于「用户看得见」：页签栏为了单行曾加 overflow-x:auto，
+    // 祖先带 overflow 会把这层绝对定位的菜单整块裁掉（菜单高 169px、栏高 46px），
+    // 点开就是一片空白。用命中测试断言它真的画在最上层。
+    const mr = menu.getBoundingClientRect();
+    const hitEl = document.elementFromPoint(
+        Math.round(mr.left + mr.width / 2), Math.round(mr.top + mr.height / 2));
+    const menuPaint = {
+        inMenu: !!hitEl && !!hitEl.closest('#tabMoreMenu'),
+        hit: hitEl ? (hitEl.id || hitEl.className || hitEl.tagName) : null,
+        h: Math.round(mr.height)
+    };
     menu.querySelector('[data-tab="template"]').click();
     await wait(60);
     const onTemplate = $('panel-template').classList.contains('active');
@@ -142,6 +153,10 @@ const PROBE = `(async () => {
     // ── 5. 状态收敛 ──
     A.template = A.defaultTemplate();
     A.updatePersonalVisibility();
+    // 状态栏的「样式 · …」由 applyModeControls 写入。以前只靠启动时的异步调用
+    // 顺带写好，probe 早一步就读到空串 —— 同一份代码一会儿绿一会儿红。
+    // 这里显式刷一次，断言的是「位置搬对了」而不是「启动时序碰巧赶上了」。
+    if (typeof A.applyModeControls === 'function') A.applyModeControls();
     const modeHidden = getComputedStyle($('modeStatus')).display === 'none';
     const styleInStatus = ($('stStyle') || {}).textContent || '';
     const prevImage = A.image;
@@ -169,7 +184,7 @@ const PROBE = `(async () => {
     insp.style.width = '';
 
     return {
-        primary, inMenu, sep, tabsH, tabRows, opened, onTemplate, label, closed,
+        primary, inMenu, sep, tabsH, tabRows, opened, menuPaint, onTemplate, label, closed,
         gradeTitleText, oldActRow, gradeActionIds, gradeMenuOpen, gradeMenuClosed,
         sideDup, envChip, envOff,
         defFolded, noticeShown, noticeText, afterExpand, afterReset, titleAlive, foldAlive,
@@ -207,6 +222,9 @@ async function main() {
             && res.tabRows === 1 && res.tabsH < 60,
             '页签收成一行：主 5 个 + 更多 3 个，高度不再占两排',
             JSON.stringify({ primary: res.primary, inMenu: res.inMenu, sep: res.sep, h: res.tabsH, rows: res.tabRows }));
+        check(res.menuPaint && res.menuPaint.inMenu,
+            '「更多」弹层真的画出来了（不被页签栏 overflow 裁掉）',
+            JSON.stringify(res.menuPaint));
         check(res.opened && res.onTemplate && res.closed && /样式/.test(res.label),
             '更多菜单可开合，切到隐藏页签后按钮回显当前页签名',
             JSON.stringify({ opened: res.opened, onTemplate: res.onTemplate, closed: res.closed, label: res.label }));

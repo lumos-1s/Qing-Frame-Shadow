@@ -959,6 +959,128 @@ async function main() {
     check(radialInv.overlay.outside > radialInv.overlay.inside + 40,
         '椭圆反相的叠加层：椭圆外染色、内部透明', JSON.stringify(radialInv.overlay));
 
+    // ── 9.13 羽化内圈：遮罩渐变 / 叠加层染色 / 内圈线共用同一个 inner ──
+    // 以前只有一条外圈虚线，看着像「框内全作用」，调羽化时框还一动不动。
+    // 这里用 spy 抓叠加层真正的 ellipse 调用，直接验证内圈线画在 rx*inner 上。
+    const innerRing = await exec(`(async () => {
+        const A = window.App, im = A.image;
+        im.el = await window.__mkGray(600, 400); im.w = 600; im.h = 400; im._gradeCache = null;
+        A.template = A.defaultTemplate(); A.setTpl(im, A.template);
+        A.resetGrade(); A.scheduleRender(true);
+        await new Promise((r) => setTimeout(r, 600));
+        A.addMask('radial');
+        await new Promise((r) => setTimeout(r, 200));
+        const m = A.activeMask(im);
+        m.shape = { cx: 0.5, cy: 0.5, rx: 0.4, ry: 0.4, rot: 0 };
+        m.inv = 0; m.density = 100;
+        const innerOf = (f) => { m.feather = f; return window.QfsMask.radialInner(m); };
+        const i0 = innerOf(0), i50 = innerOf(50), i100 = innerOf(100);
+        // 遮罩权重：inner 内满权重、inner..1 衰减、外面归零
+        m.feather = 50;
+        const c = window.QfsMask.render(m, 200, 200, im.el);
+        const g = c.getContext('2d');
+        const rad = 0.4 * 200;
+        const atR = (r) => g.getImageData(Math.round(100 + r * rad), 100, 1, 1).data[3];
+        const alpha = { r25: atR(0.25), r50: atR(0.5), r75: atR(0.75), r100: atR(1.0), r110: atR(1.1) };
+        // 叠加层真的画了第二条椭圆，且半径 = 外圈 * inner
+        const proto = CanvasRenderingContext2D.prototype;
+        const orig = proto.ellipse;
+        const calls = [];
+        proto.ellipse = function (x, y, rx, ry, rot, a, b, cc) {
+            calls.push([rx, ry, rot]);
+            return orig.call(this, x, y, rx, ry, rot, a, b, cc);
+        };
+        m.feather = 50; A.drawMaskOverlay(); const at50 = calls.slice();
+        calls.length = 0;
+        m.feather = 0; A.drawMaskOverlay(); const at0 = calls.slice();
+        calls.length = 0;
+        m.feather = 100; A.drawMaskOverlay(); const at100 = calls.slice();
+        proto.ellipse = orig;
+        m.feather = 50; A.drawMaskOverlay();
+        return { i0, i50, i100, alpha, at0, at50, at100 };
+    })()`);
+    check(Math.abs(innerRing.i0 - 0.999) < 0.01 && Math.abs(innerRing.i50 - 0.5) < 1e-6
+          && innerRing.i100 === 0,
+        '羽化 inner 半径：0→近 1、50→0.5、100→0', JSON.stringify([innerRing.i0, innerRing.i50, innerRing.i100]));
+    const ia = innerRing.alpha;
+    check(ia.r25 > 240 && ia.r50 > 240 && ia.r75 > 60 && ia.r75 < 200 && ia.r100 < 20 && ia.r110 < 20,
+        '遮罩渐变起点与 inner 一致（内圈满权重、外圈归零）', JSON.stringify(ia));
+    const r50 = innerRing.at50, r0 = innerRing.at0, r100 = innerRing.at100;
+    const outerX = r50.length ? r50[0][0] : 0, outerY = r50.length ? r50[0][1] : 0;
+    // 不依赖 ellipse 的调用顺序（clip 和外圈轮廓各画一次）：找半径正好是外圈一半的那次
+    const hasHalfRing = (list) => list.some((c) => Math.abs(c[0] - outerX * 0.5) < 0.6
+        && Math.abs(c[1] - outerY * 0.5) < 0.6);
+    check(hasHalfRing(r50) && !hasHalfRing(r0) && !hasHalfRing(r100),
+        '叠加层画了内圈细点线，半径正好是外圈×inner；羽化 0（硬边）/100（全软）时自动隐藏',
+        JSON.stringify({ f50: r50, f0: r0, f100: r100 }));
+
+    // ── 9.14 Shift 约束：正圆 / 等比联动两轴 / 不按 Shift 仍只改单轴 ──
+    const shiftDrag = await exec(`(async () => {
+        const A = window.App, im = A.image;
+        im.el = await window.__mkGray(600, 400); im.w = 600; im.h = 400; im._gradeCache = null;
+        A.template = A.defaultTemplate(); A.setTpl(im, A.template);
+        A.resetGrade(); A.scheduleRender(true);
+        await new Promise((r) => setTimeout(r, 600));
+        A.addMask('radial');
+        await new Promise((r) => setTimeout(r, 200));
+        const m = A.activeMask(im), pr = A._photoRect;
+        const ov = document.getElementById('maskOverlay');
+        const r = ov.getBoundingClientRect();
+        const P = (nx, ny) => [r.left + nx * r.width, r.top + ny * r.height];
+        const ev = (t, x, y, shift) => ov.dispatchEvent(new PointerEvent(t, {
+            clientX: x, clientY: y, bubbles: true, pointerId: 1, button: 0, shiftKey: !!shift
+        }));
+        const reset = () => { m.shape = { cx: .5, cy: .5, rx: .3, ry: .2, rot: 0 }; m.feather = 40; };
+        const pxEq = (s) => Math.abs(s.rx * pr.w - s.ry * pr.h);
+
+        // ① 空白处拖出新椭圆 + Shift → 屏幕正圆（rx/ry 归一化值不相等才对）
+        reset(); A.drawMaskOverlay();
+        const a = P(0.15, 0.15), b = P(0.35, 0.26);
+        ev('pointerdown', a[0], a[1], true);
+        ev('pointermove', b[0], b[1], true);
+        ev('pointerup', b[0], b[1], true);
+        await new Promise((r2) => setTimeout(r2, 150));
+        const s1 = Object.assign({}, m.shape), roundGap = pxEq(s1);
+
+        // ② 拖 +X 轴手柄 + Shift → 另一轴按同一倍率联动
+        reset(); A.drawMaskOverlay();
+        const h0 = P(0.8, 0.5), h1 = P(0.9, 0.5);
+        ev('pointerdown', h0[0], h0[1], true);
+        ev('pointermove', h1[0], h1[1], true);
+        ev('pointerup', h1[0], h1[1], true);
+        await new Promise((r2) => setTimeout(r2, 150));
+        const s2 = Object.assign({}, m.shape);
+        const ratioKept = Math.abs((s2.ry * pr.h / (s2.rx * pr.w)) - (0.2 * pr.h / (0.3 * pr.w))) < 0.02;
+
+        // ③ 同样的拖动不按 Shift → 只改长轴，短轴原封不动（回归保护）
+        reset(); A.drawMaskOverlay();
+        ev('pointerdown', h0[0], h0[1], false);
+        ev('pointermove', h1[0], h1[1], false);
+        ev('pointerup', h1[0], h1[1], false);
+        await new Promise((r2) => setTimeout(r2, 150));
+        const s3 = Object.assign({}, m.shape);
+
+        // ④ 拖边缘 + Shift → 锁成正圆
+        reset(); A.drawMaskOverlay();
+        const e0 = P(0.5 + 0.3 * 0.72, 0.5 + 0.2 * 0.72);
+        const e1 = P(0.5 + 0.3 * 0.95, 0.5 + 0.2 * 0.95);
+        ev('pointerdown', e0[0], e0[1], true);
+        ev('pointermove', e1[0], e1[1], true);
+        ev('pointerup', e1[0], e1[1], true);
+        await new Promise((r2) => setTimeout(r2, 150));
+        const s4 = Object.assign({}, m.shape), roundGap4 = pxEq(s4);
+        return { s1, roundGap, s2, ratioKept, s3, s4, roundGap4, ratio: pr.w / pr.h };
+    })()`);
+    check(shiftDrag.roundGap < 1.5 && Math.abs(shiftDrag.s1.rx - shiftDrag.s1.ry) > 0.02,
+        'Shift 拖出新椭圆 = 屏幕正圆（像素半径相等，归一化值本就不等）',
+        JSON.stringify({ s1: shiftDrag.s1, gap: shiftDrag.roundGap, ratio: shiftDrag.ratio }));
+    check(shiftDrag.ratioKept && shiftDrag.s2.rx > 0.34 && shiftDrag.s2.ry > 0.22,
+        'Shift 拖轴向手柄 = 两轴等比联动（形状比例不变）', JSON.stringify(shiftDrag.s2));
+    check(Math.abs(shiftDrag.s3.ry - 0.2) < 0.005 && shiftDrag.s3.rx > 0.34,
+        '不按 Shift 拖轴向手柄：只改被拖的那根轴（行为不变）', JSON.stringify(shiftDrag.s3));
+    check(shiftDrag.roundGap4 < 1.5,
+        'Shift 拖边缘 = 等比缩放后锁正圆', JSON.stringify({ s4: shiftDrag.s4, gap: shiftDrag.roundGap4 }));
+
     // ── 9.12 离开调色页签要退出蒙版编辑：编辑层不能继续挡 Logo/文字的画布操作 ──
     const tabLeave = await exec(`(async () => {
         const A = window.App, im = A.image;
@@ -1014,6 +1136,210 @@ async function main() {
           && /线的一侧/.test(unsupportedStyle.tip) && /混色器/.test(unsupportedStyle.tip),
         '相框样式添加蒙版可画布定位（照片矩形已上报，提示含渐变语义说明）',
         JSON.stringify(unsupportedStyle));
+
+    // ── 9.14 眼睛开关：停用后不参与烘焙、叠加层收掉，参数/形状保留 ──
+    const maskEye = await exec(`(async () => {
+        const A = window.App, im = A.image;
+        im.el = await window.__mkGray(600, 400); im.w = 600; im.h = 400; im._gradeCache = null;
+        A.template = A.defaultTemplate(); A.setTpl(im, A.template);
+        A.resetGrade();
+        A.scheduleRender(true);
+        await new Promise((r) => setTimeout(r, 600));
+        A.addMask('linear');
+        await new Promise((r) => setTimeout(r, 200));
+        const m = A.activeMask(im);
+        m.shape = { x1: 0.5, y1: 0.3, x2: 0.5, y2: 0.0 };
+        m.feather = 0;
+        A.setGrade({ exp: 2 }, { full: true });
+        await new Promise((r) => setTimeout(r, 350));
+        const sampleTop = () => {
+            const c = document.createElement('canvas'); c.width = 600; c.height = 400;
+            const g = c.getContext('2d'); g.drawImage(window.photoSrcOf(im), 0, 0);
+            return g.getImageData(300, 10, 1, 1).data[0];
+        };
+        const on = { top: sampleTop(), neutral: A.isNeutralGrade(im.grade) };
+        const row = document.querySelector('#maskList .mask-row.active');
+        const eyeBtn = row && row.querySelector('[data-mask-toggle]');
+        const ov = document.getElementById('maskOverlay');
+        const globalEye = document.querySelector('#maskList .mask-row[data-mask-id=""] [data-mask-toggle]');
+        if (eyeBtn) eyeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 350));
+        const off = {
+            top: sampleTop(), on: A.masksOf(im)[0].on, neutral: A.isNeutralGrade(im.grade),
+            overlay: ov.classList.contains('active'), rowOff: !!document.querySelector('#maskList .mask-row.off'),
+            status: A.statusMsg, hasEye: !!eyeBtn, globalHasEye: !!globalEye,
+            persisted: JSON.parse(JSON.stringify(im.grade)).masks[0].on
+        };
+        A.toggleMask(A.masksOf(im)[0].id);
+        await new Promise((r) => setTimeout(r, 350));
+        const back = {
+            top: sampleTop(), on: A.masksOf(im)[0].on,
+            overlay: ov.classList.contains('active'), status: A.statusMsg
+        };
+        return { on, off, back, shape: Object.assign({}, A.masksOf(im)[0].shape), exp: A.masksOf(im)[0].p.exp };
+    })()`);
+    check(maskEye.off.hasEye && !maskEye.off.globalHasEye && maskEye.on.top > 160,
+        '眼睛开关：每个蒙版有独立开关，全局行没有', JSON.stringify(maskEye.off));
+    check(maskEye.off.on === 0 && maskEye.off.top < 140 && maskEye.off.neutral
+          && !maskEye.off.overlay && maskEye.off.rowOff && maskEye.off.persisted === 0,
+        '停用蒙版：烘焙回到原图、叠加层收掉、列表显示 off、状态随草稿保存',
+        JSON.stringify(maskEye.off));
+    check(maskEye.back.on === 1 && maskEye.back.top > 160 && maskEye.back.overlay
+          && maskEye.exp === 2 && Math.abs(maskEye.shape.y1 - 0.3) < 1e-6,
+        '重新启用：参数和形状原样恢复、叠加层回来',
+        JSON.stringify(maskEye.back) + ' ' + JSON.stringify(maskEye.shape));
+
+    // ── 9.15 复制 / 粘贴蒙版：跨照片保留形状 + 组首参数，独立成 new ──
+    const maskClip = await exec(`(async () => {
+        const A = window.App, im = A.image;
+        A.resetGrade();
+        A.addMask('radial');
+        await new Promise((r) => setTimeout(r, 160));
+        const m = A.activeMask(im);
+        m.shape = { cx: 0.3, cy: 0.6, rx: 0.2, ry: 0.25, rot: 37 };
+        m.feather = 23; m.inv = 1;
+        A.setGrade({ exp: 1.5, temp: 20 });
+        A.syncMaskUI();
+        const copied = A.copyMask();
+        const clip = {
+            type: A._maskClip.type, shape: JSON.parse(JSON.stringify(A._maskClip.shape)),
+            p: JSON.parse(JSON.stringify(A._maskClip.p)), mode: A._maskClip.mode,
+            srcId: A._maskClip.anchorId, status: A.statusMsg
+        };
+        const im2 = { el: await window.__mkGray(300, 200, '#a0a0a0'), name: 'm2', path: null,
+            w: 300, h: 200, exif: {}, customSettings: null, grade: null };
+        A.images = [im, im2]; A.image = im2; A.currentIdx = 1; A._activeMaskId = null;
+        A.template = A.defaultTemplate(); A.setTpl(im2, A.template);
+        A.syncGradeUI();
+        const pasted = A.pasteMask();
+        await new Promise((r) => setTimeout(r, 120));
+        const m2 = A.masksOf(im2)[0];
+        const cross = {
+            pasted, count: A.masksOf(im2).length, status: A.statusMsg,
+            type: m2 && m2.type, mode: m2 && m2.mode, on: m2 && m2.on,
+            shape: m2 && m2.shape, p: m2 && { exp: m2.p.exp, temp: m2.p.temp },
+            freshId: !!(m2 && m2.id !== clip.srcId),
+            sameShape: !!(m2 && JSON.stringify(m2.shape) === JSON.stringify(clip.shape))
+        };
+
+        // 同一张照片里复制组合成员：粘贴必须保留组合方式并插在原成员之后
+        A.setActiveMask(m2.id);
+        A.addMask('radial');
+        await new Promise((r) => setTimeout(r, 160));
+        const member = A.activeMask(im2);
+        member.mode = 'add';
+        member.shape = { cx: 0.7, cy: 0.4, rx: 0.1, ry: 0.12, rot: 0 };
+        A.setGrade({ masks: A.masksOf(im2) });
+        A.setActiveMask(member.id);
+        A.copyMask();
+        const beforeCombo = A.masksOf(im2).length;
+        A.pasteMask();
+        const list = A.masksOf(im2);
+        const anchor = list.findIndex((x) => x.id === member.id);
+        const combo = {
+            before: beforeCombo, after: list.length,
+            mode: list[anchor + 1] && list[anchor + 1].mode,
+            insertedAfter: anchor >= 0 && list[anchor + 1] && list[anchor + 1].id !== member.id,
+            status: A.statusMsg
+        };
+
+        // 上限：已有 12 个时拒绝粘贴
+        const twelve = [];
+        for (let i = 0; i < 12; i++) {
+            const nm = window.QfsMask.newMask('linear');
+            nm.id = 'lim' + i;
+            twelve.push(nm);
+        }
+        im2.grade.masks = twelve;
+        const limited = A.pasteMask();
+        const limitStatus = A.statusMsg;
+
+        // 切回原图，后面的测试从干净状态开始
+        A.images = [im]; A.image = im; A.currentIdx = 0; A._activeMaskId = null;
+        A.template = A.defaultTemplate(); A.setTpl(im, A.template);
+        A.resetGrade(); A.syncGradeUI(); A.scheduleRender(true);
+        await new Promise((r) => setTimeout(r, 300));
+        return { copied, clip, cross, combo, limited, limitStatus };
+    })()`);
+    check(maskClip.copied && maskClip.clip.type === 'radial' && maskClip.clip.mode === 'new'
+          && maskClip.clip.srcId && /已复制蒙版/.test(maskClip.clip.status),
+        '复制蒙版：记录类型/形状/组首参数', JSON.stringify(maskClip.clip));
+    check(maskClip.cross.pasted && maskClip.cross.count === 1 && maskClip.cross.freshId
+          && maskClip.cross.type === 'radial' && maskClip.cross.mode === 'new'
+          && maskClip.cross.on === 1 && maskClip.cross.sameShape
+          && maskClip.cross.p.exp === 1.5 && maskClip.cross.p.temp === 20
+          && /已粘贴蒙版（独立调整层）/.test(maskClip.cross.status),
+        '粘贴到另一张照片：形状/参数原样、独立成组、id 重新生成',
+        JSON.stringify(maskClip.cross));
+    check(maskClip.combo.after === maskClip.combo.before + 1
+          && maskClip.combo.mode === 'add' && maskClip.combo.insertedAfter
+          && /已粘贴蒙版（并入原组合）/.test(maskClip.combo.status),
+        '同一张照片复制组合成员：粘贴保留组合方式并插在原成员后',
+        JSON.stringify(maskClip.combo));
+    check(maskClip.limited === false && /最多 12 个蒙版/.test(maskClip.limitStatus),
+        '12 个蒙版上限：粘贴被拒绝并说明原因', maskClip.limitStatus);
+
+    // ── 9.16 画笔光标圈：尺寸按照片显示短边换算，Alt 提示擦除，切换/停用即隐藏 ──
+    const brushCursor = await exec(`(async () => {
+        const A = window.App, im = A.image;
+        im.el = await window.__mkGray(600, 400); im.w = 600; im.h = 400; im._gradeCache = null;
+        A.template = A.defaultTemplate(); A.setTpl(im, A.template);
+        A.resetGrade();
+        A.scheduleRender(true);
+        await new Promise((r) => setTimeout(r, 600));
+        A.addMask('brush');
+        await new Promise((r) => setTimeout(r, 200));
+        const m = A.activeMask(im);
+        m.shape.size = 40;
+        A.syncMaskUI();
+        const cur = document.getElementById('maskBrushCursor');
+        const initialHidden = cur.hidden;
+        const ov = document.getElementById('maskOverlay');
+        const r = ov.getBoundingClientRect();
+        const x = r.left + r.width * 0.5, y = r.top + r.height * 0.5;
+        const ev = (extra) => ov.dispatchEvent(new PointerEvent('pointermove', Object.assign({
+            clientX: x, clientY: y, bubbles: true, pointerId: 1, button: 0
+        }, extra || {})));
+        ev();
+        const pr = A._photoRect, base = A._baseSize();
+        const pw = pr.w / Math.max(1, base.w) * r.width;
+        const ph = pr.h / Math.max(1, base.h) * r.height;
+        const expected = Math.max(4, 0.4 * Math.min(pw, ph));
+        const stage = document.querySelector('.stage');
+        const sr = stage.getBoundingClientRect();
+        const style = {
+            hidden: cur.hidden,
+            w: parseFloat(cur.style.width), h: parseFloat(cur.style.height),
+            centerX: parseFloat(cur.style.left) + parseFloat(cur.style.width) / 2,
+            centerY: parseFloat(cur.style.top) + parseFloat(cur.style.height) / 2
+        };
+        const wantX = x - sr.left - (stage.clientLeft || 0);
+        const wantY = y - sr.top - (stage.clientTop || 0);
+        ev({ altKey: true });
+        const erase = cur.classList.contains('erase');
+        A.addMask('linear');
+        await new Promise((r2) => setTimeout(r2, 160));
+        const hiddenOnLinear = cur.hidden;
+        A.setActiveMask(m.id);
+        ev();
+        const shownAgain = !cur.hidden;
+        A.toggleMask(m.id);
+        await new Promise((r2) => setTimeout(r2, 160));
+        const hiddenWhenOff = cur.hidden;
+        return { initialHidden, style, expected, wantX, wantY, erase, hiddenOnLinear, shownAgain, hiddenWhenOff };
+    })()`);
+    check(brushCursor.initialHidden, '画笔光圈：未把指针移到画布上时不显示', JSON.stringify(brushCursor));
+    check(!brushCursor.style.hidden
+          && Math.abs(brushCursor.style.w - brushCursor.expected) < 0.6
+          && Math.abs(brushCursor.style.h - brushCursor.expected) < 0.6
+          && Math.abs(brushCursor.style.centerX - brushCursor.wantX) < 0.8
+          && Math.abs(brushCursor.style.centerY - brushCursor.wantY) < 0.8,
+        '画笔光圈：直径 = 笔刷大小% × 照片显示短边，中心跟随指针',
+        JSON.stringify(brushCursor.style) + ' expected=' + brushCursor.expected);
+    check(brushCursor.erase && brushCursor.hiddenOnLinear
+          && brushCursor.shownAgain && brushCursor.hiddenWhenOff,
+        '画笔光圈：Alt 显示擦除色；切类型/停用后隐藏，切回画笔恢复',
+        JSON.stringify(brushCursor));
 
     // ── 10. 持久化 / 中性 / 深拷贝 / 重置 ──
     const persist = await exec(`(async () => {

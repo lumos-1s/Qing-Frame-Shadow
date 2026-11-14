@@ -287,9 +287,18 @@
         g.fillRect(0, 0, w, h);
     }
 
+    /* 椭圆羽化的「满作用区」半径（单位圆坐标 0..1）：
+       r <= inner 是满权重，inner..1 是过渡带，外面完全不作用。
+       生成遮罩、叠加层染色、内圈轮廓线三处必须共用同一个值 ——
+       各写一份 1-f 的话，将来改了一处，画出来的线就会骗人。 */
+    function radialInner(m) {
+        const f = Math.max(0.001, num(m && m.feather, 50) / 100);
+        return Math.max(0, 1 - f);
+    }
+
     function fillRadial(g, w, h, m) {
         const s = m.shape;
-        const f = Math.max(0.001, m.feather / 100);
+        const inner = radialInner(m);
         const cx = s.cx * w, cy = s.cy * h;
         const rx = Math.max(0.01, s.rx) * w, ry = Math.max(0.01, s.ry) * h;
         // 方向：与叠加层同一套「像素空间绕中心旋转」，两边角度自然一致
@@ -298,7 +307,7 @@
         g.translate(cx, cy);
         if (rot) g.rotate(rot);
         g.scale(rx, ry);
-        const grad = g.createRadialGradient(0, 0, Math.max(0, 1 - f), 0, 0, 1);
+        const grad = g.createRadialGradient(0, 0, inner, 0, 0, 1);
         if (m.inv) {
             // 反相椭圆 = 椭圆外全权重、椭圆内按羽化挖空。
             // 不能只把渐变颜色反过来再填椭圆内部：椭圆外仍是 alpha 0，
@@ -310,7 +319,7 @@
             g.translate(cx, cy);
             if (rot) g.rotate(rot);
             g.scale(rx, ry);
-            const cut = g.createRadialGradient(0, 0, Math.max(0, 1 - f), 0, 0, 1);
+            const cut = g.createRadialGradient(0, 0, inner, 0, 0, 1);
             cut.addColorStop(0, 'rgba(255,255,255,1)');
             cut.addColorStop(1, 'rgba(255,255,255,0)');
             g.globalCompositeOperation = 'destination-out';
@@ -508,7 +517,7 @@
     window.QfsMask = {
         TYPES, MODES, MASK_KEYS, newMask, defaultMaskParams, sanitizeMasks, sanitizeMask,
         maskHasParams, activeMasks, maskSignature, render, composite,
-        maskGroups, groupAlpha, activeGroups, groupSignature
+        maskGroups, groupAlpha, activeGroups, groupSignature, radialInner
     };
 })();
 
@@ -519,8 +528,57 @@
 
     function overlayEl() { return $('maskOverlay'); }
 
+    /* 把椭圆锁成「屏幕上的正圆」。rx/ry 各自归一化到照片宽/高，宽图上直接令
+       rx===ry 反而是个横椭圆，必须先换算回像素。取较大的那根轴，避免按 Shift
+       的瞬间椭圆突然缩小（与 PS/LR 的 Shift 约束同手感）。 */
+    function roundRadial(m, pr) {
+        if (!pr) return;
+        const pw = Math.max(1, pr.w), ph = Math.max(1, pr.h);
+        const Rx = Math.max(0.01, m.shape.rx) * pw;
+        const Ry = Math.max(0.01, m.shape.ry) * ph;
+        const R = Math.max(Rx, Ry);
+        m.shape.rx = Math.max(0.02, Math.min(1, R / pw));
+        m.shape.ry = Math.max(0.02, Math.min(1, R / ph));
+    }
+
+    // 眼睛图标用内联 SVG 构造，避免 innerHTML（蒙版列表可能来自草稿/工程文件）。
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    function eyeIcon(off) {
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 16 16');
+        svg.setAttribute('class', 'mask-eye-svg');
+        svg.setAttribute('aria-hidden', 'true');
+        const outline = document.createElementNS(SVG_NS, 'path');
+        outline.setAttribute('d', 'M1.3 8s2.5-4.3 6.7-4.3S14.7 8 14.7 8s-2.5 4.3-6.7 4.3S1.3 8 1.3 8Z');
+        outline.setAttribute('fill', 'none');
+        outline.setAttribute('stroke', 'currentColor');
+        outline.setAttribute('stroke-width', '1.3');
+        outline.setAttribute('stroke-linejoin', 'round');
+        svg.appendChild(outline);
+        const pupil = document.createElementNS(SVG_NS, 'circle');
+        pupil.setAttribute('cx', '8');
+        pupil.setAttribute('cy', '8');
+        pupil.setAttribute('r', '2.1');
+        pupil.setAttribute('fill', off ? 'none' : 'currentColor');
+        pupil.setAttribute('stroke', 'currentColor');
+        pupil.setAttribute('stroke-width', '1.2');
+        svg.appendChild(pupil);
+        if (off) {
+            const slash = document.createElementNS(SVG_NS, 'line');
+            slash.setAttribute('x1', '2.2'); slash.setAttribute('y1', '13.8');
+            slash.setAttribute('x2', '13.8'); slash.setAttribute('y2', '2.2');
+            slash.setAttribute('stroke', 'currentColor');
+            slash.setAttribute('stroke-width', '1.5');
+            slash.setAttribute('stroke-linecap', 'round');
+            svg.appendChild(slash);
+        }
+        return svg;
+    }
+
     Object.assign(window.App || (window.App = {}), {
         _activeMaskId: null,
+        _maskClip: null,        // 单蒙版剪贴板（只走内存，不碰系统剪贴板）
+        _maskBrushPos: null,    // 画笔光标圈最后所在的 client 坐标
         _maskRotHover: false,   // 指针是否停在旋转手柄上（叠加层画高亮用）
         // 蒙版「原图预览」：亮度/颜色蒙版选区依赖像素内容，暂时隐藏调色看原图更好选。
         // _previewUseOriginal 只在主预览渲染的一帧内为 true（见 app-render.js / photoSrcOf）。
@@ -558,6 +616,15 @@
                 if (g.members.indexOf(act) >= 0) return g;
             }
             return null;
+        },
+
+        /* 当前选中蒙版所在组是否被整体停用（组首 on=0）。
+           停用的组不参与烘焙，叠加层/原图预览/画笔光标也都不该出现。 */
+        activeGroupDisabled(im) {
+            const act = this.activeMask(im);
+            if (!act || act.on === 0) return true;
+            const grp = this.activeGroup(im);
+            return !!(grp && grp.head && grp.head.on === 0);
         },
 
         /* 改组合方式：把某个成员设成 new/add/subtract/intersect。
@@ -598,7 +665,8 @@
         setMaskOriginalPreview(on, opts) {
             on = !!on;
             const act = this.activeMask(this.image);
-            if (on && (!act || (act.type !== 'lum' && act.type !== 'color'))) on = false;
+            if (on && (!act || (act.type !== 'lum' && act.type !== 'color')
+                || this.activeGroupDisabled(this.image))) on = false;
             if (this._maskPreviewOriginal === on) { this._syncMaskOrigHint(); return; }
             const snap = (opts && opts.instant) ? null : this._snapshotPreviewCanvas();
             this._maskPreviewOriginal = on;
@@ -612,7 +680,8 @@
         _syncMaskOrigHint() {
             const act = this.activeMask(this.image);
             const on = !!this._maskPreviewOriginal && !!this.image && !!act
-                && (act.type === 'lum' || act.type === 'color');
+                && (act.type === 'lum' || act.type === 'color')
+                && !this.activeGroupDisabled(this.image);
             const hint = document.getElementById('maskOrigHint');
             if (hint) hint.hidden = !on;
             const cb = document.getElementById('cbMaskViewOrig');
@@ -718,6 +787,98 @@
             return true;
         },
 
+        /* 眼睛开关：on=0 的蒙版参数/形状都保留，只是不参与烘焙。
+           组首被关掉 = 整个组合（含 add/subtract/intersect 成员）一起停用。 */
+        toggleMask(id) {
+            const im = this.image;
+            if (!im) return false;
+            const list = this.masksOf(im);
+            const m = list.find((x) => x.id === id);
+            if (!m) return false;
+            const next = m.on === 0 ? 1 : 0;
+            m.on = next;
+            // 停用整个组时，亮度/颜色蒙版的「查看原图」必须退出：
+            // 否则调色一直藏着，用户会以为停用把调色也弄丢了。
+            if (!next) {
+                const grp = this.activeGroup(im);
+                if (grp && grp.head === m && this._maskPreviewOriginal) this._maskPreviewOriginal = false;
+            }
+            this.setGrade({ masks: list });
+            this.setStatus(next ? '已启用蒙版' : '已停用蒙版（参数保留）');
+            return true;
+        },
+
+        /* 单蒙版剪贴板：形状 + 组首参数。复制组合成员时带组首参数，
+           粘到别的照片才是一块能独立生效的蒙版，而不是一组零参数的补丁。 */
+        copyMask() {
+            const im = this.image;
+            const m = this.activeMask(im);
+            if (!im || !m) {
+                this.setStatus('先选中一个蒙版再复制');
+                return false;
+            }
+            const head = this.paramMask(im) || m;
+            this._maskClip = {
+                type: m.type,
+                mode: m.mode || 'new',
+                inv: m.inv ? 1 : 0,
+                feather: m.feather,
+                density: m.density,
+                shape: JSON.parse(JSON.stringify(m.shape || {})),
+                p: JSON.parse(JSON.stringify(head.p || {})),
+                anchorId: m.id,
+                image: im
+            };
+            this.setStatus('已复制蒙版');
+            this.syncMaskUI();
+            return true;
+        },
+
+        /* 粘贴成新蒙版：
+           · 粘到别的照片 → 独立调整层（组合成员也拆成 new，参数用组首那套）；
+           · 在同一张照片里复制组合成员 → 保留 add/subtract/intersect，
+             插在原成员后面，方便就地改形状扩一块。
+           剪贴板里不存 on：粘出来一律启用，停用的蒙版拿去复用看起来像粘贴失败。 */
+        pasteMask() {
+            const im = this.image;
+            if (!im) return false;
+            const clip = this._maskClip;
+            if (!clip) {
+                this.setStatus('剪贴板里还没有蒙版，先复制一个');
+                return false;
+            }
+            const list = this.masksOf(im);
+            if (list.length >= 12) {
+                this.setStatus('最多 12 个蒙版，先删掉不用的再粘贴');
+                return false;
+            }
+            const sameImage = clip.image === im;
+            const anchorIdx = sameImage ? list.findIndex((x) => x.id === clip.anchorId) : -1;
+            const keepMode = anchorIdx >= 0 && clip.mode && clip.mode !== 'new';
+            const fresh = window.QfsMask.newMask(clip.type);
+            const clean = window.QfsMask.sanitizeMask(Object.assign({}, clip, {
+                id: fresh.id,
+                mode: keepMode ? clip.mode : 'new',
+                on: 1,
+                shape: JSON.parse(JSON.stringify(clip.shape || {}))
+            }));
+            if (!clean) {
+                this.setStatus('粘贴失败：蒙版数据无效');
+                return false;
+            }
+            const masks = list.slice();
+            if (keepMode) masks.splice(anchorIdx + 1, 0, clean);
+            else masks.push(clean);
+            this._activeMaskId = clean.id;
+            // 新蒙版不是亮度/颜色时，原图预览必须收回，否则画面会一直停在未调色源上
+            if (this._maskPreviewOriginal && clean.type !== 'lum' && clean.type !== 'color') {
+                this._maskPreviewOriginal = false;
+            }
+            this.setGrade({ masks });
+            this.setStatus(keepMode ? '已粘贴蒙版（并入原组合）' : '已粘贴蒙版（独立调整层）');
+            return true;
+        },
+
         /* 蒙版形状改了：叠加层立刻重画，照片等松手再烘（拖动期不烘焙=跟手） */
         commitMaskShape(reason) {
             const im = this.image;
@@ -767,7 +928,72 @@
             const dpr = Math.min(2, window.devicePixelRatio || 1);
             const bw = Math.max(1, Math.round(cssW * dpr));
             const bh = Math.max(1, Math.round(cssH * dpr));
-            if (ov.width !== bw || ov.height !== bh) { ov.width = bw; ov.height = bh; }
+            // 画布视觉尺寸变了（缩放/窗口/侧栏），光圈的位置和直径立刻失效，
+            // 先收掉，等下一次 pointermove 按新矩形重新算。
+            if (ov.width !== bw || ov.height !== bh) {
+                ov.width = bw; ov.height = bh;
+                this._hideBrushCursor(true);
+            }
+        },
+
+        /* 画笔光标圈：用一个绝对定位的 DOM 圆环跟随指针。
+           不画在叠加层画布上 —— 那样每次 pointermove 都要重画整张蒙版光栅
+           （亮度/颜色蒙版还有逐像素采样），仅为了一根光标不值得。 */
+        _hideBrushCursor(keepPos) {
+            const el = $('maskBrushCursor');
+            if (el) el.hidden = true;
+            if (!keepPos) this._maskBrushPos = null;
+        },
+
+        _updateBrushCursor(e) {
+            const el = $('maskBrushCursor');
+            if (!el) return;
+            const im = this.image;
+            const m = this.activeMask(im);
+            if (!im || !m || m.type !== 'brush' || this.activeGroupDisabled(im)) {
+                this._hideBrushCursor();
+                return;
+            }
+            const x = Number(e && e.clientX), y = Number(e && e.clientY);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) { this._hideBrushCursor(); return; }
+            const ov = overlayEl();
+            const pr = this._photoRect;
+            if (!ov || !pr) { this._hideBrushCursor(); return; }
+            const r = ov.getBoundingClientRect();
+            if (!(r.width > 0) || !(r.height > 0)) { this._hideBrushCursor(); return; }
+            const base = this._baseSize();
+            const bw = Math.max(1, base.w), bh = Math.max(1, base.h);
+            const bx = (x - r.left) / r.width * bw;
+            const by = (y - r.top) / r.height * bh;
+            // 指针在照片外（画布留白/相框区域）不显示，避免暗示笔刷会落到照片外
+            if (bx < pr.x || bx > pr.x + pr.w || by < pr.y || by > pr.y + pr.h) {
+                this._hideBrushCursor();
+                return;
+            }
+            // 直径口径与 fillBrush 一致：size% × 照片短边。这里换成屏幕 CSS 像素。
+            const rawSize = Number(m.shape && m.shape.size);
+            const size = Math.max(2, Math.min(80, Number.isFinite(rawSize) ? rawSize : 18));
+            const pw = pr.w / bw * r.width;
+            const ph = pr.h / bh * r.height;
+            const d = Math.max(4, (size / 100) * Math.min(pw, ph));
+            const host = el.parentElement;
+            if (!host) { this._hideBrushCursor(); return; }
+            const hr = host.getBoundingClientRect();
+            el.style.width = d + 'px';
+            el.style.height = d + 'px';
+            el.style.left = (x - hr.left - (host.clientLeft || 0) - d / 2) + 'px';
+            el.style.top = (y - hr.top - (host.clientTop || 0) - d / 2) + 'px';
+            const erase = !!(e.altKey || ((e.buttons | 0) & 2));
+            el.classList.toggle('erase', erase);
+            el.hidden = false;
+            this._maskBrushPos = {
+                clientX: x, clientY: y, altKey: !!e.altKey, buttons: Number(e.buttons) || 0
+            };
+        },
+
+        _refreshBrushCursor() {
+            const p = this._maskBrushPos;
+            if (p) this._updateBrushCursor(p);
         },
 
         /* 指针 → 照片归一化坐标 */
@@ -864,7 +1090,14 @@
             g.setTransform(1, 0, 0, 1, 0, 0);
             g.clearRect(0, 0, ov.width, ov.height);
             const m = this.activeMask(this.image);
-            if (!m || !this.image) { ov.classList.remove('active'); this._maskRotHover = false; return; }
+            if (!m || !this.image) { ov.classList.remove('active'); this._maskRotHover = false; this._hideBrushCursor(); return; }
+            // 停用的蒙版不参与烘焙：不画范围、不给手柄，也不让叠加层继续挡画布操作。
+            if (m.on === 0 || this.activeGroupDisabled(this.image)) {
+                ov.classList.remove('active');
+                this._maskRotHover = false;
+                this._hideBrushCursor();
+                return;
+            }
             // 只有椭圆有旋转手柄；切到别的类型时清掉悬停态，避免切回来时残留高亮
             if (m.type !== 'radial') this._maskRotHover = false;
             const pr = this._photoRect;
@@ -941,7 +1174,8 @@
                 g.fillStyle = grad;
                 g.fillRect(sx, sy, sw, sh);
             } else if (m.type === 'radial') {
-                const f = Math.max(0.001, m.feather / 100);
+                // 与遮罩生成共用同一个 inner：染色范围、内圈线、实际生效范围三者永远一致
+                const inner = window.QfsMask.radialInner(m);
                 const cx = sx + m.shape.cx * sw, cy = sy + m.shape.cy * sh;
                 const rx = Math.max(1, m.shape.rx * sw), ry = Math.max(1, m.shape.ry * sh);
                 if (m.inv) {
@@ -955,7 +1189,7 @@
                     if (rotRad) g.rotate(rotRad);
                     g.scale(rx, ry);
                     g.globalCompositeOperation = 'destination-out';
-                    const cut = g.createRadialGradient(0, 0, Math.max(0, 1 - f), 0, 0, 1);
+                    const cut = g.createRadialGradient(0, 0, inner, 0, 0, 1);
                     cut.addColorStop(0, 'rgba(255,255,255,1)');
                     cut.addColorStop(1, 'rgba(255,255,255,0)');
                     g.fillStyle = cut;
@@ -967,8 +1201,8 @@
                     g.translate(cx, cy);
                     if (rotRad) g.rotate(rotRad);
                     g.scale(rx, ry);
-                    // 单位圆内的径向渐变：内圈到 (1-f) 是满权重，之外衰减到 0
-                    const grad = g.createRadialGradient(0, 0, Math.max(0, 1 - f), 0, 0, 1);
+                    // 单位圆内的径向渐变：r<=inner 满权重，之外衰减到 0
+                    const grad = g.createRadialGradient(0, 0, inner, 0, 0, 1);
                     grad.addColorStop(0, rgba(baseA));
                     grad.addColorStop(1, rgba(0));
                     g.fillStyle = grad;
@@ -1026,6 +1260,24 @@
                 g.ellipse(c.x, c.y, Math.max(2, rx), Math.max(2, ry), rotRad, 0, Math.PI * 2);
                 g.stroke();
                 g.setLineDash([]);
+                // 羽化内圈：r<=inner 是「满作用区」，inner..1 才是过渡带。以前只有一条
+                // 外圈虚线，看着像「框内全作用」，调羽化滑块时框还一动不动。这条细点线
+                // 把满作用区圈出来，滑块一动它跟着缩/涨（反相时表示「完全挖空区」）。
+                // 半径直接取遮罩生成用的同一个 inner，线画在哪、效果就到哪。
+                // 硬边（inner≈1）时两条线几乎重合，画出来只会像外圈变粗；全软
+                // （inner=0）时压根没有满作用区，也不该画。
+                const innerR = window.QfsMask.radialInner(m);
+                const irx = rx * innerR, iry = ry * innerR;
+                if (innerR > 0.06 && innerR < 0.97 && irx > 7 * dpr && iry > 7 * dpr) {
+                    g.save();
+                    g.beginPath();
+                    g.ellipse(c.x, c.y, irx, iry, rotRad, 0, Math.PI * 2);
+                    g.lineWidth = 1 * dpr;
+                    g.strokeStyle = 'rgba(255,255,255,.45)';
+                    g.setLineDash([2 * dpr, 6 * dpr]);
+                    g.stroke();
+                    g.restore();
+                }
                 // 四个轴向手柄（两条轴的 ± 端点）：拖它只改这一根轴的长度。
                 // 画成小方块，和「圆点=旋转」区分开，用户一眼知道有两套手柄。
                 const axisHs = this.maskAxisHandles(m.shape);
@@ -1100,10 +1352,15 @@
                 list.addEventListener('click', (e) => {
                     const row = e.target.closest('[data-mask-id]');
                     if (!row) return;
+                    if (e.target.closest('[data-mask-toggle]')) { this.toggleMask(row.dataset.maskId); return; }
                     if (e.target.closest('[data-mask-del]')) { this.removeMask(row.dataset.maskId); return; }
                     this.setActiveMask(row.dataset.maskId || null);
                 });
             }
+            const copy = $('btnMaskCopy');
+            if (copy) copy.addEventListener('click', () => this.copyMask());
+            const paste = $('btnMaskPaste');
+            if (paste) paste.addEventListener('click', () => this.pasteMask());
             const del = $('btnMaskDel');
             if (del) {
                 del.addEventListener('click', () => {
@@ -1127,6 +1384,8 @@
                 // 这个滑块没有走 _patchMask，必须自己回写标签/数字框；
                 // 否则拖完笔刷大小，面板上还停在旧值（其他蒙版滑块由 syncMaskUI 负责）。
                 if (this.updateLabel) this.updateLabel('lblMaskBrushSize', String(v));
+                // 光圈跟着滑块变大小（指针不在画布上时 _maskBrushPos 为空，什么也不做）
+                this._refreshBrushCursor();
                 // input 期用低分辨率预览，松手（change）补一次全分辨率烘焙。
                 this.commitMaskShape(done ? 'full' : 'live');
             });
@@ -1296,6 +1555,7 @@
             ov.addEventListener('pointerdown', (e) => {
                 const m = this.activeMask(this.image);
                 if (!m) return;
+                if (m.on === 0 || this.activeGroupDisabled(this.image)) { this._hideBrushCursor(); return; }
                 const pt = this._maskPoint(e);
                 if (!pt) return;
                 try { ov.setPointerCapture(e.pointerId); } catch (_) { /* 合成事件没有活动指针 */ }
@@ -1320,7 +1580,8 @@
                     // 旋转手柄优先于「拖动/改大小」：它本来就落在 rr≈1 的边缘带里，
                     // 不先判就会被当成改大小，永远转不动。
                     if (ah) {
-                        drag = { kind: 'axis', axis: ah.axis };
+                        // 记下按下时的两轴，Shift 等比联动时按「被拖轴的变化倍率」缩放另一轴
+                        drag = { kind: 'axis', axis: ah.axis, ax0: m.shape.rx, ay0: m.shape.ry };
                     } else if (rh && hit(pt, rh, 10)) {
                         drag = { kind: 'rotate' };
                     } else if (hit(pt, { x: m.shape.cx, y: m.shape.cy }, 12) || rr < 0.95) {
@@ -1349,14 +1610,19 @@
                 } else {
                     drag = null;
                 }
+                if (m.type === 'brush') this._updateBrushCursor(e);
+                else this._hideBrushCursor();
                 if (drag) this.drawMaskOverlay();
             });
 
             ov.addEventListener('pointermove', (e) => {
                 const m = this.activeMask(this.image);
                 if (!m) return;
+                if (m.on === 0 || this.activeGroupDisabled(this.image)) { this._hideBrushCursor(); return; }
                 // 注意：pending（按下未拖）也要进这里，否则「拖出新渐变」永远升级不了
                 if (!drag && !pending) {
+                    if (m.type === 'brush') this._updateBrushCursor(e);
+                    else this._hideBrushCursor();
                     // 悬停光标：旋转手柄 grab / 内部 move / 边缘可缩放 / 空白 crosshair
                     let cur = '';
                     let overRot = false;
@@ -1385,6 +1651,8 @@
                 }
                 const pt = this._maskPoint(e);
                 if (!pt) return;
+                if (m.type === 'brush') this._updateBrushCursor(e);
+                else this._hideBrushCursor();
                 if (pending) {
                     // 拖动超过阈值才把「空白处按下」升级成新形状
                     const moved = Math.hypot(pt.x - pending.start.x, pt.y - pending.start.y);
@@ -1399,6 +1667,7 @@
                         m.shape.cx = cx; m.shape.cy = cy;
                         m.shape.rx = Math.max(0.02, Math.abs(pt.x - cx));
                         m.shape.ry = Math.max(0.02, Math.abs(pt.y - cy));
+                        if (e.shiftKey) roundRadial(m, this._photoRect);   // Shift 拖出正圆
                         pending = null;
                         // 新椭圆升级成 size 拖动时，必须把半径基准一起带上：
                         // 否则下一次 pointermove 读 drag.rx0/d0 全是 undefined，
@@ -1435,8 +1704,17 @@
                         const py = (pt.y - m.shape.cy) * ph;
                         if (drag.axis === 'x') {
                             m.shape.rx = Math.max(0.02, Math.min(1, Math.abs(px * cos + py * sin) / pw));
+                            // Shift：另一根轴按同一倍率联动，保持屏幕上的形状比例
+                            if (e.shiftKey && drag.ay0) {
+                                const k = m.shape.rx / Math.max(0.02, drag.ax0);
+                                m.shape.ry = Math.max(0.02, Math.min(1, drag.ay0 * k));
+                            }
                         } else {
                             m.shape.ry = Math.max(0.02, Math.min(1, Math.abs(-px * sin + py * cos) / ph));
+                            if (e.shiftKey && drag.ax0) {
+                                const k = m.shape.ry / Math.max(0.02, drag.ay0);
+                                m.shape.rx = Math.max(0.02, Math.min(1, drag.ax0 * k));
+                            }
                         }
                     }
                 } else if (drag.kind === 'size') {
@@ -1444,6 +1722,7 @@
                     const k = Math.max(0.05, d / drag.d0);
                     m.shape.rx = Math.max(0.02, Math.min(1, drag.rx0 * k));
                     m.shape.ry = Math.max(0.02, Math.min(1, drag.ry0 * k));
+                    if (e.shiftKey) roundRadial(m, this._photoRect);   // Shift 拖边锁正圆
                 } else if (drag.kind === 'rotate') {
                     const pr = this._photoRect;
                     if (pr) {
@@ -1493,12 +1772,16 @@
             };
             ov.addEventListener('pointerup', end);
             ov.addEventListener('pointercancel', end);
-            // 指针离开叠加层：清掉悬停高亮与光标（拖动中不清，否则拖到边缘会闪）
+            // 指针离开叠加层：清掉悬停高亮与画笔光圈（拖动中如果还按着，
+            // pointer capture 会继续送 move，光圈会按新位置重新出现）
             ov.addEventListener('pointerleave', () => {
+                this._hideBrushCursor();
                 if (drag || pending) return;
                 if (this._maskRotHover) { this._maskRotHover = false; this.drawMaskOverlay(); }
                 if (ov.style.cursor) ov.style.cursor = '';
             });
+            // 滚轮缩放会改画布尺寸，光圈的位置/大小立刻失效；等下一次 pointermove 再显示
+            ov.addEventListener('wheel', () => this._hideBrushCursor(), { passive: true });
             ov.addEventListener('contextmenu', (e) => { if (this.activeMask(this.image)) e.preventDefault(); });
         },
 
@@ -1507,8 +1790,49 @@
             const masks = this.masksOf(this.image);
             const act = this.activeMask(this.image);
             if (list) {
-                const rows = ['<button class="mask-row' + (act ? '' : ' active') + '" data-mask-id="" type="button">'
-                    + '<span class="mask-name">全局</span><span class="mask-type">整张图</span></button>'];
+                // 用 DOM 构造而不是拼 innerHTML：m.id / m.type 来自草稿或工程文件，
+                // 现在虽然只可能是程序生成的值，但一旦以后允许外部模板带蒙版，
+                // 拼接就会变成 UI 注入（伪造按钮/布局）。textContent + dataset 天然免疫。
+                const frag = document.createDocumentFragment();
+                const addRow = (cls, id, name, type, del, eyeOn) => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'mask-row' + cls;
+                    b.dataset.maskId = id;
+                    // 眼睛图标（sr-only 的语义用 title/aria 表达）：全局行放一个占位，
+                    // 保证「全局」和下面蒙版的名字左对齐。
+                    const eye = document.createElement('span');
+                    eye.className = 'mask-eye' + (eyeOn === false ? ' off' : '')
+                        + (eyeOn == null ? ' mask-eye-none' : '');
+                    if (eyeOn == null) {
+                        eye.setAttribute('aria-hidden', 'true');
+                    } else {
+                        eye.dataset.maskToggle = '1';
+                        eye.setAttribute('role', 'switch');
+                        eye.setAttribute('aria-checked', eyeOn ? 'true' : 'false');
+                        eye.title = eyeOn ? '停用这个蒙版（参数保留）' : '启用这个蒙版';
+                        eye.appendChild(eyeIcon(!eyeOn));
+                    }
+                    b.appendChild(eye);
+                    const nameEl = document.createElement('span');
+                    nameEl.className = 'mask-name';
+                    nameEl.textContent = name;
+                    b.appendChild(nameEl);
+                    const typeEl = document.createElement('span');
+                    typeEl.className = 'mask-type';
+                    typeEl.textContent = type;
+                    b.appendChild(typeEl);
+                    if (del) {
+                        const delEl = document.createElement('span');
+                        delEl.className = 'mask-del';
+                        delEl.dataset.maskDel = '1';
+                        delEl.title = '删除';
+                        delEl.textContent = '×';
+                        b.appendChild(delEl);
+                    }
+                    frag.appendChild(b);
+                };
+                addRow(act ? '' : ' active', '', '全局', '整张图', false);
                 // 注意：window.QfsMask.MODES 是**字符串数组**（内部校验用），
                 // 带 label 的元数据在 window.App.MASK_MODES。这里要用后者，
                 // 用错了会渲染出「蒙版 0 · undefined」（踩过）。
@@ -1526,14 +1850,15 @@
                             : md.k === 'intersect' ? '∩ ' : '';
                     const label = md.k === 'new' ? ('蒙版 ' + groupNo)
                         : ('蒙版 ' + groupNo + ' · ' + md.label);
-                    rows.push('<button class="mask-row' + (on ? ' active' : '') + (m.on === 0 ? ' off' : '')
-                        + (md.k !== 'new' ? ' combo' : '') + '" data-mask-id="' + m.id + '" type="button">'
-                        + '<span class="mask-name">' + mark + label + '</span>'
-                        + '<span class="mask-type">' + t.label + '</span>'
-                        + '<span class="mask-del" data-mask-del="1" title="删除">×</span></button>');
+                    addRow((on ? ' active' : '') + (m.on === 0 ? ' off' : '') + (md.k !== 'new' ? ' combo' : ''),
+                        String(m.id), mark + label, t.label, true, m.on !== 0);
                 }
-                list.innerHTML = rows.join('');
+                list.replaceChildren(frag);
             }
+            const copyBtn = $('btnMaskCopy');
+            if (copyBtn) copyBtn.disabled = !act;
+            const pasteBtn = $('btnMaskPaste');
+            if (pasteBtn) pasteBtn.disabled = !this._maskClip;
             const opts = $('maskOpts');
             if (opts) opts.style.display = act ? '' : 'none';
             const brushRow = $('rowMaskBrush');
@@ -1572,14 +1897,20 @@
                     // 相框/卡片管线现在也会上报照片矩形，pr 为空只剩「还没渲染完」一种情况
                     const how = pr ? ({
                         linear: '线的一侧会被整片选中，过渡带宽度≈线的长度：两端点拉得越远过渡越柔；拖线身移动，空白处拖一下重画',
-                        radial: '拖内部移动；拖四个方块手柄单独调长轴/短轴，拖边缘等比缩放；拖外侧圆点旋转（Shift 15°吸附）；外面拖出新椭圆',
+                        radial: '内侧细点圈=满作用区，外圈=羽化到零；拖内部移动、四个方块手柄调单轴、边缘等比缩放、外侧圆点旋转，外面拖出新椭圆。按住 Shift：正圆 / 等比联动两轴 / 旋转吸附 15°',
                         brush: '按住涂抹；按住 Alt 或右键涂抹 = 擦除',
                         lum: '按亮度自动选区，调下面的暗部/亮部阈值',
                         color: '在画布上点一下取色，再调色相/容差；灰和近白黑不会被选中'
                     })[act.type] : '蒙版叠加层还没准备好，稍等片刻再试';
-                    // 编辑蒙版时混色器会被收起（CSS：#grpGrade.editing-mask ~ #grpMix）——
-                    // 它只作用于整张照片、不跟蒙版走，不说一句用户会以为混色器丢了
-                    tip.textContent = how + '；混色器只作用于整张照片，编辑蒙版时已暂时收起';
+                    if (act.on === 0) {
+                        tip.textContent = '这个蒙版已停用（眼睛图标）：参数和形状都保留，点一下眼睛即可恢复。';
+                    } else if (this.activeGroupDisabled(this.image)) {
+                        tip.textContent = '这个组合的组首已停用：组内所有成员暂时不生效，点亮组首的眼睛即可恢复。';
+                    } else {
+                        // 编辑蒙版时混色器会被收起（CSS：#grpGrade.editing-mask ~ #grpMix）——
+                        // 它只作用于整张照片、不跟蒙版走，不说一句用户会以为混色器丢了
+                        tip.textContent = how + '；混色器只作用于整张照片，编辑蒙版时已暂时收起';
+                    }
                 }
             }
             const badge = $('grpMask');
@@ -1615,6 +1946,12 @@
             }
             this.drawMaskOverlay();
             this._syncMaskOrigHint();
+            // 光圈只在「选中画笔且未停用」时存在；切类型/停用/切图后立刻收掉
+            if (act && act.type === 'brush' && !this.activeGroupDisabled(this.image)) {
+                this._refreshBrushCursor();
+            } else {
+                this._hideBrushCursor();
+            }
         }
     });
 })();

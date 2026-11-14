@@ -66,15 +66,28 @@
 
         <!-- ═══ 顶部工具栏 ═══ -->
         <header id="toolbar">
-            <!-- 返回边框墙：进入编辑后作为「回首页换风格」的入口显示；启动时由预设墙逻辑打开 -->
+            <!-- 返回风格墙：进入编辑后作为「回首页换风格」的入口显示；启动时由预设墙逻辑打开 -->
             <div class="toolbar-group" id="grpBack" style="display:none">
-                <button id="btnBackWall" class="tbtn" title="返回边框墙、换个风格"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 3.5 5 8l5.5 4.5"/></svg>边框墙</button>
+                <button id="btnBackWall" class="tbtn" title="返回风格墙、换个风格"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 3.5 5 8l5.5 4.5"/></svg><span class="tbtn-label">风格墙</span></button>
             </div>
 
-            <!-- 导入 -->
+            <!-- 导入：主按钮导入照片，右侧箭头只放文件夹入口 -->
             <div class="toolbar-group">
-                <button id="btnOpen" class="tbtn" title="打开图片 (Ctrl+O)">导入照片</button>
-                <button id="btnOpenFolder" class="tbtn" title="导入整个文件夹（含子文件夹） (Ctrl+Shift+O)">导入文件夹</button>
+                <div class="tool-split" id="importSplit">
+                    <button id="btnOpen" class="tbtn" title="导入照片 (Ctrl+O)">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="9" rx="1.6"/><circle cx="6" cy="7" r="1.1"/><path d="M3.5 11.5 6.7 8.6a1 1 0 0 1 1.4 0l3.4 2.9"/></svg>
+                        <span class="tbtn-label">导入</span>
+                    </button>
+                    <button id="btnImportMore" class="tbtn tool-arrow" title="导入文件夹（含子文件夹）" aria-label="更多导入方式" aria-haspopup="true" aria-expanded="false">
+                        <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.5 8 11l4.5-4.5"/></svg>
+                    </button>
+                    <div class="tool-pop" id="importPop" hidden>
+                        <button id="btnOpenFolder" class="tool-pop-item" title="导入整个文件夹（含子文件夹） (Ctrl+Shift+O)">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.2h4l1.3 1.6H14v7.4H2z"/><path d="M2 6h12"/></svg>
+                            导入文件夹…
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- 操作 -->
@@ -82,7 +95,7 @@
                 <div class="export-split" id="exportSettingsWrap">
                     <button id="btnSave" class="tbtn primary export-main" title="导出当前图片">
                         <svg class="btn-ico" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5 V10"/><path d="M4.6 6.6 8 10l3.4-3.4"/><path d="M2.6 12.4 H13.4"/></svg>
-                        <span id="btnSaveLabel">导出</span>
+                        <span id="btnSaveLabel" class="tbtn-label">导出</span>
                     </button>
                     <button id="btnExportSettings" class="tbtn primary" title="导出设置：格式 / 质量 / 尺寸 / EXIF" aria-label="导出设置" aria-haspopup="true">
                         <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 6.5 8 11l4.5-4.5"/></svg>
@@ -140,24 +153,38 @@
                         <div class="ep-note muted" id="exportExifNote">拍摄信息仅 JPG 导出时写入</div>
                     </div>
                 </div>
-                <button id="btnCopy" class="tbtn" title="复制到剪贴板，可直接粘贴到微信 / 小红书 (Ctrl+Shift+C)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5.6" y="5.6" width="8" height="8" rx="1.6"/><path d="M10.4 2.6H3.6c-.6 0-1 .4-1 1v6.8"/></svg>复制</button>
-                <button id="btnSyncSel" class="tbtn" title="将当前边框效果应用到选中的照片">同步到选中</button>
+                <button id="btnCopy" class="tbtn" title="复制到剪贴板，可直接粘贴到微信 / 小红书 (Ctrl+Shift+C)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.6" y="5.6" width="8" height="8" rx="1.6"/><path d="M10.4 2.6H3.6c-.6 0-1 .4-1 1v6.8"/></svg><span class="tbtn-label">复制</span></button>
             </div>
 
-            <!-- 编辑：撤销 / 重做 / 重置 / 随机 -->
+            <!-- 编辑：撤销 / 重做常驻；同步 / 重置 / 随机收进「⋯」 -->
             <div class="toolbar-group">
-                <button id="btnUndo" class="tbtn icon" title="撤销 (Ctrl+Z)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5H2.5V3.5"/><path d="M12.5 12.5a5 5 0 0 0-9.4-2.2L2.5 5.5"/><path d="M2.5 8.8V13H7"/></svg>撤销</button>
-                <button id="btnRedo" class="tbtn icon" title="重做 (Ctrl+Y)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5h1.5v-2"/><path d="M3.5 12.5a5 5 0 0 1 9.4-2.2l.6-4.8"/><path d="M13.5 8.8V13H9"/></svg>重做</button>
-                <button id="btnReset" class="tbtn icon warn" title="重置所有参数"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5a5.5 5.5 0 1 0 5.1 3.6"/><path d="M13.4 2.2v3.6H9.8"/></svg>重置</button>
-                <button id="btnRandom" class="tbtn icon" title="随机应用一种边框"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 5.5h11l-3-3"/><path d="M14.5 10.5h-11l3 3"/><path d="M6.5 8h1"/><path d="M10.5 8h1"/></svg>随机</button>
+                <button id="btnUndo" class="tbtn icon" title="撤销 (Ctrl+Z)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5H2.5V3.5"/><path d="M12.5 12.5a5 5 0 0 0-9.4-2.2L2.5 5.5"/><path d="M2.5 8.8V13H7"/></svg><span class="tbtn-label">撤销</span></button>
+                <button id="btnRedo" class="tbtn icon" title="重做 (Ctrl+Y)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5.5h1.5v-2"/><path d="M3.5 12.5a5 5 0 0 1 9.4-2.2l.6-4.8"/><path d="M13.5 8.8V13H9"/></svg><span class="tbtn-label">重做</span></button>
+                <div class="tool-split" id="toolMoreWrap">
+                    <button id="btnToolbarMore" class="tbtn icon" type="button" title="更多编辑操作：同步到选中 / 重置 / 随机" aria-haspopup="true" aria-expanded="false" aria-label="更多编辑操作">⋯</button>
+                    <div class="tool-pop tool-pop-right" id="toolbarMoreMenu" hidden>
+                        <button id="btnSyncSel" class="tool-pop-item" type="button" title="将当前边框效果应用到选中的照片 (Ctrl+D)">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 5.5h8l-2.2-2.2"/><path d="M13.5 10.5h-8l2.2 2.2"/><path d="M12.8 3.6v3.2h-3.2"/><path d="M3.2 12.4v-3.2h3.2"/></svg>
+                            同步到选中
+                        </button>
+                        <div class="tool-pop-sep" role="separator"></div>
+                        <button id="btnReset" class="tool-pop-item warn" type="button" title="重置所有参数">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5a5.5 5.5 0 1 0 5.1 3.6"/><path d="M13.4 2.2v3.6H9.8"/></svg>
+                            重置所有参数
+                        </button>
+                        <button id="btnRandom" class="tool-pop-item" type="button" title="随机应用一种边框">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 5.5h11l-3-3"/><path d="M14.5 10.5h-11l3 3"/><path d="M6.5 8h1"/><path d="M10.5 8h1"/></svg>
+                            随机应用边框
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="grow"></div>
 
             <div class="toolbar-group zoom-group">
-                <button id="btnFit" class="tbtn icon" title="适应窗口"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 2.5H2.5v3"/><path d="M10.5 2.5h3v3"/><path d="M5.5 13.5h-3v-3"/><path d="M10.5 13.5h3v-3"/></svg>适应</button>
+                <button id="btnFit" class="tbtn icon" title="适应窗口"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 2.5H2.5v3"/><path d="M10.5 2.5h3v3"/><path d="M5.5 13.5h-3v-3"/><path d="M10.5 13.5h3v-3"/></svg><span class="tbtn-label">适应</span></button>
                 <input id="zoomInput" class="tzoom" type="text" value="100%" title="缩放比例(%)" />
-                <span class="zoom-badge">%</span>
                 <input id="zoomRange" class="trange" type="range" min="10" max="300" value="100" title="缩放" />
             </div>
 
@@ -191,12 +218,12 @@
         <!-- ═══ 主体三栏 ═══ -->
         <main id="main">
 
-            <!-- 左侧：边框 -->
+            <!-- 左侧：素材库（边框预设 / 调色预设） -->
             <aside id="sidebar" class="mode-border">
                 <div class="side-title side-mode-title">
                     <div class="side-mode-tabs" role="tablist" aria-label="左侧素材库">
-                        <button id="sideTabBorder" class="side-mode-tab active" type="button" data-side-mode="border" role="tab" aria-selected="true">边框</button>
-                        <button id="sideTabGrade" class="side-mode-tab" type="button" data-side-mode="grade" role="tab" aria-selected="false">我的调色</button>
+                        <button id="sideTabBorder" class="side-mode-tab active" type="button" data-side-mode="border" role="tab" aria-selected="true">素材库</button>
+                        <button id="sideTabGrade" class="side-mode-tab" type="button" data-side-mode="grade" role="tab" aria-selected="false">调色预设</button>
                     </div>
                     <button id="btnSidebarCollapse" class="panel-collapse-btn" type="button" title="收起素材栏 (Ctrl+[)" aria-label="收起素材栏">
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.5 5.5 8 10 12.5"/></svg>
@@ -206,7 +233,7 @@
                     <div class="side-subhead">
                         <button id="btnMyTemplates" class="side-title-action" type="button" title="管理我的样式（边框 + 文字 + Logo 的整套外观）">我的样式</button>
                     </div>
-                    <div class="side-search"><input id="presetSearch" type="text" placeholder="搜索边框…" /></div>
+                    <div class="side-search"><input id="presetSearch" type="text" placeholder="搜索风格…" /></div>
                     <div id="presetTree" class="preset-tree"></div>
                 </div>
                 <div id="sideGradeBody" class="side-body" hidden>
@@ -215,16 +242,16 @@
                         <button id="btnGradePresetImport" class="side-action" type="button" title="一次选择多个 .xmp 文件，批量导入预设">导入预设</button>
                     </div>
                     <div class="side-search grade-search">
-                        <input id="tfGradePresetSearch" type="text" placeholder="搜索我的调色" aria-label="搜索我的调色" spellcheck="false" autocomplete="off" />
+                        <input id="tfGradePresetSearch" type="text" placeholder="搜索调色预设" aria-label="搜索调色预设" spellcheck="false" autocomplete="off" />
                         <button id="btnClearGradePresetSearch" class="tpl-search-clear" type="button" title="清空搜索" aria-label="清空搜索" hidden>×</button>
                     </div>
                     <div class="grade-side-hint">
                         <span>悬停预览，单击应用</span>
                         <span id="gradePresetCount" class="tpl-count" hidden></span>
-                        <button id="btnGradePresetRefresh" class="side-icon-btn" type="button" title="刷新我的调色" aria-label="刷新我的调色">↻</button>
+                        <button id="btnGradePresetRefresh" class="side-icon-btn" type="button" title="刷新调色预设" aria-label="刷新调色预设">↻</button>
                         <button id="btnGradePresetOpenDir" class="side-icon-btn" type="button" title="打开预设文件夹" aria-label="打开预设文件夹">📂</button>
                     </div>
-                    <div id="lvGradePresets" class="grade-preset-list" role="region" aria-label="我的调色列表"></div>
+                    <div id="lvGradePresets" class="grade-preset-list" role="region" aria-label="调色预设列表"></div>
                 </div>
                 <div id="sidebarResizer" class="side-resizer" title="拖动调整素材栏宽度，双击恢复默认"></div>
             </aside>
@@ -238,6 +265,7 @@
                 <div class="stage">
                     <canvas id="previewCanvas" width="800" height="600"></canvas>
                     <canvas id="maskOverlay" class="mask-overlay" width="1" height="1" aria-label="蒙版编辑层：拖出渐变/椭圆，或按住涂抹"></canvas>
+                    <div id="maskBrushCursor" class="mask-brush-cursor" aria-hidden="true" hidden></div>
                     <div id="maskOrigHint" class="mask-orig-hint" hidden>
                         <span class="mask-orig-tag">原图</span>
                         <span class="mask-orig-text">调色暂时隐藏，方便选择蒙版范围</span>
@@ -286,9 +314,9 @@
                      原来两行 8 个按钮 + 「工具」标签，窄栏里挤成两排还压着画布。
                      弹出菜单仍挂在 #inspTabs 内，switchTab 的 .tab[data-tab] 查询照样命中。 -->
                 <div class="tabs" id="inspTabs" role="tablist" aria-label="参数页签">
-                    <button class="tab active" data-tab="canvas" role="tab" aria-selected="true">画布</button>
+                    <button class="tab active" data-tab="canvas" role="tab" aria-selected="true" title="画布与照片：比例、边距、缩放、圆角、裁切">画布</button>
                     <button class="tab" data-tab="text" role="tab" aria-selected="false">文字</button>
-                    <button class="tab" data-tab="border" role="tab" aria-selected="false">边框</button>
+                    <button class="tab" data-tab="border" role="tab" aria-selected="false" title="边框参数：可编辑边框的填充、描边、圆角、阴影；预设自带边框时说明原因并给出换用入口">边框参数</button>
                     <button class="tab" data-tab="grade" role="tab" aria-selected="false" title="调色：像素调色（曝光/曲线/锐化/校准/混色器）+ 氛围（暗角/漏光/颗粒）">调色</button>
                     <button class="tab" data-tab="logo" role="tab" aria-selected="false">Logo</button>
                     <div class="tab-more-wrap" id="tabMoreWrap">
@@ -322,7 +350,8 @@
                     <div class="tab-panel active" id="panel-canvas">
                         <div class="param-empty-note">导入照片后即可调节画布与照片</div>
                         <div class="param-group">
-                            <div class="pg-title collapsible">画布</div>
+                            <div class="pg-title collapsible">画布与照片</div>
+                            <div class="photo-meta" id="photoMeta"><span id="photoMetaText">未导入照片</span></div>
                             <div class="param-row">
                                 <label>画布比例</label>
                                 <select id="cbCanvasRatio" class="ctl-sel">
@@ -345,10 +374,6 @@
                                 <span class="pval" id="lblGlobalMargin"></span>
                             </div>
                             <div class="hint-box">同时放大或缩小照片四周的边距；100% 为该边框的默认边距。</div>
-                        </div>
-
-                        <div class="param-group">
-                            <div class="pg-title collapsible">照片</div>
                             <div class="param-row" id="rowImgScale">
                                 <label>图片缩放</label>
                                 <input type="range" id="slImgScale" class="ctl-rng" min="10" max="150" step="1" value="100" />
@@ -378,6 +403,55 @@
                                 <input type="range" id="slBgBlurInt" class="ctl-rng" min="10" max="100" step="5" value="50" />
                                 <span class="pval" id="lblBgBlurInt"></span>
                             </div>
+                            <!-- 「背景模糊·经典 / 日期」专属的背景观感。
+                                 显隐由 updatePersonalVisibility 按 photoFrameStyle 控制；
+                                 不动滑块时模板里没有这些字段，旧预设渲染保持不变。
+                                 主体大小不再单列：它与上方通用的「图片缩放」在引擎里是同一个乘数，
+                                 留着两个 94% 只会让用户不知道该拖哪个。
+                                 底部两行字的位置与间距另起一组（见下方 grpBlurText）：
+                                 那三根管的是几何，和这里的明暗/取景/阴影不是一码事。 -->
+                            <div class="param-row" id="rowBlurBackdropDim" style="display:none;">
+                                <label>背景明暗</label>
+                                <input type="range" id="slBlurBackdropDim" class="ctl-rng" min="0" max="80" step="2" value="40" title="模糊底上叠多少黑：0 = 不压暗（明亮），越大越深；默认 40" />
+                                <span class="pval" id="lblBlurBackdropDim"></span>
+                            </div>
+                            <div class="param-row" id="rowBlurBackdropZoom" style="display:none;">
+                                <label>背景取景</label>
+                                <input type="range" id="slBlurBackdropZoom" class="ctl-rng" min="100" max="200" step="5" value="100" title="把模糊底再放大，改变虚化色块的取景范围；100% = 默认铺满" />
+                                <span class="pval" id="lblBlurBackdropZoom"></span>
+                            </div>
+                            <div class="param-row" id="rowBlurSubjectShadow" style="display:none;">
+                                <label>主体阴影</label>
+                                <input type="range" id="slBlurSubjectShadow" class="ctl-rng" min="0" max="200" step="10" value="100" title="中间照片外侧的悬浮阴影：0 = 不要阴影，100 = 预设原样，拖大则加深投影并补一圈环绕暗晕，照片更立体" />
+                                <span class="pval" id="lblBlurSubjectShadow"></span>
+                            </div>
+                            <div class="hint-box" id="hintBlurAdvanced" style="display:none;">这些项只作用于「背景模糊·经典 / 日期」，会随预设和工程一起保存；中间照片的大小用上方通用的「图片缩放」调节。</div>
+                        </div>
+
+                        <!-- 底部文字排版：照片下方那两行字（品牌+型号 / 参数或日期）的位置与间距。
+                             单独成组：它管的是几何，不是背景观感；默认把「照片底边 → 画布底边」的
+                             空白连同两行字均分成三份。
+                             留在画布栏而不是文字栏：参照系是照片底边，而那条边由上面的边距大小 /
+                             图片缩放决定，同一屏调才不用来回切页签；文字栏只放一个「去调」的入口。 -->
+                        <div class="param-group" id="grpBlurText">
+                            <div class="pg-title collapsible">底部文字排版</div>
+                            <div class="param-row" id="rowBlurTextOffset" style="display:none;">
+                                <label>上下位置</label>
+                                <input type="range" id="slBlurTextOffset" class="ctl-rng" min="-100" max="100" step="5" value="0" title="品牌+型号那一行在底部参数带里的上下位置：0 = 空白三份均分，负值上移、正值下移" />
+                                <span class="pval" id="lblBlurTextOffset"></span>
+                            </div>
+                            <div class="param-row" id="rowBlurTextGap" style="display:none;">
+                                <label>行间距</label>
+                                <input type="range" id="slBlurTextGap" class="ctl-rng" min="0" max="300" step="5" value="100" title="型号行与参数 / 日期行的上下间距：100% = 把照片底边到底边的空白均分三份，0 = 两行贴在一起" />
+                                <span class="pval" id="lblBlurTextGap"></span>
+                            </div>
+                            <div class="param-row" id="rowBlurBrandGap" style="display:none;">
+                                <label>品牌间距</label>
+                                <input type="range" id="slBlurBrandGap" class="ctl-rng" min="0" max="300" step="5" value="100" title="品牌与型号之间的水平间距：100% = 默认的一小段距离，0 = 贴在一起" />
+                                <span class="pval" id="lblBlurBrandGap"></span>
+                            </div>
+                            <button id="btnBlurReset" class="mini-btn block" type="button" style="display:none;"
+                                    title="把「背景模糊」与这组共六项恢复成预设默认：背景明暗 / 取景 / 阴影 / 上下位置 / 行间距 / 品牌间距">恢复模糊默认</button>
                         </div>
                     </div>
 
@@ -498,6 +572,13 @@
                                     <option value="SPLIT">分列</option>
                                 </select>
                             </div>
+                            <!-- 底部两行字的几何（上下位置 / 行间距 / 品牌间距）留在画布栏：
+                                 参照系是照片底边，和「边距大小 / 图片缩放」同一屏调才顺。
+                                 这里只给入口 —— 否则用户在文字栏找不到，会以为没有这些设置。
+                                 注意「参数位置」是左/中/右，「上下位置」是垂直偏移，别混。 -->
+                            <div class="hint-box hint-goto" id="hintBlurTextWhere" style="display:none;">底部两行字的位置与间距在
+                                <button type="button" class="hint-link" id="btnGotoBlurText" title="切到「画布」页签并定位到「底部文字排版」">画布 › 底部文字排版</button>
+                                里调。</div>
                         </div>
 
                         <div class="param-group">
@@ -856,6 +937,18 @@
 
                     <!-- ══ Tab3 边框 ══ -->
                     <div class="tab-panel" id="panel-border">
+                        <!-- 预设自带边框（相框样式 / 卡片模糊底）时，下面 5 个图层组全部不适用。
+                             不把整页留空：说明为什么为空，给出可逐项编辑的预设数量与换用建议。 -->
+                        <div class="border-preset-state" id="borderPresetState" hidden>
+                            <div class="bps-kicker">预设边框</div>
+                            <div class="bps-title" id="borderPresetTitle"></div>
+                            <div class="bps-text" id="borderPresetText"></div>
+                            <div class="bps-acts">
+                                <button class="mini-btn primary" id="btnBorderBackWall" type="button">去风格墙挑选</button>
+                            </div>
+                            <div class="bps-note">全部 <span id="borderPresetTotal">90</span> 款预设中，有 <span id="borderEditableCount">21</span> 款支持逐项编辑；换成这类图层边框预设后，这里会出现填充、描边、圆角、阴影与发光。</div>
+                        </div>
+
                         <div class="param-group ctl-grp-layers">
                             <div class="pg-title collapsible">填充</div>
                             <div class="param-row">
@@ -966,20 +1059,6 @@
 
                         <!-- 撕边分组已删：强度/密度两个滑块引擎零读取（拖动画面无变化），
                              齿孔（filmPerforation）由预设驱动、本来就没有 UI。 -->
-
-                        <div class="param-group">
-                            <div class="pg-title collapsible">四角装饰括号</div>
-                            <div class="param-row">
-                                <label>样式</label>
-                                <select id="cbCornerDecorType" class="ctl-sel">
-                                    <option value="none">无</option>
-                                    <option value="line">直角</option>
-                                    <option value="round">圆角</option>
-                                    <option value="double">双线</option>
-                                </select>
-                            </div>
-                            <div class="param-row"><label>大小</label><input type="range" id="slCornerDecorSize" class="ctl-rng" min="10" max="100" value="30" /><span class="pval" id="lblCornerDecorSize"></span></div>
-                        </div>
                     </div>
 
                     <!-- ══ Tab4 光影 ══ -->
@@ -1287,7 +1366,7 @@
                             <div class="mask-bar">
                                 <div class="curve-chans" id="maskTypes">
                                     <button type="button" class="curve-chan" data-mt="linear" title="线性渐变：拖出方向，起点全作用、终点不作用">渐变</button>
-                                    <button type="button" class="curve-chan" data-mt="radial" title="径向椭圆：空白处拖出椭圆；拖四个方块手柄分别调长轴/短轴，拖外侧圆点旋转">椭圆</button>
+                                    <button type="button" class="curve-chan" data-mt="radial" title="径向椭圆：空白处拖出椭圆；拖四个方块手柄分别调长轴/短轴，拖外侧圆点旋转。按住 Shift 画正圆或等比联动两轴；内侧细点圈是满作用区，外圈是羽化到零">椭圆</button>
                                     <button type="button" class="curve-chan" data-mt="brush" title="画笔：在画布上涂抹，Alt/右键擦除">画笔</button>
                                     <button type="button" class="curve-chan" data-mt="lum" title="按亮度自动选区">亮度</button>
                                     <button type="button" class="curve-chan" data-mt="color" title="按颜色选区：在画布上点一下取色，再调容差">颜色</button>
@@ -1301,6 +1380,10 @@
                                 <button type="button" class="curve-chan" data-mm="intersect" title="只保留与上一个蒙版重叠的部分">相交</button>
                             </div>
                             <div class="mask-list" id="maskList"></div>
+                            <div class="mask-acts">
+                                <button type="button" class="mini-btn" id="btnMaskCopy" title="复制当前蒙版的形状和参数（不写系统剪贴板）">复制蒙版</button>
+                                <button type="button" class="mini-btn" id="btnMaskPaste" title="把复制的蒙版粘贴成新蒙版；同一张照片里复制组合成员时保留组合方式">粘贴蒙版</button>
+                            </div>
                             <!-- 两条最容易误解的规则，直接写在面板上：
                                  ① 新建蒙版默认零参数，不动滑块画面不会有任何变化（整组会被跳过）；
                                  ② 蒙版只接管 11 档基础调色，其余档位仍作用于全图。 -->
@@ -1312,7 +1395,7 @@
                             <div id="maskOpts" style="display:none">
                                 <div class="param-row">
                                     <label>羽化</label>
-                                    <input type="range" id="slMaskFeather" class="ctl-rng" min="0" max="100" step="1" value="50" />
+                                    <input type="range" id="slMaskFeather" class="ctl-rng" min="0" max="100" step="1" value="50" title="羽化宽度：内侧细点圈以内是满作用区，从它到外圈衰减到 0" />
                                     <span class="pval" id="lblMaskFeather">50</span>
                                 </div>
                                 <div class="param-row">
@@ -1582,7 +1665,7 @@
                                     <button type="button" class="curve-chan" data-m="s">饱和度</button>
                                     <button type="button" class="curve-chan" data-m="l">明亮度</button>
                                 </div>
-                                <button type="button" class="mini-btn" id="btnMixReset" title="八条色相带全部归零">重置</button>
+                                <button type="button" class="mini-btn" id="btnMixReset" title="混色器八条色带与「点颜色」样本全部清空归零">重置</button>
                             </div>
                             <div id="mixRows">
                                 <div class="param-row mix-row" data-m="h"><label>红色</label><input type="range" id="slMixRH" class="ctl-rng rng-mix" min="-100" max="100" step="1" value="0" /><span class="pval" id="lblMixRH">0</span></div>
@@ -1611,19 +1694,19 @@
                                 <div class="param-row mix-row" data-m="l"><label>洋红</label><input type="range" id="slMixML" class="ctl-rng rng-mix" min="-100" max="100" step="1" value="0" /><span class="pval" id="lblMixML">0</span></div>
                             </div>
                             <!-- 点颜色：一次取色 = 一个样本。中心色来自取样，范围决定多接近才算这个颜色，
-                                 色相/饱和度/明亮度/变量是这个样本自己的调整。 -->
+                                 色相/饱和度/明亮度/变量是这个样本自己的调整。
+                                 样本不用下拉列表：圆点直接摆在「取样」那一排（最多 6 个），
+                                 顺手点、顺手删，也不会展开一层把下面五个滑块挤下去。 -->
                             <div id="pcPanel">
                                 <div class="pc-head">
                                     <button type="button" class="mini-btn pc-pick" id="btnPcPick" title="在照片上点一下取这个颜色，之后单独调它；Esc 退出" aria-pressed="false"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.4 3.1 12.9 5.6"/><path d="M9.2 6.5 12.9 3.1a1.7 1.7 0 0 1 2.4 2.4L11.5 9.2"/><path d="M9.2 6.5 3.4 12.3v2h2L11 9.2"/></svg><span>取样</span></button>
-                                    <span class="pc-swatch" id="pcSwatch" title="当前样本颜色"></span>
-                                    <button type="button" class="mini-btn pc-list-btn" id="btnPcList" aria-expanded="false" title="已取的样本（最多 8 个）">▾</button>
+                                    <div class="pc-strip" id="pcStrip" role="group" aria-label="已取的样本（最多 6 个）"></div>
                                 </div>
                                 <div class="pc-empty" id="pcEmpty">点「取样」在照片上取一个颜色，就能单独调它</div>
-                                <div class="pc-list" id="pcList" hidden></div>
                                 <div id="pcRows">
-                                    <div class="param-row pc-row"><label>色相</label><input type="range" id="slPcH" class="ctl-rng" min="-100" max="100" step="1" value="0" /><span class="pval" id="lblPcH">0</span></div>
-                                    <div class="param-row pc-row"><label>饱和度</label><input type="range" id="slPcS" class="ctl-rng" min="-100" max="100" step="1" value="0" /><span class="pval" id="lblPcS">0</span></div>
-                                    <div class="param-row pc-row"><label>明亮度</label><input type="range" id="slPcL" class="ctl-rng" min="-100" max="100" step="1" value="0" /><span class="pval" id="lblPcL">0</span></div>
+                                    <div class="param-row pc-row"><label>色相</label><input type="range" id="slPcH" class="ctl-rng rng-pc" min="-100" max="100" step="1" value="0" /><span class="pval" id="lblPcH">0</span></div>
+                                    <div class="param-row pc-row"><label>饱和度</label><input type="range" id="slPcS" class="ctl-rng rng-pc" min="-100" max="100" step="1" value="0" /><span class="pval" id="lblPcS">0</span></div>
+                                    <div class="param-row pc-row"><label>明亮度</label><input type="range" id="slPcL" class="ctl-rng rng-pc" min="-100" max="100" step="1" value="0" /><span class="pval" id="lblPcL">0</span></div>
                                     <div class="param-row pc-row"><label>变量</label><input type="range" id="slPcVar" class="ctl-rng" min="-100" max="100" step="1" value="0" /><span class="pval" id="lblPcVar">0</span></div>
                                     <div class="param-row pc-row"><label>范围</label><input type="range" id="slPcRange" class="ctl-rng" min="0" max="100" step="1" value="30" /><span class="pval" id="lblPcRange">30</span></div>
                                 </div>
@@ -1796,12 +1879,14 @@
         <footer id="statusbar">
             <span id="stRes" class="st-item">分辨率 --</span>
             <span id="stInfo" class="st-item">未导入照片</span>
-            <span id="stStyle" class="st-item st-style" role="button" tabindex="0" hidden title="点击在左侧边框列表定位当前样式"></span>
+            <span id="stStyle" class="st-item st-style" role="button" tabindex="0" hidden title="点击在左侧素材库定位当前样式"></span>
             <span id="stCanvas" class="st-item grow">画布 --×--</span>
             <button id="btnCompare" class="st-btn" title="按住查看原图（触屏可点按，空格 按住）/ 松开恢复"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><circle cx="8" cy="8" r="6.2"/><path d="M8 1.8v12.4"/><path d="M8 1.8a6.2 6.2 0 0 1 0 12.4" fill="currentColor" fill-opacity=".25" stroke="none"/></svg>对比原图</button>
             <div class="progress-wrap"><div id="progressBar" class="progress-bar"></div></div>
             <span id="exportProgressText" class="st-item" style="display:none"></span>
             <button id="btnExportCancel" class="st-btn" style="display:none" title="取消导出">取消</button>
+            <button id="btnExportOpen" class="st-btn" style="display:none" title="在资源管理器里打开本次导出的文件夹">打开导出位置</button>
+            <button id="btnExportRetry" class="st-btn" style="display:none" title="只把刚才写入失败的那几张重新写一次">重试失败项</button>
         </footer>
     </div>
 
@@ -1919,7 +2004,13 @@
                 <span class="modal-title" id="settingsTitle">设置</span>
                 <button id="settingsClose" class="modal-close" title="关闭" aria-label="关闭设置窗口">&times;</button>
             </div>
+            <div class="settings-tabs" role="tablist" aria-label="设置分类">
+                <button class="settings-tab active" id="settingsTabGeneral" type="button" role="tab" data-settings-tab="general" aria-selected="true" aria-controls="settingsPanelGeneral">常规</button>
+                <button class="settings-tab" id="settingsTabUpdate" type="button" role="tab" data-settings-tab="update" aria-selected="false" aria-controls="settingsPanelUpdate">更新</button>
+                <button class="settings-tab" id="settingsTabAbout" type="button" role="tab" data-settings-tab="about" aria-selected="false" aria-controls="settingsPanelAbout">关于</button>
+            </div>
             <div class="modal-body settings-body">
+                <div class="settings-panel active" id="settingsPanelGeneral" data-settings-panel="general" role="tabpanel" aria-labelledby="settingsTabGeneral">
                 <section class="settings-sec">
                     <div class="settings-sec-title">导出</div>
                     <div class="settings-row">
@@ -1962,13 +2053,19 @@
                     <div class="settings-row">
                         <div class="settings-label">主题</div>
                         <div class="settings-control">
-                            <button class="mini-btn" id="btnThemeToggle" type="button">当前：浅色（点此切深色）</button>
+                            <div class="seg" id="segTheme" role="group" aria-label="主题">
+                                <button class="seg-btn" type="button" data-theme="light" aria-pressed="false">浅色</button>
+                                <button class="seg-btn active" type="button" data-theme="dark" aria-pressed="true">深色</button>
+                            </div>
                         </div>
                     </div>
                     <div class="settings-row">
                         <div class="settings-label">预览画质</div>
                         <div class="settings-control">
-                            <button class="mini-btn" id="btnPreviewQualityToggle" type="button">当前：标准（点此切原图 1:1）</button>
+                            <div class="seg" id="segPreview" role="group" aria-label="预览画质">
+                                <button class="seg-btn active" type="button" data-preview="standard" aria-pressed="true">标准</button>
+                                <button class="seg-btn" type="button" data-preview="full" aria-pressed="false">原图 1:1</button>
+                            </div>
                             <div class="settings-hint settings-hint-dl">
                                 <div><b>标准</b>成品长边降到 1800px 渲染，拖动流畅</div>
                                 <div><b>原图 1:1</b>按原始分辨率渲染，能看清锐度与噪点，大图调参变慢</div>
@@ -1976,8 +2073,17 @@
                             </div>
                         </div>
                     </div>
+                    <div class="settings-row">
+                        <div class="settings-label">恢复默认</div>
+                        <div class="settings-control">
+                            <button class="mini-btn" id="btnSettingsResetAll" type="button" title="把外观、预览与默认导出位置恢复为初始值">恢复默认设置</button>
+                            <div class="settings-hint">界面缩放、主题、预览画质、参数栏密度和默认导出位置会回到初始值；照片与已保存的预设不受影响。</div>
+                        </div>
+                    </div>
                 </section>
+                </div>
 
+                <div class="settings-panel" id="settingsPanelUpdate" data-settings-panel="update" role="tabpanel" aria-labelledby="settingsTabUpdate" hidden>
                 <section class="settings-sec">
                     <div class="settings-sec-title">更新</div>
                     <!-- 自动检查：只决定「要不要在启动时悄悄查一次」，下载与安装始终要用户点按钮 -->
@@ -2009,21 +2115,27 @@
                                     <option value="https://ghfast.top/{url}">ghfast.top</option>
                                     <option value="__custom__">自定义…</option>
                                 </select>
-                                <input id="tfUpdateMirror" class="about-mirror-input" type="text" spellcheck="false" autocomplete="off"
-                                       placeholder="留空 = 直连 GitHub" />
-                                <button id="btnSaveUpdateMirror" class="mini-btn" type="button">保存</button>
+                                <div id="updateMirrorCustom" class="settings-mirror-custom" hidden>
+                                    <input id="tfUpdateMirror" class="about-mirror-input" type="text" spellcheck="false" autocomplete="off"
+                                           placeholder="留空 = 直连 GitHub" />
+                                    <button id="btnSaveUpdateMirror" class="mini-btn" type="button">保存</button>
+                                </div>
                             </div>
                             <div id="aboutMirrorHint" class="about-status about-mirror-hint" role="status" aria-live="polite"></div>
-                            <div class="settings-hint">
-                                镜像是第三方服务，速度与可用性随网络变化，可随时改回直连。
-                                <code>{url}</code> 是占位符，会替换成真实下载地址；下载完仍按 GitHub 清单里的 sha512 校验，对不上会丢弃重下。
-                            </div>
+                            <details class="settings-details">
+                                <summary>镜像与校验说明</summary>
+                                <div class="settings-hint">
+                                    镜像是第三方服务，速度与可用性随网络变化，可随时改回直连。
+                                    <code>{url}</code> 是占位符，会替换成真实下载地址；下载完仍按 GitHub 清单里的 sha512 校验，对不上会丢弃重下。
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </section>
+                </div>
 
+                <div class="settings-panel" id="settingsPanelAbout" data-settings-panel="about" role="tabpanel" aria-labelledby="settingsTabAbout" hidden>
                 <section class="settings-sec" id="aboutSec">
-                    <div class="settings-sec-title">关于</div>
                     <div class="about-body">
                         <div class="about-hero">
                             <img class="about-logo" src="../main/icon.png" alt="清框影图标">
@@ -2065,7 +2177,8 @@
                                 <span>收起 / 展开边框栏</span><span class="about-keys"><kbd>Ctrl</kbd><kbd>[</kbd></span>
                                 <span>收起 / 展开参数栏</span><span class="about-keys"><kbd>Ctrl</kbd><kbd>]</kbd></span>
                                 <span>全屏沉浸展示</span><span class="about-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd></span>
-                                <span>删除选中照片 / 元素</span><span class="about-keys"><kbd>Delete</kbd><span class="about-sep">/</span><kbd>Backspace</kbd></span>
+                                <span>切换全屏窗口</span><span class="about-keys"><kbd>F11</kbd></span>
+                                <span>删除勾选的多张照片 / 选中元素</span><span class="about-keys"><kbd>Delete</kbd><span class="about-sep">/</span><kbd>Backspace</kbd></span>
                                 <span>微移选中元素（Shift = 10px）</span><span class="about-keys"><kbd>方向键</kbd></span>
                                 <span>切换照片</span><span class="about-keys"><kbd>←</kbd><kbd>→</kbd></span>
                                 <span>按住对比原图</span><span class="about-keys"><kbd>空格</kbd></span>
@@ -2117,6 +2230,7 @@
                         </div>
                     </div>
                 </section>
+                </div>
             </div>
         </div>
     </div>
@@ -2130,7 +2244,7 @@
             </div>
             <div class="modal-body" style="line-height:1.9;font-size:13px;color:var(--text);">
                 <div style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">三步上手，全程本地处理，照片与设置不上传。</div>
-                <div class="intro-step" style="background:var(--bg-soft,#f2f4f3);border:1px solid var(--border,#dfe4e1);border-radius:10px;padding:12px 14px;margin-bottom:10px;"><b>① 选择边框</b><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">启动即进入边框墙：现成边框直接套用（<span id="introStatsText">90 款边框</span>），点卡片即可开始编辑</div></div>
+                <div class="intro-step" style="background:var(--bg-soft,#f2f4f3);border:1px solid var(--border,#dfe4e1);border-radius:10px;padding:12px 14px;margin-bottom:10px;"><b>① 选择风格</b><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">启动即进入风格墙：现成风格直接套用（<span id="introStatsText">90 款边框</span>），点卡片即可开始编辑</div></div>
                 <div class="intro-step" style="background:var(--bg-soft,#f2f4f3);border:1px solid var(--border,#dfe4e1);border-radius:10px;padding:12px 14px;margin-bottom:10px;"><b>② 导入照片</b><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">进入编辑后点「导入照片 / 导入文件夹」，或直接把图片、文件夹拖进窗口；也支持 Ctrl+V 粘贴截图</div></div>
                 <div class="intro-step" style="background:var(--bg-soft,#f2f4f3);border:1px solid var(--border,#dfe4e1);border-radius:10px;padding:12px 14px;margin-bottom:6px;"><b>③ 调参导出</b><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">右侧调整参数 / 签名 / Logo / 品牌水印，满意后点「导出」</div></div>
             </div>
@@ -2256,8 +2370,8 @@
         </div>
     </div>
 
-    <!-- ═══ 边框墙启动主页 (启动即边框画廊,点击卡片进入编辑) ═══ -->
-    <div id="presetWall" class="preset-wall" role="region" aria-label="边框画廊" hidden>
+    <!-- ═══ 风格墙启动主页 (启动即风格画廊,点击卡片进入编辑) ═══ -->
+    <div id="presetWall" class="preset-wall" role="region" aria-label="风格墙" hidden>
         <header class="pw-head">
             <div class="pw-brand">
                 <svg width="20" height="20" viewBox="0 0 18 18" aria-hidden="true">

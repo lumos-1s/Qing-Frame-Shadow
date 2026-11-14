@@ -16,6 +16,10 @@
  *    避免相邻带（红/橙只差 30°）同时拉满时颜色串台。
  */
 (function () {
+    // 点颜色最多几个样本。着色器按 8 组 uniform 写死，这里只是 UI 上限：
+    // 6 个圆点刚好在「取样」右边排成一行，再多就得换行，反而看不清谁是谁。
+    const PC_MAX = 6;
+
     // ── WebGL 烘焙前置级 ─────────────────────────────────────────
     const VS = 'attribute vec2 aP;varying vec2 vUV;void main(){vUV=aP*0.5+0.5;gl_Position=vec4(aP,0.0,1.0);}';
     const FS = [
@@ -41,7 +45,10 @@
         '  if(d>1e-6){ float den=1.0-abs(2.0*l-1.0); s=den>1e-4?d/den:0.0; }',
         '  float h=0.0;',
         '  if(d>1e-6){',
-        '    if(mx==c.r) h=fract((c.g-c.b)/d+6.0)/6.0;',
+        // 色相必须「先除 6 再 fract」：写成 fract((g-b)/d+6.0)/6.0 时，
+        // 纯黄 (r==g) 的 (g-b)/d 正好是 1，fract(7)=0 → 黄色被读成 0°，
+        // 只要混色器 / 点颜色一跑，画面里的纯黄就会变红。
+        '    if(mx==c.r) h=fract(((c.g-c.b)/d+6.0)/6.0);',
         '    else if(mx==c.g) h=((c.b-c.r)/d+2.0)/6.0;',
         '    else h=((c.r-c.g)/d+4.0)/6.0;',
         '  }',
@@ -83,18 +90,24 @@
         // ── 点颜色样本 ──
         // 权重 = 色相距离（由「范围」决定半宽）+ 饱和度/亮度接近度衰减；
         // 颜色越接近样本色权重越高，所以一片同色会被整体带动，邻近色只被扫到一点。
+        // 单位约定：uPH 与 hsl.x 都是 0–1 的归一化色相（pass() 上传前 /360），
+        // 所以距离要先换算成角度，才能和下面按「度」定义的 hw 比。
+        // 早先这里写成 hsl.x*360.0-uPH[k]，等于拿 0–360 去减 0–1：
+        // 只有样本色相接近 0°（红色）时权重才不为 0，其余颜色全部静默失效。
         '  if(uSn>0&&hsl.y>0.003&&hsl.z>0.01&&hsl.z<0.99){',
         '    float ws=0.0,sh=0.0,ss=0.0,sl=0.0,sv=0.0,ha=0.0,sa=0.0,la=0.0;',
         '    for(int k=0;k<8;k++){',
         '      float live=step(float(k)+0.5,float(uSn));',
-        '      float d2=abs(hsl.x*360.0-uPH[k]);d2=min(d2,360.0-d2);',
+        '      float d2=abs(hsl.x-uPH[k])*360.0;d2=min(d2,360.0-d2);',
         '      float hw=6.0+uPR[k]*0.72;',
         '      float w2=clamp(1.0-d2/hw,0.0,1.0);w2=w2*w2*(3.0-2.0*w2);',
-        // 范围越窄，饱和/亮度也要更接近才算同一个颜色；范围拉宽则放宽容差
-        '      float rt=1.0-uPR[k]*0.01;',
-        '      float dsa=abs(hsl.y-uPS[k])/(0.18+0.42*rt);',
+        // 范围越窄，饱和/亮度也要更接近才算同一个颜色；范围拉宽则一起放宽。
+        // rt 必须随「范围」单调递增：早先写成 1-uPR*0.01，范围拉满时色相容差最大、
+        // 饱和/亮度容差却收到最紧，等于「范围越大越不灵」，和滑块的语义相反。
+        '      float rt=uPR[k]*0.01;',
+        '      float dsa=abs(hsl.y-uPS[k])/(0.30+0.40*rt);',
         '      w2*=clamp(1.0-dsa*dsa,0.0,1.0);',
-        '      float dla=abs(hsl.z-uPL[k])/(0.30+0.55*rt);',
+        '      float dla=abs(hsl.z-uPL[k])/(0.45+0.45*rt);',
         '      w2*=clamp(1.0-dla*dla,0.0,1.0);',
         '      w2*=live;',
         '      ws+=w2;sh+=w2*uPDh[k];ss+=w2*uPDs[k];sl+=w2*uPDl[k];sv+=w2*uPDv[k];',
@@ -363,8 +376,11 @@
             const mixReset = $('btnMixReset');
             if (mixReset) {
                 mixReset.addEventListener('click', () => {
-                    this.setGrade({ mix: null });
-                    this.setStatus('已重置混色器');
+                    // 点颜色样本也在这个组里：只清八条色带会让「重置」看起来没生效
+                    const hadSamples = this._pcSamples().length > 0;
+                    this.setGrade(hadSamples ? { mix: null, samples: null } : { mix: null });
+                    this._pcRefresh();
+                    this.setStatus(hadSamples ? '已重置混色器与点颜色样本' : '已重置混色器');
                 });
             }
             // 吸管取色（LR 的 TAT）：必须在混色器滑块绑定之后，
@@ -533,8 +549,12 @@
             const by = (e.clientY - rect.top) / rect.height * base.h;
             const nx = (bx - pr.x) / pr.w, ny = (by - pr.y) / pr.h;
             if (!(nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1)) return null;
-            // 采样源优先用烘焙后的降采样画布：拖过参数之后还能点中眼睛看到的颜色
-            const src = (im._grade && (im._grade.low || im._grade.canvas)) || im.el;
+            // 采样源优先用烘焙后的降采样画布：拖过参数之后还能点中眼睛看到的颜色。
+            // 但 grade 回到中性时那张画布是**上一次烘焙的残留**（neutral 分支只清 key、
+            // 不清图，为的是省一次重烘），拿它取色会读到早就撤掉的调整 —— 此时必须回原图。
+            const gd = im._grade || {};
+            const baked = !gd.neutral ? (gd.low || gd.canvas) : null;
+            const src = baked || im.el;
             const W = src.width || src.naturalWidth || 0;
             const H = src.height || src.naturalHeight || 0;
             if (!W || !H) return null;
@@ -600,7 +620,8 @@
 
         /* ── 点颜色（对齐 LR 的 Point Color）────────────────────────────
          * 和混色器的 8 个固定色带是两件事：这里的样本中心色就是「用户点到的那个
-         * 颜色」，最多 8 个；样本自己的 色相/饱和度/明亮度/变量 只作用在够接近
+         * 颜色」，界面最多 6 个（着色器 uniform 按 8 组写死，留出旧工程的余量）；
+         * 样本自己的 色相/饱和度/明亮度/变量 只作用在够接近
          * 它的像素上，「范围」决定"够接近"有多宽。
          *
          * 采样复用 _mixPickSample：同一套坐标口径、同样从烘焙结果取样，
@@ -617,7 +638,7 @@
             const tmp = document.createElement('canvas');
             tmp.width = 1; tmp.height = 1;
             const st = this._pc = {
-                on: false, idx: 0,
+                on: false, idx: 0, max: PC_MAX,
                 ctx: tmp.getContext('2d', { willReadFrequently: true })
             };
             // 滑块拖动走 rAF 节流：这份「还没落地」的快照必须在样本集合变化时作废，
@@ -669,14 +690,27 @@
                     this._pcRefresh();
                     return;
                 }
+                // 满 6 个就拦下：不静默替换当前样本（那样用户不知道丢了哪个），
+                // 抖动一下样本条 + 说明怎么腾位置，取样态保持开着，还能点已有颜色切样本。
+                if (list.length >= PC_MAX) {
+                    const box = $('pcStrip');
+                    if (box) {
+                        box.classList.remove('pc-full');
+                        void box.offsetWidth;     // 强制重排，动画重新开始
+                        box.classList.add('pc-full');
+                        setTimeout(() => box.classList.remove('pc-full'), 900);
+                    }
+                    this.setStatus('最多 ' + PC_MAX + ' 个样本：先点样本右上角的 × 删掉一个，再取新颜色');
+                    return;
+                }
                 const smp = {
                     hue: Math.round(s.hue),
                     sat: Math.round(s.sat * 1000) / 1000,
                     light: Math.round(s.light * 1000) / 1000,
                     range: 30, dh: 0, ds: 0, dl: 0, dv: 0
                 };
-                if (list.length >= 8) list[st.idx] = smp;     // 满了就替换当前选中的那个
-                else { list.push(smp); st.idx = list.length - 1; }
+                list.push(smp);
+                st.idx = list.length - 1;
                 this.setGrade({ samples: list });
                 setOn(false);
                 this._pcRefresh();
@@ -705,17 +739,12 @@
                 });
             }
 
-            // 样本列表展开 / 收起
-            const listBtn = $('btnPcList');
-            const box = $('pcList');
-            if (listBtn && box) {
-                listBtn.addEventListener('click', () => {
-                    const open = box.hasAttribute('hidden');
-                    if (open) { box.removeAttribute('hidden'); listBtn.setAttribute('aria-expanded', 'true'); }
-                    else { box.setAttribute('hidden', ''); listBtn.setAttribute('aria-expanded', 'false'); }
-                });
-                box.addEventListener('click', (e) => {
-                    const del = e.target.closest ? e.target.closest('[data-del]') : null;
+            // 样本条：圆点就摆在「取样」右边，点圆点切样本、点 × 删、点空格子进取样态
+            const strip = $('pcStrip');
+            if (strip) {
+                strip.addEventListener('click', (e) => {
+                    const t = e.target;
+                    const del = t.closest ? t.closest('[data-del]') : null;
                     if (del) {
                         e.preventDefault(); e.stopPropagation();
                         dropPending();
@@ -728,8 +757,22 @@
                         this.setStatus(list.length ? '已删除这个样本' : '样本已清空');
                         return;
                     }
-                    const item = e.target.closest ? e.target.closest('.pc-item') : null;
-                    if (item) { st.idx = Number(item.dataset.i) || 0; this._pcRefresh(); }
+                    if (t.closest && t.closest('[data-add]')) { setOn(true); return; }
+                    const chip = t.closest ? t.closest('.pc-chip') : null;
+                    if (chip) {
+                        st.idx = Number(chip.dataset.i) || 0;
+                        this._pcRefresh();
+                        this.setStatus('已切到样本 ' + (st.idx + 1) + ' · 用下面四个滑块单独调它');
+                    }
+                });
+                // 圆点是 div[role=button]，补上键盘回车 / 空格
+                strip.addEventListener('keydown', (e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    const chip = e.target.closest ? e.target.closest('.pc-chip') : null;
+                    if (!chip) return;
+                    e.preventDefault();
+                    st.idx = Number(chip.dataset.i) || 0;
+                    this._pcRefresh();
                 });
             }
 
@@ -805,8 +848,12 @@
             const cur = list[this._pc.idx] || null;
             const panel = document.getElementById('pcPanel');
             if (panel) panel.classList.toggle('pc-none', !list.length);
-            const sw = document.getElementById('pcSwatch');
-            if (sw) sw.style.background = cur ? this._pcCss(cur) : 'var(--surface-alt)';
+            // 三条轨道按当前样本色相铺渐变（CSS 里读 --h）；没样本时用中性黄
+            const hVar = cur ? String(Math.round(Number(cur.hue) || 0)) : '45';
+            for (const id of ['slPcH', 'slPcS', 'slPcL']) {
+                const el = document.getElementById(id);
+                if (el) el.style.setProperty('--h', hVar);
+            }
             const set = (id, k, plain) => {
                 const inp = document.getElementById(id);
                 const v = cur ? (Number(cur[k]) || 0) : (k === 'range' ? 30 : 0);
@@ -819,24 +866,35 @@
             set('slPcL', 'dl');
             set('slPcVar', 'dv');
             set('slPcRange', 'range', true);
-            this._pcRenderList();
+            this._pcRenderStrip();
         },
 
-        _pcRenderList() {
-            const box = document.getElementById('pcList');
-            if (!box) return;
+        /* 样本条：最多 6 个圆点，空格子用虚线占位（点它直接进取样态）。
+           老工程里可能带着 8 个（旧上限），这里照旧全部显示，方便逐个删掉。 */
+        _pcRenderStrip() {
+            const strip = document.getElementById('pcStrip');
+            if (!strip) return;
             const list = this._pcSamples();
             const idx = this._pc ? this._pc.idx : 0;
+            const slots = Math.max(PC_MAX, list.length);
             let html = '';
-            for (let i = 0; i < list.length; i++) {
+            for (let i = 0; i < slots; i++) {
                 const s = list[i];
-                html += '<div class="pc-item' + (i === idx ? ' active' : '') + '" data-i="' + i + '">'
-                    + '<span class="pc-dot" style="background:' + this._pcCss(s) + '"></span>'
-                    + '<span class="pc-name">' + Math.round(s.hue) + '°　范围 ' + (s.range || 0) + '</span>'
-                    + '<button type="button" class="pc-del" data-del="' + i + '" title="删除这个样本">×</button>'
+                if (!s) {
+                    html += '<button type="button" class="pc-slot" data-add="1"'
+                        + ' aria-label="空位，点一下开始取样" title="空位：点一下开始取样"></button>';
+                    continue;
+                }
+                html += '<div class="pc-chip' + (i === idx ? ' active' : '') + '" data-i="' + i + '"'
+                    + ' role="button" tabindex="0" aria-pressed="' + (i === idx ? 'true' : 'false') + '"'
+                    + ' style="--c:' + this._pcCss(s) + '"'
+                    + ' title="样本 ' + (i + 1) + '：色相 ' + Math.round(s.hue) + '° · 范围 ' + (s.range || 0)
+                    + '，点一下切到它；悬停右上角 × 删除">'
+                    + '<button type="button" class="pc-x" data-del="' + i + '"'
+                    + ' aria-label="删除样本 ' + (i + 1) + '" title="删除这个样本">×</button>'
                     + '</div>';
             }
-            box.innerHTML = html;
+            strip.innerHTML = html;
         },
 
         syncGradeExtraUI(p) {

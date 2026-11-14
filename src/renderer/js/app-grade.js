@@ -494,6 +494,8 @@
     // 与混色器的 8 个固定色带不同：样本中心是"用户点到的那个颜色"，
     // 每个样本自己有 色相/饱和度/明亮度/变量 四档调整，外加「范围」决定多大一片算这个颜色。
     // range 存 0~100 原样（0 是极窄而非"未设置"），着色器里再换算成角度/容差。
+    // 着色器 uniform 数组只有 8 组，这里按 8 兜底；界面（app-mix.js 的 PC_MAX）
+    // 只允许取 6 个 —— 6 个圆点刚好在「取样」右边排成一行。
     const SAMPLES_MAX = 8;
     function clampSm(v) {
         const n = Math.round(Number(v) || 0);
@@ -865,14 +867,42 @@
 
     // ── 缓存 ──────────────────────────────────────────────────────
     const _lru = [];
+    /* 淘汰一张照片时显式释放它持有的全尺寸画布后备缓冲。
+       只置 null 的话，Chromium 要等 GC 才肯还那 96MB；多图洗图时 LRU 一直往外吐
+       大画布却迟迟不回落（app-qfs.js 编码完也是 width=0 这么做的）。
+       只在「整张图被淘汰」时调用：此刻 _grade 与 _gradeCache 会一起丢弃，
+       不会有别处还在用这些位图。invalidateFullGrade 那种局部作废不能这么干，
+       它丢的 canvas 可能正是 low 档 slot.base。 */
+    function releaseGradeBitmaps(im) {
+        if (!im) return;
+        const seen = new Set();
+        const kill = (c) => {
+            if (!c || seen.has(c) || !(c instanceof HTMLCanvasElement)) return;
+            seen.add(c);
+            try { c.width = 0; c.height = 0; } catch (_) { /* 已释放，忽略 */ }
+        };
+        const g = im._grade || {};
+        kill(g.canvas);
+        kill(g.low);
+        const slots = im._gradeCache;
+        if (!slots) return;
+        for (const k of Object.keys(slots)) {
+            const s = slots[k];
+            if (!s) continue;
+            kill(s.base);
+            for (const it of (s.chain || [])) kill(it && it.canvas);
+        }
+    }
     function lruTouch(im) {
         const i = _lru.indexOf(im);
         if (i >= 0) _lru.splice(i, 1);
         _lru.push(im);
         while (_lru.length > LRU_MAX) {
             const old = _lru.shift();
-            if (old && old._grade) { old._grade.canvas = null; old._grade.low = null; }
-            if (old) old._gradeCache = null;
+            if (!old) continue;
+            releaseGradeBitmaps(old);
+            if (old._grade) { old._grade.canvas = null; old._grade.low = null; }
+            old._gradeCache = null;
         }
     }
 
@@ -1308,6 +1338,8 @@
         MIX_BANDS,
         MIX_METRICS,
         CG_ZONES,
+        // 测试钩子：验证 LRU 淘汰确实把全尺寸画布的后备缓冲还了回去
+        _releaseGradeBitmaps: releaseGradeBitmaps,
         defaultCg,
         sanitizeCg,
         isCgActive: cgActive,
@@ -1377,7 +1409,9 @@
             // 选中蒙版却改了「不受蒙版控制」的档位（曲线/黑白/清晰度/镜头校正/色彩平衡/渐变映射…）：
             // 这些一直是全局的，用户很容易以为"蒙版没生效"。这里直接说清楚它落到整张照片了。
             if (act && keys.length) {
-                const globals = keys.filter((k) => MASK_ROUTE_KEYS.indexOf(k) < 0);
+                // masks 是蒙版列表本身（所有蒙版操作都走这里），不是「全局调色档位」；
+                // 不排除的话，每次加/删/停用蒙版都会弹一句「masks 是全局档位」。
+                const globals = keys.filter((k) => k !== 'masks' && MASK_ROUTE_KEYS.indexOf(k) < 0);
                 if (globals.length && this.setStatus) {
                     const names = globals.map((k) => {
                         const f = GRADE_FIELDS.find((x) => x.k === k);

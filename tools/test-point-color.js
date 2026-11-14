@@ -11,11 +11,13 @@
 //  ⑤ 再点同一个颜色不重复建样本（去重）
 //  ⑥ 点蓝色块建第二个样本并选中它，色块跟着变
 //  ⑦ 色相/范围滑块写回当前样本；标签同步
-//  ⑧ 样本列表可展开，删除某项后数量减一、当前项归位
+//  ⑧ 样本圆点直接排在「取样」那一排（无展开列表）；删一个后数量减一、当前项归位
+//  ⑧b 满 6 个后不再新增、提示怎么腾位置；删掉一个后又能继续取
 //  ⑨ 中性灰取不到颜色，不会建样本
 //  ⑩ 切回混色器页，原来的 8 条色带行照常可用
 //  ⑪ 管线接线：样本进了 grade（sanitize 后仍保留），烘焙产物存在
-//  ⑫ WebGL 可用时：前置 GL pass 只动目标颜色，邻近色不乱
+//  ⑪b 组内「重置」连点颜色样本一起清空，面板回到空态
+//  ⑫ WebGL 可用时：红/黄/蓝三个样本各自只动目标色，邻近色不乱；范围单调递增
 'use strict';
 
 const fs = require('fs');
@@ -117,7 +119,13 @@ const stateJs = `(() => {
         tab: document.getElementById('grpMix').dataset.tab,
         none: document.getElementById('pcPanel').classList.contains('pc-none'),
         cur: cur,
-        swatch: document.getElementById('pcSwatch').style.background,
+        chips: document.querySelectorAll('#pcStrip .pc-chip').length,
+        slots: document.querySelectorAll('#pcStrip .pc-slot').length,
+        active: (() => { const a = document.querySelector('#pcStrip .pc-chip.active');
+            return a ? Number(a.dataset.i) : -1; })(),
+        max: A._pc ? A._pc.max : -1,
+        chipBg: (() => { const a = document.querySelector('#pcStrip .pc-chip.active');
+            return a ? getComputedStyle(a).backgroundColor : ''; })(),
         status: A.dom.stCanvas ? A.dom.stCanvas.textContent : ''
     };
 })()`;
@@ -185,6 +193,8 @@ async function main() {
     const before = await exec(stateJs);
     check(before.tab === 'pc', '② 点「点颜色」页签切换成功', `tab=${before.tab} mixNa=${na.had}`);
     check(before.n === 0 && before.none === true, '② 还没取样时是空态', `n=${before.n} none=${before.none}`);
+    check(before.chips === 0 && before.slots === 6 && before.max === 6,
+        '② 样本条先摆 6 个空位，容量一眼可见', `chips=${before.chips} slots=${before.slots} max=${before.max}`);
     const hiddenRows = await exec(`(() => {
         const r = document.getElementById('pcRows').getBoundingClientRect();
         const e = document.getElementById('pcEmpty').getBoundingClientRect();
@@ -232,11 +242,12 @@ async function main() {
     check(s3.n === 2 && s3.idx === 1, '⑥ 点蓝块建了第二个样本并选中它', `n=${s3.n} idx=${s3.idx}`);
     check(s3.cur && Math.abs(s3.cur.hue - 240) <= 12, '⑥ 第二个样本的色相接近蓝', `hue=${s3.cur && s3.cur.hue}`);
     const blueSw = await exec(`(() => {
-        const bg = getComputedStyle(document.getElementById('pcSwatch')).backgroundColor;
+        const bg = getComputedStyle(document.querySelector('#pcStrip .pc-chip.active')).backgroundColor;
         const m = /rgb\\((\\d+), ?(\\d+), ?(\\d+)\\)/.exec(bg) || [];
-        return { bg, r: +m[1], g: +m[2], b: +m[3] };
+        return { bg, r: +m[1], g: +m[2], b: +m[3], chips: document.querySelectorAll('#pcStrip .pc-chip').length };
     })()`);
-    check(blueSw.b > 150 && blueSw.r < 100, '⑥ 当前样本色块跟着换色', `bg=${blueSw.bg}`);
+    check(blueSw.b > 150 && blueSw.r < 100 && blueSw.chips === 2,
+        '⑥ 样本条上的选中圆点跟着换色', `bg=${blueSw.bg} chips=${blueSw.chips}`);
 
     /* ⑦ 滑块写回样本（input 走 rAF 节流、change 同步落地，两条路径都验） */
     await exec(`(() => {
@@ -284,27 +295,99 @@ async function main() {
     check(afterH.dh === 50 && afterH.lbl === '+50', '⑦ 松手后色相立即落地并同步标签',
         `dh=${afterH.dh} lbl=${afterH.lbl}`);
 
-    /* ⑧ 列表展开 / 删除 */
-    const listState = await exec(`(() => {
-        document.getElementById('btnPcList').click();
-        const box = document.getElementById('pcList');
-        const items = box.querySelectorAll('.pc-item');
-        return { hidden: box.hasAttribute('hidden'), items: items.length,
-                 expanded: document.getElementById('btnPcList').getAttribute('aria-expanded') };
+    /* ⑧ 样本条：圆点直接摆在「取样」那一排，不再有 ▾ 展开列表 */
+    const stripState = await exec(`(() => {
+        const strip = document.getElementById('pcStrip');
+        const head = document.querySelector('#pcPanel .pc-head');
+        const chips = strip ? Array.prototype.slice.call(strip.querySelectorAll('.pc-chip')) : [];
+        const r = (el) => el ? el.getBoundingClientRect() : null;
+        const headR = r(head), c0 = r(chips[0]), btnR = r(document.getElementById('btnPcPick'));
+        return {
+            inHead: !!(strip && head && head.contains(strip)),
+            chips: chips.length,
+            slots: strip ? strip.querySelectorAll('.pc-slot').length : -1,
+            noList: !document.getElementById('pcList') && !document.getElementById('btnPcList'),
+            afterBtn: !!(btnR && c0 && c0.left >= btnR.right - 1),
+            sameRow: !!(headR && c0 && c0.top >= headR.top - 1 && c0.bottom <= headR.bottom + 1),
+            rows: (() => { const t = new Set(chips.map((c) => Math.round(c.getBoundingClientRect().top))); return t.size; })()
+        };
     })()`);
-    check(listState.hidden === false && listState.items === 2, '⑧ 样本列表可展开并列出两条',
-        `hidden=${listState.hidden} items=${listState.items}`);
-    check(listState.expanded === 'true', '⑧ 展开按钮 aria-expanded 同步', `aria=${listState.expanded}`);
+    check(stripState.inHead && stripState.chips === 2 && stripState.slots === 4,
+        '⑧ 两个样本是圆点，空位补齐 6 个', JSON.stringify(stripState));
+    check(stripState.noList, '⑧ 「▾」展开列表已移除', `noList=${stripState.noList}`);
+    check(stripState.afterBtn && stripState.sameRow && stripState.rows === 1,
+        '⑧ 圆点与取样按钮同排、单行不换行',
+        `afterBtn=${stripState.afterBtn} sameRow=${stripState.sameRow} rows=${stripState.rows}`);
+
+    const addSlot = await exec(`(() => {
+        const s = document.querySelector('#pcStrip .pc-slot');
+        if (!s) return { clicked: false };
+        s.click();
+        return { clicked: true, on: !!window.App._pc.on,
+                 btn: document.getElementById('btnPcPick').classList.contains('active') };
+    })()`);
+    check(addSlot.clicked && addSlot.on && addSlot.btn, '⑧ 点空位直接进取样态', JSON.stringify(addSlot));
+    await exec(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
 
     await exec(`(() => {
-        const b = document.querySelector('#pcList .pc-item[data-i="1"] .pc-del');
+        const b = document.querySelector('#pcStrip .pc-chip[data-i="1"] .pc-x');
         if (b) b.click();
         return true;
     })()`);
     await sleep(120);
     const afterDel = await exec(stateJs);
-    check(afterDel.n === 1 && afterDel.idx === 0, '⑧ 删除后只剩一条且选中项归位', `n=${afterDel.n} idx=${afterDel.idx}`);
+    check(afterDel.n === 1 && afterDel.idx === 0 && afterDel.chips === 1 && afterDel.slots === 5,
+        '⑧ 删掉一个后只剩一条、选中项归位、空位补回', `n=${afterDel.n} idx=${afterDel.idx} slots=${afterDel.slots}`);
     check(String(afterDel.status).indexOf('删除') >= 0, '⑧ 状态栏提示已删除', `status=${afterDel.status}`);
+
+    /* ⑧b 上限 6：满了不再新增，删一个才能继续 */
+    const fullState = await exec(`(async () => {
+        const A = window.App;
+        const six = [];
+        for (let i = 0; i < 6; i++) six.push({ hue: 90 + i * 40, sat: 0.5, light: 0.5, range: 30, dh: 0, ds: 0, dl: 0, dv: 0 });
+        A.setGrade({ samples: six });
+        A._pc.idx = 0;
+        A._pcRefresh();
+        await new Promise((r) => setTimeout(r, 80));
+        document.getElementById('btnPcPick').click();
+        return { n: (A.gradeOf(A.image).samples || []).length,
+                 chips: document.querySelectorAll('#pcStrip .pc-chip').length,
+                 slots: document.querySelectorAll('#pcStrip .pc-slot').length };
+    })()`);
+    await exec(clickJs(0.11875, 0.5));
+    await sleep(120);
+    const blocked = await exec(stateJs);
+    check(fullState.n === 6 && fullState.chips === 6 && fullState.slots === 0 && blocked.n === 6,
+        '⑧b 满 6 个后不再新增样本', `n=${blocked.n} chips=${fullState.chips} slots=${fullState.slots}`);
+    check(String(blocked.status).indexOf('最多 6') >= 0, '⑧b 提示先删一个再取', `status=${blocked.status}`);
+    check(blocked.on === true, '⑧b 满额时仍停在取样态，可以改点已有颜色', `on=${blocked.on}`);
+
+    await exec(`(() => {
+        const b = document.querySelector('#pcStrip .pc-chip[data-i="5"] .pc-x');
+        if (b) b.click();
+        return true;
+    })()`);
+    await sleep(120);
+    await exec(clickJs(0.11875, 0.5));
+    await sleep(120);
+    const refill = await exec(`(() => {
+        const A = window.App, l = (A.gradeOf(A.image) || {}).samples || [];
+        return { n: l.length, hues: l.map((x) => Math.round(x.hue)) };
+    })()`);
+    check(refill.n === 6 && refill.hues.indexOf(0) >= 0, '⑧b 腾出一个位置后能继续取', `n=${refill.n} hues=${refill.hues}`);
+
+    // 复位成单个红色样本：⑨ / ⑪ 沿用「只有一个样本」的前提
+    await exec(`(() => {
+        const A = window.App;
+        A.setGrade({ samples: [{ hue: 0, sat: 0.9, light: 0.45, range: 30, dh: 0, ds: 0, dl: 0, dv: 0 }] });
+        A._pc.idx = 0; A._pc.on = false;
+        document.getElementById('btnPcPick').classList.remove('active');
+        document.getElementById('btnPcPick').setAttribute('aria-pressed', 'false');
+        document.getElementById('canvasPane').classList.remove('mix-picking');
+        A._pcRefresh();
+        return true;
+    })()`);
+    await sleep(120);
 
     /* ⑨ 中性灰取不到（取失败保持取样态，方便接着再点） */
     await exec(`document.getElementById('btnPcPick').click()`);
@@ -352,34 +435,122 @@ async function main() {
     check(pipe.dh === 30 && pipe.low === true && pipe.neutral === false,
         '⑪ 带位移的样本触发重新烘焙', `dh=${pipe.dh} low=${pipe.low} neutral=${pipe.neutral}`);
 
-    /* ⑫ GL pass：只动目标颜色（需要 WebGL） */
+    /* ⑪b 组内的「重置」要连点颜色样本一起清：只清八条色带会让人以为没生效 */
+    const reset = await exec(`(() => {
+        const A = window.App;
+        const before = (A.gradeOf(A.image).samples || []).length;
+        document.getElementById('btnMixReset').click();
+        const g = A.gradeOf(A.image) || {};
+        return { before: before, after: (g.samples || []).length, mix: g.mix,
+                 none: document.getElementById('pcPanel').classList.contains('pc-none'),
+                 status: A.dom.stCanvas ? A.dom.stCanvas.textContent : '' };
+    })()`);
+    check(reset.before > 0 && reset.after === 0 && !reset.mix && reset.none,
+        '⑪b 重置按钮同时清空点颜色样本并回到空态',
+        `before=${reset.before} after=${reset.after} none=${reset.none}`);
+    check(/点颜色/.test(reset.status), '⑪b 重置后的状态栏说明了点颜色也被清空', reset.status);
+
+    /* ⑫ GL pass：只动目标颜色（需要 WebGL）
+       三块色条各测一次取样：红 0° / 黄 53° / 蓝 230°。
+       只测红色会漏掉「uPH 归一化 vs 着色器按角度比」这类单位错 ——
+       hue≈0 时 0/360 与 0 恰好相等，权重算对纯属巧合。 */
     const glOk = await exec(`!!(window.QfsMix && window.QfsMix.available())`);
     if (!glOk) {
         skip('⑫ 前置 GL pass 的像素验证（本环境没有 WebGL）');
     } else {
         const px = await exec(`(() => {
             const c = document.createElement('canvas');
-            c.width = 400; c.height = 100;
+            c.width = 600; c.height = 100;
             const g = c.getContext('2d');
             g.fillStyle = '#e02020'; g.fillRect(0, 0, 200, 100);
-            g.fillStyle = '#2040e0'; g.fillRect(200, 0, 200, 100);
-            const out = window.QfsMix.pass(c, {}, [{
-                hue: 0, sat: 0.9, light: 0.45, range: 40, dh: 50, ds: 20, dl: 0, dv: 0
-            }], 400, 100, false);
-            if (!out) return { pass: false };
-            // pass 交回的是 WebGL canvas，取不到 2d 上下文，先 drawImage 到普通画布再读点
-            const o2 = document.createElement('canvas');
-            o2.width = 400; o2.height = 100;
-            const o = o2.getContext('2d');
-            o.drawImage(out, 0, 0);
-            const a = o.getImageData(50, 50, 1, 1).data;
-            const b = o.getImageData(300, 50, 1, 1).data;
-            return { pass: true, red: [a[0], a[1], a[2]], blue: [b[0], b[1], b[2]] };
+            g.fillStyle = '#e8d020'; g.fillRect(200, 0, 200, 100);
+            g.fillStyle = '#2040e0'; g.fillRect(400, 0, 200, 100);
+            const rgb2hsl = (hex) => {
+                const r = parseInt(hex.slice(1, 3), 16) / 255;
+                const gg = parseInt(hex.slice(3, 5), 16) / 255;
+                const b = parseInt(hex.slice(5, 7), 16) / 255;
+                const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), l = (mx + mn) / 2, d = mx - mn;
+                const sat = d < 1e-6 ? 0 : d / (1 - Math.abs(2 * l - 1));
+                let h = 0;
+                if (d > 1e-6) {
+                    if (mx === r) h = ((gg - b) / d + 6) % 6;
+                    else if (mx === gg) h = (b - r) / d + 2;
+                    else h = (r - gg) / d + 4;
+                    h *= 60;
+                }
+                return { hue: h, sat, light: l };
+            };
+            // 取六个点：三块各两个（中间 + 偏移），确认整块被带动而不是只动一个像素
+            const run = (hex) => {
+                const smp = Object.assign(rgb2hsl(hex), { range: 40, dh: 60, ds: 25, dl: 0, dv: 0 });
+                const out = window.QfsMix.pass(c, {}, [smp], 600, 100, false);
+                if (!out) return null;
+                const o2 = document.createElement('canvas');
+                o2.width = 600; o2.height = 100;
+                const o = o2.getContext('2d');
+                o.drawImage(out, 0, 0);
+                const at = (x) => { const a = o.getImageData(x, 50, 1, 1).data; return [a[0], a[1], a[2]]; };
+                return { r: at(100), y: at(300), b: at(500) };
+            };
+            // 范围单调性：同一色相、饱和度差 0.45 的邻居。
+            // 范围小 → 只认几乎一模一样的颜色；范围大 → 连淡一点的同色也带上。
+            const c2 = document.createElement('canvas');
+            c2.width = 200; c2.height = 100;
+            const g2 = c2.getContext('2d');
+            g2.fillStyle = 'hsl(60, 80%, 50%)'; g2.fillRect(0, 0, 100, 100);
+            g2.fillStyle = 'hsl(60, 35%, 50%)'; g2.fillRect(100, 0, 100, 100);
+            const runRange = (range, hue, dh) => {
+                const out = window.QfsMix.pass(c2, {}, [{
+                    hue: hue, sat: 0.8, light: 0.5, range: range, dh: dh, ds: 0, dl: 0, dv: 0
+                }], 200, 100, false);
+                if (!out) return null;
+                const o2 = document.createElement('canvas');
+                o2.width = 200; o2.height = 100;
+                const o = o2.getContext('2d');
+                o.drawImage(out, 0, 0);
+                const at = (x) => { const a = o.getImageData(x, 50, 1, 1).data; return [a[0], a[1], a[2]]; };
+                return { hit: at(50), faint: at(150) };
+            };
+            return {
+                pass: true,
+                red: run('#e02020'),
+                yellow: run('#e8d020'),
+                blue: run('#2040e0'),
+                narrow: runRange(10, 60, 60),
+                wide: runRange(90, 60, 60),
+                // 红色样本扫不到这两块黄：黄色只应原样穿过着色器（60° 边界的往返测试）
+                untouched: runRange(10, 0, 50),
+                base: { r: [224, 32, 32], y: [232, 208, 32], b: [32, 64, 224] }
+            };
         })()`);
-        const redMoved = px.pass && (Math.abs(px.red[0] - 224) + Math.abs(px.red[1] - 32) + Math.abs(px.red[2] - 32) > 12);
-        const blueKept = px.pass && (Math.abs(px.blue[0] - 32) <= 3 && Math.abs(px.blue[1] - 64) <= 3 && Math.abs(px.blue[2] - 224) <= 3);
-        check(redMoved, '⑫ 样本只改目标色（红色被拉动）', `red=${px.red}`);
-        check(blueKept, '⑫ 邻近色不受影响（蓝色保持）', `blue=${px.blue}`);
+        const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+        const strip = (res, key) => (res && res[key]) || [0, 0, 0];
+        const cases = [
+            { key: 'red', slot: 'r', label: '红 0°', others: ['y', 'b'] },
+            { key: 'yellow', slot: 'y', label: '黄 53°', others: ['r', 'b'] },
+            { key: 'blue', slot: 'b', label: '蓝 230°', others: ['r', 'y'] }
+        ];
+        for (const cs of cases) {
+            const res = px[cs.key];
+            const moved = px.pass && !!res && dist(strip(res, cs.slot), px.base[cs.slot]) > 12;
+            const kept = px.pass && !!res && cs.others.every((k) => dist(strip(res, k), px.base[k]) <= 4);
+            check(moved, `⑫ 取样${cs.label}：目标色被拉动`, res ? `${cs.slot}=${strip(res, cs.slot)}` : 'pass=null');
+            check(kept, `⑫ 取样${cs.label}：另外两块颜色不动`,
+                res ? cs.others.map((k) => `${k}=${strip(res, k)}`).join(' ') : 'pass=null');
+        }
+        // 范围单调性：小范围只认几乎一样的颜色，大范围连淡同色一起带
+        const narrow = px.narrow, wide = px.wide;
+        const reference = [230, 230, 26];   // hsl(60,80%,50%)
+        check(px.pass && !!narrow && dist(narrow.hit, reference) > 12,
+            '⑫ 小范围：同色块被拉动', narrow ? `hit=${narrow.hit}` : 'pass=null');
+        check(px.pass && !!narrow && dist(narrow.faint, [172, 172, 83]) <= 4,
+            '⑫ 小范围：饱和度差 0.45 的邻居不动', narrow ? `faint=${narrow.faint}` : 'pass=null');
+        check(px.pass && !!wide && dist(wide.faint, [172, 172, 83]) > 12,
+            '⑫ 大范围：淡一点的同色也被带上（范围单调递增）', wide ? `faint=${wide.faint}` : 'pass=null');
+        const keep = px.untouched;
+        check(px.pass && !!keep && dist(keep.hit, reference) <= 4 && dist(keep.faint, [172, 172, 83]) <= 4,
+            '⑫ 纯黄色穿过着色器不变红（rgb2hsl 的 60° 边界）',
+            keep ? `hit=${keep.hit} faint=${keep.faint}` : 'pass=null');
     }
 
     /* ⑬ 端到端：样本经 setGrade 进管线后，烘出来的像素必须真的变

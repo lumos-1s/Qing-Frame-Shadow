@@ -173,7 +173,11 @@ window.App = Object.assign(window.App || {}, {
                 img.src = '';
                 continue;
             }
-            const exif = (m.exif && typeof m.exif === 'object') ? m.exif : {};
+            // .qfs 存的是烘焙后的成品像素，本来就是正方向；方向校正的唯一负责方是
+            // 解码器（readPhotoExif 统一报 orientation=1）。0.1.25 之前的工程文件里
+            // 可能还留着原始的 6/8，直接喂给 applyOrientation 会让老照片打开就横躺。
+            const exif = Object.assign({},
+                (m.exif && typeof m.exif === 'object') ? m.exif : {}, { orientation: 1 });
             const oriented = await this.applyOrientation(img, exif.orientation);
             const useEl = oriented ? oriented.el : img;
             const im = {

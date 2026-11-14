@@ -3084,6 +3084,8 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         return Math.max(0, Math.round(b * 0.6));
     }
     // 模糊留白带:上/左/右/下的解析度统一,由"模糊半径"兜底,边框粗细不超过图片短边的 7%,避免大边框预设把照片框出大片空白
+    // 注:刻意不开放「留白宽度」倍率 —— 它会连画布尺寸(导出分辨率)一起改,
+    // 与通用「边距大小」互相打架,属于两个旋钮抢一个结果。
     function blurBand(size, iw, ih, intensity) {
         const blurRadius = scaledBlurRadius(intensity);
         const rim = Math.min(Math.max(scaledPx(50), Math.floor(size / 2)), Math.round(Math.min(iw, ih) * 0.07));
@@ -3101,7 +3103,7 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         const blockH = (S.paramType === 0 ? (exifSz + scaledPx(4)) + scaledPx(6) + exifSz : exifSz);
         return Math.max(side, Math.round(blockH + scaledPx(24)));
     }
-    function drawMainPhoto(g, img, cx, cy, arc, scale, offX, offY) {
+    function drawMainPhoto(g, img, cx, cy, arc, scale, offX, offY, shadowK) {
         const iw = img.naturalWidth, ih = img.naturalHeight;
         const sc = scale || 1;
         const dw = iw * sc, dh = ih * sc;
@@ -3109,18 +3111,31 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         const dy = cy + (ih - dh) / 2 + (offY || 0);
         const radius = Math.max(1, arc * sc);
         // 悬浮阴影:大小与糊度跟随照片尺寸及图片缩放同步放大(图片越大/越放大,影子越宽越柔和)
-        // 透明度刻意压低,避免在模糊底上形成"黑圈/黑框"轮廓
+        // 原来只留一层向下飘远的淡影，照片看着像贴在背景上；shadowK 让用户把它调成立体浮起：
+        //   k=1(缺省) —— alpha 0.5 / blur shBlur*1.5 / 向下偏移，逐像素等同旧版；
+        //   k>1      —— 投影加深并收紧贴边，再叠一层无偏移的环绕接触阴影(照片四周一圈暗晕)；
+        //   k=0      —— 完全不要阴影。
+        const k = shadowK == null ? 1 : Math.max(0, Math.min(2, Number(shadowK)));
         const shBlur = Math.max(4, Math.round(Math.min(iw, ih) * 0.03 * sc));
         const shOff = Math.max(3, Math.round(shBlur * 0.8));
         g.save();
-        g.shadowColor = 'rgba(0,0,0,0.5)';
-        g.shadowBlur = shBlur * 1.5;
-        g.shadowOffsetY = shOff * 1.5;
+        g.shadowColor = 'rgba(0,0,0,' + Math.min(0.85, 0.5 * k).toFixed(3) + ')';
+        g.shadowBlur = shBlur * 1.5 / Math.max(1, k * 0.75);
+        g.shadowOffsetY = shOff * 1.5 / Math.max(1, k * 0.55);
         g.fillStyle = '#ffffff';
         roundRectPath(g, dx, dy, dw, dh, radius);
         g.fill();
+        if (k > 1) {
+            g.shadowColor = 'rgba(0,0,0,' + Math.min(0.6, (k - 1) * 0.6).toFixed(3) + ')';
+            g.shadowBlur = Math.max(3, shBlur * 0.4);
+            g.shadowOffsetY = 0;
+            g.shadowOffsetX = 0;
+            roundRectPath(g, dx, dy, dw, dh, radius);
+            g.fill();
+        }
         g.shadowBlur = 0;
         g.shadowOffsetY = 0;
+        g.shadowOffsetX = 0;
         roundRectPath(g, dx, dy, dw, dh, radius);
         g.clip();
         g.drawImage(img, dx, dy, dw, dh);
@@ -3238,16 +3253,25 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         // 印象式模糊底:照片 cover 铺满整张画布,整体高斯模糊后压暗
         g.save();
         g.fillStyle = '#1a1a1a'; g.fillRect(0, 0, cw, ch);
-        const scale = Math.max(cw / iw, ch / ih);
+        // 两条新增自由度：背景取景放大 / 背景压暗。字段缺省时分别等于原来的
+        // cover×1、0.4 黑叠加，渲染逐像素不变。
+        // 主体占比保持引擎原有的 ×0.94：它由通用滑块「图片缩放」(S.imgScale) 调节，
+        // 不再单列一个自由度 —— 两者本是同一个乘数，重复只会让用户不知道拖哪个。
+        const bgZoom = S.blurBackdropZoom != null ? S.blurBackdropZoom / 100 : 1;
+        const scale = Math.max(cw / iw, ch / ih) * bgZoom;
         const dw = iw * scale, dh = ih * scale;
         g.filter = 'blur(' + scaledBlurRadius(S.blurIntensity) + 'px)';
         g.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
         g.filter = 'none';
-        g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(0, 0, cw, ch);
+        g.fillStyle = S.blurBackdropDim == null
+            ? 'rgba(0,0,0,0.4)'
+            : 'rgba(0,0,0,' + (S.blurBackdropDim / 100).toFixed(3) + ')';
+        g.fillRect(0, 0, cw, ch);
         g.restore();
         const photoCr = Math.min(S.cornerAll, Math.min(iw, ih) / 2);
         const cx = blurMargin + exPadX, cy = blurMargin + exPadY;
-        drawMainPhoto(g, img, cx, cy, photoCr, (S.imgScale || 1) * 0.94, S.imgOffsetX, S.imgOffsetY);
+        const shadowK = S.blurSubjectShadow != null ? S.blurSubjectShadow / 100 : 1;
+        drawMainPhoto(g, img, cx, cy, photoCr, (S.imgScale || 1) * 0.94, S.imgOffsetX, S.imgOffsetY, shadowK);
 
         if (!S.useExif) return;
         // 字号: 先按用户基准(paramFs + 参数缩放滑块)计算, 再根据照片底边与画布底边之间的
@@ -3263,7 +3287,6 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         const exifSz = Math.round(baseSz * k);
         const modelSz = exifSz + scaledPx(4);
         const paramSz = exifSz;
-        const centerY = topY + Math.floor(maskH / 2);
 
         const bc = sampleBottomDarkColor(img);
         const grad = g.createLinearGradient(0, topY, 0, ch);
@@ -3278,17 +3301,37 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         const paramTrack = Math.max(1, Math.round(paramSz * 0.10));
         const brandTxt = brandHidden(S) ? '' : prettyBrand(S.cam.brand);
         const modelTxt = brandHidden(S) ? '' : String(S.cam.model || '').trim();
-        const brandGap = (brandTxt && modelTxt) ? Math.round(modelSz * 0.28) : 0;
+        // 品牌↔型号的水平间距：默认 0.28×型号字号（原本就留的一小段距离），
+        // 「品牌间距」按倍率缩放它（0 = 贴在一起，300% = 三倍宽）。
+        const brandGapBase = (brandTxt && modelTxt) ? Math.round(modelSz * 0.28) : 0;
+        const brandGapPct = S.blurBrandGap != null ? S.blurBrandGap / 100 : 1;
+        const brandGap = Math.round(brandGapBase * brandGapPct);
         const brandW = brandTxt ? brandTextWidth(g, brandTxt, modelSz, modelTrack) : 0;
         const modelW0 = modelTxt ? textMetrics(g, modelTxt, modelSz, false, true, modelTrack).w : 0;
         const fullW = brandW + (modelTxt ? brandGap + modelW0 : 0);
         const text = dateLayout ? dateYMD() : buildParamString(S.cam, S.paramType);
         if (showModel) {
             const logoW = brandMarkW(S, modelSz);
-            const gap = Math.min(scaledPx(24), Math.max(0, maskH - modelSz - paramSz));
+            // 行距默认把「照片底边 → 画布底边」这段高度连同两行字均分成三份：
+            // 上留白 = 行距 = 下留白 = (maskH - 型号行 - 参数行) / 3。
+            // 「行间距」滑块按倍率缩放它（0~300%），0 时两行贴在一起。
+            const gapBase = Math.max(0, Math.round((maskH - modelSz - paramSz) / 3));
+            const gapPct = S.blurTextGap != null ? S.blurTextGap / 100 : 1;
+            const gap = Math.round(Math.min(gapBase * gapPct, Math.max(0, maskH - modelSz - paramSz)));
             const blockH = modelSz + gap + paramSz;
-            const modelY = Math.max(topY + modelSz, centerY - Math.floor(blockH / 2) + modelSz);
-            const paramsY = modelY + paramSz + gap;
+            // 「上下位置」：整块两行字在参数带里上下移动。0 = 居中（即三份均分），
+            // ±100% 走到头；夹在参数带内，拖满也不会把字顶出画布。
+            const room = Math.max(0, maskH - blockH);
+            const shift = Math.round((S.blurTextOffset != null ? S.blurTextOffset / 100 : 0) * (maskH / 2));
+            const shiftClamped = Math.max(-Math.floor(room / 2), Math.min(Math.floor(room / 2), shift));
+            const blockTop = topY + Math.round(room / 2) + shiftClamped;
+            // 用字形盒(ascent/descent)而不是字号本身定位：字号里那 22% 的下缘留白
+            // 若也算进「文字高度」，会全堆到文字上方，视觉上变成上宽下窄。
+            const modelAsc = Math.round(modelSz * 0.78);
+            const modelDesc = Math.round(modelSz * 0.22);
+            const paramAsc = Math.round(paramSz * 0.78);
+            const modelY = blockTop + modelAsc;
+            const paramsY = modelY + modelDesc + gap + paramAsc;
             const onlyLogo = (S.brandLogo === 2 && logoW > 0);
             let mX;
             if (pos === 'LEFT' || pos === 'SPLIT') mX = padX;
@@ -3313,7 +3356,11 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
             else pX = cx2(cw, pw.w);
             drawTextL(g, text, pX, paramsY, 'rgba(220,220,220,0.824)', paramSz, true, false, paramTrack);
         } else {
-            const paramsY = centerY + Math.floor(paramSz / 2);
+            // 单行（仅参数 / 日期）：同样支持上下移动，默认居中（按字形盒居中）。
+            const room = Math.max(0, maskH - paramSz);
+            const shift = Math.round((S.blurTextOffset != null ? S.blurTextOffset / 100 : 0) * (maskH / 2));
+            const shiftClamped = Math.max(-Math.floor(room / 2), Math.min(Math.floor(room / 2), shift));
+            const paramsY = topY + Math.round(room / 2) + Math.round(paramSz * 0.78) + shiftClamped;
             const pw = textMetrics(g, text, paramSz, true, false, paramTrack);
             let pX;
             if (pos === 'LEFT' || pos === 'SPLIT') pX = padX;
@@ -5407,6 +5454,16 @@ const w = natW;
             brandLogoData,
             paramFs: rawPf > 0 ? clampP(rawPf, 2, 160) : autoPf,
             blurIntensity: clampP(t.blurIntensity != null ? t.blurIntensity : 50, 0, 100),
+            // 背景模糊(经典/日期)的专属自由度。null = 用户没动过 → 引擎走缺省路径。
+            // 视觉三项默认与旧版一致；文字三项的缺省值就是「空白均分三份 + 品牌间距 0.28 字号」。
+            // 主体大小不设字段：它与 S.imgScale（通用「图片缩放」滑块）是同一个乘数。
+            blurBackdropDim: t.blurBackdropDim != null ? clampP(t.blurBackdropDim, 0, 80) : null,
+            blurBackdropZoom: t.blurBackdropZoom != null ? clampP(t.blurBackdropZoom, 100, 200) : null,
+            blurSubjectShadow: t.blurSubjectShadow != null ? clampP(t.blurSubjectShadow, 0, 200) : null,
+            // 底部文字排版：整块上下位置(±100% 半带高) / 两行间距倍率 / 品牌-型号水平间距倍率。
+            blurTextOffset: t.blurTextOffset != null ? clampP(t.blurTextOffset, -100, 100) : null,
+            blurTextGap: t.blurTextGap != null ? clampP(t.blurTextGap, 0, 300) : null,
+            blurBrandGap: t.blurBrandGap != null ? clampP(t.blurBrandGap, 0, 300) : null,
             paramType: clampP(t.paramType != null ? t.paramType : 0, 0, 2),
             position: positionOf(t.paramPosition),
             useExif: true,
@@ -5682,7 +5739,7 @@ const w = natW;
             }
             case 'BLUR_CLASSIC':
             case 'BLUR_DATE': {
-                const side = blurBand(size, iw, ih, (S ? S.blurIntensity : 50));
+                const side = blurBand(size, iw, ih, (S ? S.blurIntensity : 50), S);
                 const bottom = S ? blurBottom(size, iw, ih, S) : side;
                 return { w: iw + side * 2, h: ih + side + bottom };
             }

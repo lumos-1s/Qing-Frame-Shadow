@@ -598,7 +598,7 @@
     function gradeToXmp(grade, name) {
         const App = window.App;
         const g = (App && App.normalizeGrade) ? App.normalizeGrade(grade) : (grade || {});
-        const safeName = String(name || '我的调色').replace(/[<>]/g, '').replace(/--+/g, '-');
+        const safeName = String(name || '调色预设').replace(/[<>]/g, '').replace(/--+/g, '-');
         const attrs = [];
         const add = (k, v) => attrs.push('    crs:' + k + '="' + escAttr(v) + '"');
 

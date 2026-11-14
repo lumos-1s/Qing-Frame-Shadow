@@ -57,7 +57,9 @@ async function main() {
         if (window.App && App.closeIntro) App.closeIntro(); return true; })()`);
     await sleep(1000);
 
-    const r = await exec(`(async () => {
+    let r = null;
+    try {
+    r = await exec(`(async () => { try {
         const A = window.App;
         window.ensureFullGrade = () => {};   // 只测编码路径，跳过 ACR 烘焙
         const W = 200, H = 150;
@@ -103,9 +105,34 @@ async function main() {
         const opaqueSolid = window.qfsAllOpaque(solid);
         const b64O = A.imageToQfsBase64(imO, 'image/jpeg', 0.92);
         const cornerO = await cornerOf(b64O);
-        return { reusable, opaqueFlag, cornerT, cornerLegacy, opaqueSolid, cornerO };
-    })()`);
 
+        // 旧工程（0.1.25 之前）的 exif 里可能还留着原始 orientation=6。
+        // .qfs 存的是烘焙后的正方向像素，恢复时绝不能再按它转第二次。
+        const old = document.createElement('canvas'); old.width = 200; old.height = 100;
+        const og = old.getContext('2d'); og.fillStyle = '#3366cc'; og.fillRect(0, 0, 200, 100);
+        const bundle = {
+            images: [{ name: 'old.qfs', data: old.toDataURL('image/jpeg', 0.92),
+                       exif: { orientation: 6, make: 'Canon' }, w: 100, h: 200 }],
+            template: A.defaultTemplate(), session: { currentIdx: 0 }
+        };
+        // 只验数据重建：工程恢复会连带一整串 UI 刷新，精简窗口里没必要跑，
+        // 垫空桩避免无关异常把 probe 打断。
+        ['onSettingCommit','queueThumb','invalidateStyleCaches','buildThumbnails',
+         'afterImageSelect','onGradePresetImageChange','refreshUI','scheduleRender',
+         'scheduleDraft','saveDraftNow','setStatus','finishImportProgress',
+         'setTpl','queueThumb'].forEach((k) => { A[k] = () => {}; });
+        let restoreErr = '';
+        try { await A.restoreQfsProject(bundle, 'old.qfs'); }
+        catch (e) { restoreErr = String((e && e.message) || e); }
+        const rim = A.images[0];
+        const legacyProject = rim ? { w: rim.w, h: rim.h,
+            orientation: rim.exif && rim.exif.orientation,
+            make: rim.exif && rim.exif.make, tag: rim.el && rim.el.tagName } : null;
+        return { reusable, opaqueFlag, cornerT, cornerLegacy, opaqueSolid, cornerO, legacyProject, restoreErr };
+    } catch (e) { return { fatal: String((e && e.stack) || e) }; } })()`);
+    } catch (e) { console.log('EXECERR ' + String((e && e.stack) || e).slice(0, 700)); r = { fatal: 'exec' }; }
+
+    if (r.fatal) console.log('FATAL ' + r.fatal.slice(0, 900));
     check(r.reusable === true && r.opaqueFlag === false,
         '带透明角的 canvas 结构上可复用，但 qfsAllOpaque 判定为不可用',
         `reusable=${r.reusable} opaque=${r.opaqueFlag}`);
@@ -117,6 +144,11 @@ async function main() {
     check(r.opaqueSolid === true && r.cornerO[0] > 180 && r.cornerO[1] < 110,
         '全不透明的普通照片仍走复用优化，红色像素保持',
         `opaque=${r.opaqueSolid} rgba=${r.cornerO.join(',')}`);
+    check(r.legacyProject && r.legacyProject.w === 200 && r.legacyProject.h === 100
+        && r.legacyProject.orientation === 1 && r.legacyProject.make === 'Canon'
+        && r.legacyProject.tag === 'IMG',
+        '旧工程带 orientation=6 也不二次旋转，宽高与元数据保持',
+        JSON.stringify({ legacyProject: r.legacyProject, restoreErr: r.restoreErr }));
 
     console.log(failures.length ? `\n${failures.length} FAILURE(S)` : '\nALL PASS');
     win.destroy();

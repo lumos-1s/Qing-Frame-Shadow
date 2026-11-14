@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('qingframe', {
     saveImagesBatch: () => ipcRenderer.invoke('save-images-batch'),
     pickExportLocation: (payload) => ipcRenderer.invoke('pick-export-location', payload),
     writeExportFiles: (payload) => ipcRenderer.invoke('write-export-files', payload),
+    showItemInFolder: (p) => ipcRenderer.invoke('show-item-in-folder', p),
     listLogos: () => ipcRenderer.invoke('list-logos'),
     importLogoPack: (filePath) => ipcRenderer.invoke('import-logo-pack', filePath),
     listTextures: () => ipcRenderer.invoke('list-textures'),

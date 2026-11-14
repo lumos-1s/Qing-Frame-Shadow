@@ -1798,6 +1798,9 @@ window.App = Object.assign(window.App || {}, {
         this.refreshUI();
         this.saveCurrentTemplate();
         this.scheduleRender(true);
+        // 元素删掉后状态栏还停在上一句「已添加 Logo」，用户分不清是删成功了
+        // 还是快捷键失灵（deleteCaption / clearElements 都有反馈，这里补上）
+        this.setStatus(`已删除 ${sel.length} 个选中元素`);
     },
 
     clearElements() {

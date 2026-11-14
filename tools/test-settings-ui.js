@@ -95,6 +95,7 @@ app.whenReady().then(async () => {
     const exec = (expr) => win.webContents.executeJavaScript(expr);
 
     // ── A：结构 —— 设置项在设置弹窗里；关于已并入设置,不再有独立的关于弹窗 ──
+    await exec(`(() => { try { localStorage.removeItem('qfs_settings_tab'); } catch (_) {} return true; })()`);
     const sA = await exec(`(() => {
         const inSettings = !!document.querySelector('#settingsModal #tfUpdateMirror');
         const inAbout = !!document.querySelector('#aboutModal #tfUpdateMirror');
@@ -109,21 +110,37 @@ app.whenReady().then(async () => {
     check(!sA.hasAboutModal && sA.aboutInSettings,
         '关于已并入设置：无独立关于弹窗，设置里有「关于」区', JSON.stringify(sA));
 
-    // ── A2：预览画质开关（标准 1800 / 原图 1:1）──
+    // ── A2：预览画质分段控件（标准 1800 / 原图 1:1）──
     const sA2 = await exec(`(() => {
-        const b = document.getElementById('btnPreviewQualityToggle');
-        return { has: !!b, label: b ? b.textContent : '' };
+        const seg = document.getElementById('segPreview');
+        const btns = seg ? [...seg.querySelectorAll('[data-preview]')] : [];
+        const on = btns.find((b) => b.getAttribute('aria-pressed') === 'true');
+        return { has: !!seg, label: on ? on.textContent : '', count: btns.length };
     })()`);
-    check(sA2.has && sA2.label.includes('标准'),
-        '设置里有「预览画质」开关且默认为标准', JSON.stringify(sA2));
+    check(sA2.has && sA2.count === 2 && sA2.label.includes('标准'),
+        '设置里有「预览画质」分段控件且默认为标准', JSON.stringify(sA2));
     await exec(`window.App.applyPreviewQuality(true)`);
     const fullMax = await exec(`window.App.displayMax`);
     check(typeof fullMax === 'number' && fullMax > 1800,
         '开启「原图 1:1」后预览上限高于默认 1800', String(fullMax));
+    const fullPressed = await exec(`document.querySelector('#segPreview [data-preview="full"]').getAttribute('aria-pressed')`);
+    check(fullPressed === 'true', '切到原图时 aria-pressed 落在「原图 1:1」', fullPressed);
     await exec(`window.App.applyPreviewQuality(false)`);
     const stdMax = await exec(`window.App.displayMax`);
     check(stdMax === undefined || stdMax === null,
         '切回「标准」后回落默认（displayMax 未设置）', String(stdMax));
+    const stdPressed = await exec(`document.querySelector('#segPreview [data-preview="standard"]').getAttribute('aria-pressed')`);
+    check(stdPressed === 'true', '切回标准时 aria-pressed 落在「标准」', stdPressed);
+
+    // 主题也是分段控件：点浅色真的切换并写 prefs，再切回深色
+    await exec(`document.querySelector('#segTheme [data-theme="light"]').click()`);
+    await sleep(80);
+    const lightState = await exec(`({ dark: document.documentElement.classList.contains('dark'), pressed: document.querySelector('#segTheme [data-theme="light"]').getAttribute('aria-pressed') })`);
+    check(lightState.dark === false && lightState.pressed === 'true',
+        '主题分段控件：点浅色立即生效', JSON.stringify(lightState));
+    check(savedPrefs.some((p) => p && p.theme === 'light'), '主题选择写入 prefs', JSON.stringify(savedPrefs.slice(-2)));
+    await exec(`document.querySelector('#segTheme [data-theme="dark"]').click()`);
+    await sleep(80);
 
     // ── A3：更新下载源下拉（预设镜像 / 直连 / 自定义）──
     // 只测纯同步函数 _syncMirrorSelect，不碰 setUpdateMirror 的 IPC（那需要主进程桩）。
@@ -148,6 +165,51 @@ app.whenReady().then(async () => {
     check(sA3.hitCustom === '__custom__' && sA3.hitDirect === '',
         '未识别的地址落到「自定义」，空值回到「直连」',
         JSON.stringify({ c: sA3.hitCustom, d: sA3.hitDirect }));
+
+    // ── A3.5：设置分页（常规 / 更新 / 关于），并记住上次停留的页 ──
+    await exec(`window.App.openSettings()`);
+    await sleep(100);
+    const sTab1 = await exec(`(() => {
+        const visible = (sel) => [...document.querySelectorAll(sel)].filter((el) => el.getClientRects().length > 0);
+        return {
+            tabs: [...document.querySelectorAll('#settingsModal .settings-tab')].map((b) => b.textContent.trim()),
+            visiblePanels: visible('#settingsModal [data-settings-panel]').map((p) => p.dataset.settingsPanel),
+            generalActive: document.querySelector('#settingsModal .settings-tab[data-settings-tab="general"]').getAttribute('aria-selected')
+        };
+    })()`);
+    check(JSON.stringify(sTab1.tabs) === JSON.stringify(['常规', '更新', '关于']),
+        '设置分三页：常规 / 更新 / 关于', JSON.stringify(sTab1.tabs));
+    check(sTab1.visiblePanels.length === 1 && sTab1.visiblePanels[0] === 'general' && sTab1.generalActive === 'true',
+        '默认只显示「常规」页，且页签 aria-selected 正确', JSON.stringify(sTab1));
+
+    await exec(`window.App.switchSettingsTab('update')`);
+    await sleep(60);
+    const sTab2 = await exec(`(() => {
+        const visible = (sel) => [...document.querySelectorAll(sel)].filter((el) => el.getClientRects().length > 0);
+        return {
+            panels: visible('#settingsModal [data-settings-panel]').map((p) => p.dataset.settingsPanel),
+            updateSel: !!document.querySelector('#settingsModal [data-settings-panel="update"] #selAutoCheck'),
+            stored: localStorage.getItem('qfs_settings_tab')
+        };
+    })()`);
+    check(sTab2.panels.length === 1 && sTab2.panels[0] === 'update' && sTab2.updateSel,
+        '切到「更新」页只显示更新设置', JSON.stringify(sTab2));
+    check(sTab2.stored === 'update', '页签选择写入 localStorage', sTab2.stored);
+
+    await exec(`window.App.closeSettings()`);
+    await sleep(80);
+    await exec(`window.App.openSettings()`);
+    await sleep(100);
+    const sTab3 = await exec(`(() => {
+        const visible = (sel) => [...document.querySelectorAll(sel)].filter((el) => el.getClientRects().length > 0);
+        return visible('#settingsModal [data-settings-panel]').map((p) => p.dataset.settingsPanel);
+    })()`);
+    check(sTab3.length === 1 && sTab3[0] === 'update',
+        '重新打开设置停留在上次的页签', JSON.stringify(sTab3));
+    await exec(`window.App.switchSettingsTab('general')`);
+    await sleep(60);
+    await exec(`window.App.closeSettings()`);
+    await sleep(80);
 
     // ── A4：关于 →「更新内容」：按钮 / 弹窗 / 未读红点 / Esc 逐层关闭 ──
     await exec(`window.App.refreshAboutInfo()`);
@@ -263,10 +325,11 @@ app.whenReady().then(async () => {
     })()`);
 
     // ── A6：排版 —— 标签单行、行距一致、弹窗宽度跟随界面缩放 ──
-    await exec(`(() => { window.App.openSettings(); const b = document.querySelector('#settingsModal .settings-body'); if (b) b.scrollTop = 0; return true; })()`);
+    await exec(`(() => { window.App.openSettings(); window.App.switchSettingsTab('general'); const b = document.querySelector('#settingsModal .settings-body'); if (b) b.scrollTop = 0; return true; })()`);
     await sleep(120);
     const sA6 = await exec(`(() => {
         const card = document.querySelector('#settingsModal .settings-card');
+        const general = document.querySelector('#settingsModal [data-settings-panel="general"]');
         const appearance = [...document.querySelectorAll('#settingsModal .settings-sec')]
             .find((s) => {
                 const t = s.querySelector('.settings-sec-title');
@@ -274,8 +337,8 @@ app.whenReady().then(async () => {
             });
         const rows = appearance ? [...appearance.querySelectorAll('.settings-row')] : [];
         const gaps = rows.slice(1).map((r, i) => Math.round(r.getBoundingClientRect().top - rows[i].getBoundingClientRect().bottom));
-        const labels = [...document.querySelectorAll('#settingsModal .settings-label')];
-        const exportBtns = [...document.querySelectorAll('#settingsModal .settings-btns .mini-btn')];
+        const labels = [...general.querySelectorAll('.settings-label')];
+        const exportBtns = [...general.querySelectorAll('.settings-btns .mini-btn')];
         return {
             width: Math.round(card.getBoundingClientRect().width),
             labelHeights: labels.map((l) => Math.round(l.getBoundingClientRect().height)),
@@ -299,7 +362,8 @@ app.whenReady().then(async () => {
     await sleep(150);
     const sA6b = await exec(`(() => {
         const card = document.querySelector('#settingsModal .settings-card');
-        const labels = [...document.querySelectorAll('#settingsModal .settings-label')];
+        const general = document.querySelector('#settingsModal [data-settings-panel="general"]');
+        const labels = [...general.querySelectorAll('.settings-label')];
         return {
             width: Math.round(card.getBoundingClientRect().width),
             heights: labels.map((l) => Math.round(l.getBoundingClientRect().height))
@@ -312,6 +376,40 @@ app.whenReady().then(async () => {
     await sleep(120);
     await exec(`window.App.closeSettings()`);
     await sleep(80);
+
+    // ── A7：恢复默认设置：外观与偏好回到初始值，照片/预设不受影响 ──
+    const resetState = await exec(`(async () => {
+        const A = window.App;
+        const orig = window.confirm;
+        window.confirm = () => true;
+        A.applyFontScale(1.3);
+        A.applyTheme('light');
+        A.applyPreviewQuality(true);
+        const ok = await A.resetAllSettings();
+        window.confirm = orig;
+        const pressed = (seg) => {
+            const on = document.querySelector(seg + ' [aria-pressed="true"]');
+            return on ? (on.dataset.preview || on.dataset.theme || on.textContent.trim()) : '';
+        };
+        return {
+            ok,
+            scale: getComputedStyle(document.documentElement).getPropertyValue('--font-scale').trim(),
+            dark: document.documentElement.classList.contains('dark'),
+            theme: pressed('#segTheme'),
+            preview: pressed('#segPreview'),
+            auto: document.getElementById('selAutoCheck').value,
+            tab: document.querySelector('#settingsModal .settings-tab.active').dataset.settingsTab,
+            status: A.statusMsg || ''
+        };
+    })()`);
+    check(resetState.ok === true && resetState.scale === '1' && resetState.dark === true
+        && resetState.theme === 'dark' && resetState.preview === 'standard'
+        && resetState.auto === 'startup' && resetState.tab === 'general',
+        '「恢复默认设置」把缩放/主题/预览/自动检查/页签全部复位',
+        JSON.stringify(resetState));
+    check(/已恢复默认设置/.test(resetState.status), '恢复默认后有状态栏反馈', resetState.status);
+    check(savedPrefs.some((p) => p && p.theme === 'dark' && p.autoCheck === 'startup'),
+        '恢复默认写回 prefs（主题 + 自动检查）', JSON.stringify(savedPrefs.slice(-3)));
 
     // ── B：未设置时显示「每次询问」，清除按钮禁用 ──
     await exec(`window.App.openSettings()`);

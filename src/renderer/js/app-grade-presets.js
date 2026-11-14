@@ -161,7 +161,7 @@ window.App = Object.assign(window.App || {}, {
         }
         const token = ++this._gradePresetLoadSeq;
         if (!this._gradePresets.length) {
-            box.innerHTML = '<div class="tpl-empty tpl-loading"><div class="tpl-empty-title">正在读取我的调色…</div></div>';
+            box.innerHTML = '<div class="tpl-empty tpl-loading"><div class="tpl-empty-title">正在读取调色预设…</div></div>';
         }
         let entries = [];
         try { entries = (await api.listGradePresets()) || []; } catch (_) { entries = []; }
@@ -767,7 +767,7 @@ window.App = Object.assign(window.App || {}, {
         if (nameOverride != null) {
             name = String(nameOverride);
         } else {
-            const typed = await this.promptText('给这套调色起个名字（之后可在列表里重命名）', '我的调色');
+            const typed = await this.promptText('给这套调色起个名字（之后可在列表里重命名）', '调色预设');
             if (typed == null) return false;
             name = String(typed);
         }
@@ -809,7 +809,7 @@ window.App = Object.assign(window.App || {}, {
         const savedName = res.libraryName || finalName;
         this._revealGradePreset(savedName);
         const extra = (res.libraryPath && res.libraryPath !== picked.path)
-            ? '，已收录到「我的调色」' : '';
+            ? '，已收录到「调色预设」' : '';
         this.setStatus(`已保存调色「${savedName}」（XMP）${extra}`);
         return true;
     },

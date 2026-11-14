@@ -106,6 +106,22 @@ const isTrustedFrame = (event) => {
 };
 const BLOCKED = { ok: false, error: '不允许的调用来源' };
 
+// 所有 IPC 注册统一走这两个包装器：来源校验只写一处，新增 handler 不可能再忘。
+// 之前逐个 handler 手写 isTrustedFrame，漏了约 40 个；现在注册点即校验点。
+// 注意：包装器内部才可以直接用 ipcMain.handle / ipcMain.on，业务代码一律用 handleIpc / onIpc。
+const handleIpc = (channel, fn) => {
+    ipcMain.handle(channel, (e, ...args) => {
+        if (!isTrustedFrame(e)) return BLOCKED;
+        return fn(e, ...args);
+    });
+};
+const onIpc = (channel, fn) => {
+    ipcMain.on(channel, (e, ...args) => {
+        if (!isTrustedFrame(e)) return;
+        fn(e, ...args);
+    });
+};
+
 function resolveInside(root, candidate) {
     const base = path.resolve(root);
     const dest = path.resolve(base, String(candidate || ''));
@@ -135,7 +151,15 @@ async function readPhotoExif(filePath) {
         if (exif && Object.keys(exif).length) return exif;
         return {};
     }
-    const exif = readExif(filePath);
+    // readExif 是 async：以前少了 await，icc 会挂到 Promise 对象上，async 返回时解包丢失，
+    // 于是「非 sRGB 原片」提示永远不出现。这里必须等真正的 exif 对象。
+    const exif = (await readExif(filePath)) || {};
+    // Chromium 解码 JPEG 时已经按 EXIF Orientation 转过像素：naturalWidth / drawImage /
+    // <img> 拿到的都是正方向。这里若再报原始值，渲染层的 applyOrientation() 会转第二次，
+    // 竖拍照片（Orientation 6/8）导入后就横躺（已用真实 Electron 复现）。统一报告 1 =
+    // 像素已正方向；方向校正的唯一负责方是解码器。RAW / HEIC 在上面已经因为各自原因
+    // 归一为 1，与此保持一致。
+    exif.orientation = 1;
     // 顺带带上 ICC 描述：非 sRGB 的原片（例如相机的 Adobe RGB）浏览器会先转成 sRGB，
     // 与 PS 按嵌入配置文件工作的结果从第一步就不同 —— 导入时要能提示用户。
     try {
@@ -177,14 +201,14 @@ if (!app.requestSingleInstanceLock()) {
     const { loadState, saveState, validDir, freeFilePath } = createStateStore(path.join(app.getPath('userData'), 'state.json'));
 
 // ── 自定义标题栏:窗口控制(最小化/最大化切换/关闭)与最大化状态推送 ──
-ipcMain.on('win-minimize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.minimize(); });
-ipcMain.on('win-toggle-max', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (!w) return; if (w.isMaximized()) w.unmaximize(); else w.maximize(); });
-ipcMain.on('win-toggle-fullscreen', (e) => {
+onIpc('win-minimize', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.minimize(); });
+onIpc('win-toggle-max', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (!w) return; if (w.isMaximized()) w.unmaximize(); else w.maximize(); });
+onIpc('win-toggle-fullscreen', (e) => {
     const w = BrowserWindow.fromWebContents(e.sender);
     if (!w) return;
     w.setFullScreen(!w.isFullScreen());
 });
-ipcMain.on('win-close', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); });
+onIpc('win-close', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w) w.close(); });
 const wireTitleBar = (win) => {
     const pushMax = () => { if (!win.isDestroyed()) win.webContents.send('win-maximized', win.isMaximized()); };
     win.on('maximize', pushMax);
@@ -484,7 +508,7 @@ app.whenReady().then(() => {
         }
         }
     }
-    ipcMain.handle('check-for-updates', async () => {
+    handleIpc('check-for-updates', async () => {
         if (!updater) return { ok: false, message: '当前版本不支持在线自动更新,请到 GitHub Releases 下载新版' };
         try {
             await withTimeout(updater.checkForUpdates(), CHECK_TIMEOUT_MS, '检查更新');
@@ -524,7 +548,7 @@ app.whenReady().then(() => {
         console.log('[updater] 镜像下载完成并通过校验:', dest);
     };
 
-    ipcMain.handle('start-update-download', async () => {
+    handleIpc('start-update-download', async () => {
         if (!updater) return { ok: false, message: '当前版本不支持在线自动更新,请到 GitHub Releases 下载新版' };
         if (updateDownloadInFlight) return { ok: false, message: '更新下载已在进行中' };
         updateDownloadInFlight = true;
@@ -555,7 +579,7 @@ app.whenReady().then(() => {
             updateDownloadInFlight = false;
         }
     });
-    ipcMain.handle('quit-and-install', () => {
+    handleIpc('quit-and-install', () => {
         // 镜像通道下载的安装包不经 electron-updater，自己静默装（/S）再退出
         if (mirrorInstallerPath && fs.existsSync(mirrorInstallerPath)) {
             try {
@@ -570,7 +594,7 @@ app.whenReady().then(() => {
     });
 
     // 更新下载源（空 = GitHub 直连）。只允许 http(s)，http 仅限本机，其余一律拒绝。
-    ipcMain.handle('set-update-mirror', (_e, raw) => {
+    handleIpc('set-update-mirror', (_e, raw) => {
         const r = normalizeMirror(raw);
         if (!r.ok) return { ok: false, error: r.error, mirror: '' };
         saveState({ prefs: { updateMirror: r.value } });
@@ -583,7 +607,7 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
 
-ipcMain.handle('load-acr-tables', () => {
+handleIpc('load-acr-tables', () => {
     try {
         const raw = fs.readFileSync(ACR_TABLES_PATH);
         if (raw.length < 10 || raw.slice(0, 4).toString('ascii') !== 'CRT4') return null;
@@ -594,14 +618,14 @@ ipcMain.handle('load-acr-tables', () => {
         };
     } catch (_) { return null; }
 });
-ipcMain.handle('load-acr-shadows', () => {
+handleIpc('load-acr-shadows', () => {
     try {
         const raw = fs.readFileSync(ACR_SHADOWS_PATH);
         if (raw.length < 34 || raw.slice(0, 4).toString('ascii') !== 'CRS2') return null;
         return raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
     } catch (_) { return null; }
 });
-ipcMain.handle('list-presets', () => {
+handleIpc('list-presets', () => {
     try {
         if (!fs.existsSync(PRESETS_DIR)) return [];
         return fs.readdirSync(PRESETS_DIR)
@@ -611,7 +635,7 @@ ipcMain.handle('list-presets', () => {
 });
 
 // ── 诊断日志:应用信息 + 渲染层操作日志导出(报 bug 时一键提供,同 yt-dlp --verbose 思路) ──
-ipcMain.handle('get-app-info', () => ({
+handleIpc('get-app-info', () => ({
     version: app.getVersion(),
     electron: process.versions.electron,
     chrome: process.versions.chrome,
@@ -628,7 +652,7 @@ ipcMain.handle('get-app-info', () => ({
 
 // 关于页只允许打开本项目 GitHub 链接,避免渲染进程拿到任意 openExternal 能力。
 // 路径必须正好是仓库主页或以 / 结尾,防止 "Qing-Fram-Shadow-xxx" 一类前缀误匹配。
-ipcMain.handle('open-external', async (_e, url) => {
+handleIpc('open-external', async (_e, url) => {
     try {
         const u = new URL(String(url));
         const pathOk = u.pathname === REPO_PATH || u.pathname.startsWith(REPO_PATH + '/');
@@ -640,7 +664,7 @@ ipcMain.handle('open-external', async (_e, url) => {
     } catch (e) { return { ok: false, message: e && e.message }; }
 });
 
-ipcMain.handle('open-data-dir', async () => {
+handleIpc('open-data-dir', async () => {
     try {
         const p = app.getPath('userData');
         const err = await shell.openPath(p);
@@ -652,7 +676,7 @@ ipcMain.handle('open-data-dir', async () => {
 // 约定：userData/wall-covers/<预设名>.webp|jpg|jpeg|png，文件名与预设名一致（如「圆角卡片.webp」）。
 // 只读文件名映射，不复制、不改内置资源；删掉文件即恢复原封面。
 const wallCoversDir = () => path.join(app.getPath('userData'), 'wall-covers');
-ipcMain.handle('list-wall-covers', async () => {
+handleIpc('list-wall-covers', async () => {
     try {
         const dir = wallCoversDir();
         const names = await fs.promises.readdir(dir);
@@ -674,7 +698,7 @@ ipcMain.handle('list-wall-covers', async () => {
         return {};   // 目录不存在 = 没有自定义封面
     }
 });
-ipcMain.handle('open-wall-covers-dir', async () => {
+handleIpc('open-wall-covers-dir', async () => {
     try {
         const dir = wallCoversDir();
         await fs.promises.mkdir(dir, { recursive: true });
@@ -703,7 +727,7 @@ const removeWallCoverFile = async (full) => {
     }
 };
 
-ipcMain.handle('pick-wall-cover', async (e, name, filePath) => {
+handleIpc('pick-wall-cover', async (e, name, filePath) => {
     if (!isTrustedFrame(e)) return BLOCKED;
     const base = wallCoverBase(name);
     if (!base) return { ok: false, message: '预设名无效' };
@@ -742,7 +766,7 @@ ipcMain.handle('pick-wall-cover', async (e, name, filePath) => {
     } catch (err) { return { ok: false, message: err && err.message }; }
 });
 
-ipcMain.handle('clear-wall-cover', async (e, name) => {
+handleIpc('clear-wall-cover', async (e, name) => {
     if (!isTrustedFrame(e)) return BLOCKED;
     const base = wallCoverBase(name);
     if (!base) return { ok: false, message: '预设名无效' };
@@ -763,7 +787,7 @@ ipcMain.handle('clear-wall-cover', async (e, name) => {
     } catch (err) { return { ok: false, message: err && err.message }; }
 });
 // 导出完成后在资源管理器中显示文件/目录(不再只显示一串路径文本)
-ipcMain.handle('show-item-in-folder', (_e, p) => {
+handleIpc('show-item-in-folder', (_e, p) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         if (!p) return { ok: false };
@@ -776,7 +800,7 @@ ipcMain.handle('show-item-in-folder', (_e, p) => {
 
 // 复制文本到剪贴板:关于页诊断信息优先走这里,避免 file:// 下 navigator.clipboard
 // 权限差异导致复制失败。限制 2MB,防止误传超大内容卡住主进程。
-ipcMain.handle('copy-text', (_e, text) => {
+handleIpc('copy-text', (_e, text) => {
     try {
         const s = String(text || '');
         if (s.length > 2 * 1024 * 1024) return { ok: false, message: '文本过大' };
@@ -787,7 +811,7 @@ ipcMain.handle('copy-text', (_e, text) => {
 
 // 复制当前画布到系统剪贴板。只接受 data URL:渲染进程不能直接 require electron,
 // 由预加载脚本的 copyImage 通道接入。返回实际像素尺寸,供界面提示用。
-ipcMain.handle('copy-image', (_e, dataUrl) => {
+handleIpc('copy-image', (_e, dataUrl) => {
     try {
         if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
             return { ok: false, message: '图片数据无效' };
@@ -800,7 +824,7 @@ ipcMain.handle('copy-image', (_e, dataUrl) => {
     } catch (e) { return { ok: false, message: e && e.message }; }
 });
 
-ipcMain.handle('save-diagnostics', async (_e, text) => {
+handleIpc('save-diagnostics', async (_e, text) => {
     try {
         const r = await dialog.showSaveDialog({
             title: '保存诊断日志',
@@ -813,17 +837,21 @@ ipcMain.handle('save-diagnostics', async (_e, text) => {
     } catch (e) { return { ok: false, message: e && e.message }; }
 });
 
-ipcMain.handle('load-preset', (_e, name) => {
+handleIpc('load-preset', (_e, name) => {
+    if (!isTrustedFrame(_e)) return BLOCKED;
     try {
-        const p = path.join(PRESETS_DIR, name + '.json');
-        if (!fs.existsSync(p)) return null;
+        // 预设名来自渲染层：只允许作为单个文件名使用，不能让 ../ 读到目录外。
+        const safe = safeLeafName(name, '');
+        if (!safe) return null;
+        const p = resolveInside(PRESETS_DIR, safe + '.json');
+        if (!p || !fs.existsSync(p)) return null;
         return JSON.parse(fs.readFileSync(p, 'utf-8'));
     } catch (e) { return null; }
 });
 
 // 启动时要读全部预设:原来 list-presets + 逐个 load-preset = 78 次 IPC 往返,每次都在主进程
 // 做一次 existsSync + readFileSync 且串行。合并成一次往返,盘上并发读。
-ipcMain.handle('load-all-presets', async () => {
+handleIpc('load-all-presets', async () => {
     try {
         if (!fs.existsSync(PRESETS_DIR)) return [];
         const names = fs.readdirSync(PRESETS_DIR)
@@ -871,7 +899,7 @@ const cachedImages = (key, dir, exts) => {
     return data;
 };
 const LOGO_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
-ipcMain.handle('list-logos', () => {
+handleIpc('list-logos', () => {
     // 内置目录通常为空(第三方 Logo 不进仓库/安装包):目录缺失也不能让整个 IPC 抛错,
     // 否则渲染进程的 Logo 选择组会整块失效。
     let builtin = [];
@@ -889,7 +917,8 @@ ipcMain.handle('list-logos', () => {
 
 // 导入 Eagle 素材包（.eaglepack / .zip）：解出里面的位图写到 userData/brandlogos，
 // 文件名直接用素材名（Canon_White.png / Xiaomi.png），品牌匹配靠文件名，无需额外品牌表。
-ipcMain.handle('import-logo-pack', async (e, filePath) => {
+handleIpc('import-logo-pack', async (e, filePath) => {
+    if (!isTrustedFrame(e)) return BLOCKED;
     let target = filePath;
     if (!target) {
         const win = BrowserWindow.fromWebContents(e.sender);
@@ -906,7 +935,7 @@ ipcMain.handle('import-logo-pack', async (e, filePath) => {
     return r;
 });
 
-ipcMain.handle('open-logo-dir', async () => {
+handleIpc('open-logo-dir', async () => {
     try { fs.mkdirSync(USER_LOGOS_DIR, { recursive: true }); } catch (_) { /* 忽略 */ }
     const err = await shell.openPath(USER_LOGOS_DIR);
     return err ? { ok: false, error: err } : { ok: true };
@@ -920,24 +949,24 @@ const customIcons = createCustomIconStore(
     path.join(__dirname, '..', '..', 'shared', 'custom-icons.json')
 );
 
-ipcMain.handle('list-custom-icons', () => customIcons.list());
+handleIpc('list-custom-icons', () => customIcons.list());
 
 // 删除/重命名自定义图标:同步写盘,否则初始库图标重启后复活
-ipcMain.handle('delete-custom-icon', (_e, dataUrl) => customIcons.remove(dataUrl));
-ipcMain.handle('rename-custom-icon', (_e, dataUrl, name) => customIcons.rename(dataUrl, name));
+handleIpc('delete-custom-icon', (_e, dataUrl) => customIcons.remove(dataUrl));
+handleIpc('rename-custom-icon', (_e, dataUrl, name) => customIcons.rename(dataUrl, name));
 
-ipcMain.handle('list-textures', () => cachedImages('textures', TEXTURES_DIR, ['.png', '.jpg', '.jpeg']));
+handleIpc('list-textures', () => cachedImages('textures', TEXTURES_DIR, ['.png', '.jpg', '.jpeg']));
 
 // 内置原创标记(shared/marks,随包分发)。全部是项目自绘的几何/排版图形,
 // 不含任何第三方品牌素材 —— 品牌 logo 因商标/著作权原因不随发行版分发,见 OPTIMIZATIONS.md。
-ipcMain.handle('list-marks', () => cachedImages('marks', MARKS_DIR, ['.svg', '.png']));
+handleIpc('list-marks', () => cachedImages('marks', MARKS_DIR, ['.svg', '.png']));
 
 const ensureTemplatesDir = () => {
     if (!fs.existsSync(TEMPLATES_DIR)) fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
     return TEMPLATES_DIR;
 };
 
-ipcMain.handle('save-template', (_e, { name, data }) => {
+handleIpc('save-template', (_e, { name, data }) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         if (!name) return { ok: false, error: '模板名称为空' };
@@ -953,7 +982,7 @@ ipcMain.handle('save-template', (_e, { name, data }) => {
     } catch (e) { return { ok: false, error: String(e) }; }
 });
 
-ipcMain.handle('list-templates', () => {
+handleIpc('list-templates', () => {
     try {
         ensureTemplatesDir();
         return fs.readdirSync(TEMPLATES_DIR)
@@ -962,7 +991,7 @@ ipcMain.handle('list-templates', () => {
     } catch (e) { return []; }
 });
 
-ipcMain.handle('load-template', (_e, name) => {
+handleIpc('load-template', (_e, name) => {
     try {
         const safe = safeLeafName(name, '');
         if (!safe) return null;
@@ -973,7 +1002,7 @@ ipcMain.handle('load-template', (_e, name) => {
     } catch (e) { return null; }
 });
 
-ipcMain.handle('delete-template', (_e, name) => {
+handleIpc('delete-template', (_e, name) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         const safe = safeLeafName(name, '');
@@ -985,7 +1014,7 @@ ipcMain.handle('delete-template', (_e, name) => {
     } catch (e) { return { ok: false, error: String(e) }; }
 });
 
-ipcMain.handle('rename-template', (_e, { oldName, newName }) => {
+handleIpc('rename-template', (_e, { oldName, newName }) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         if (!oldName || !newName) return { ok: false, error: '模板名称为空' };
@@ -1003,27 +1032,27 @@ ipcMain.handle('rename-template', (_e, { oldName, newName }) => {
 
 // ── 调色预设：userData/grade-presets/*.xmp，与整帧样式模板分库 ──
 // 预设本身就是 Lightroom / Camera Raw 的 XMP 文件，目录里的文件可以直接分享。
-ipcMain.handle('save-grade-preset', (_e, { name, xml }) => {
+handleIpc('save-grade-preset', (_e, { name, xml }) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     return gradePresetStore.save(GRADE_PRESETS_DIR, name, xml);
 });
 
-ipcMain.handle('list-grade-presets', () => gradePresetStore.list(GRADE_PRESETS_DIR));
+handleIpc('list-grade-presets', () => gradePresetStore.list(GRADE_PRESETS_DIR));
 
-ipcMain.handle('load-grade-preset', (_e, { name, ext }) =>
+handleIpc('load-grade-preset', (_e, { name, ext }) =>
     gradePresetStore.load(GRADE_PRESETS_DIR, name, ext));
 
-ipcMain.handle('delete-grade-preset', (_e, { name, ext }) => {
+handleIpc('delete-grade-preset', (_e, { name, ext }) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     return gradePresetStore.remove(GRADE_PRESETS_DIR, name, ext);
 });
 
-ipcMain.handle('rename-grade-preset', (_e, { oldName, newName }) => {
+handleIpc('rename-grade-preset', (_e, { oldName, newName }) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     return gradePresetStore.rename(GRADE_PRESETS_DIR, oldName, newName);
 });
 
-ipcMain.handle('open-grade-presets-dir', async () => {
+handleIpc('open-grade-presets-dir', async () => {
     try {
         fs.mkdirSync(GRADE_PRESETS_DIR, { recursive: true });
         const err = await shell.openPath(GRADE_PRESETS_DIR);
@@ -1032,7 +1061,7 @@ ipcMain.handle('open-grade-presets-dir', async () => {
 });
 
 // 保存当前调色：先让用户选位置；默认永远打开预设库目录，最省一步。
-ipcMain.handle('pick-grade-preset-save-path', async (_e, suggestedName) => {
+handleIpc('pick-grade-preset-save-path', async (_e, suggestedName) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         fs.mkdirSync(GRADE_PRESETS_DIR, { recursive: true });
@@ -1061,7 +1090,7 @@ ipcMain.handle('pick-grade-preset-save-path', async (_e, suggestedName) => {
 });
 
 // 写入用户选的位置；如果不在预设库里，再自动在库里放一份。
-ipcMain.handle('save-grade-preset-xmp', (_e, { path: filePath, xml }) => {
+handleIpc('save-grade-preset-xmp', (_e, { path: filePath, xml }) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     if (typeof filePath !== 'string' || !filePath) return { ok: false, error: '保存路径为空' };
     try {
@@ -1087,7 +1116,7 @@ ipcMain.handle('save-grade-preset-xmp', (_e, { path: filePath, xml }) => {
 });
 
 // 导出已有预设到用户选的位置：只写文件，不再往库里收录一份。
-ipcMain.handle('export-grade-preset-xmp', (_e, { path: filePath, xml }) => {
+handleIpc('export-grade-preset-xmp', (_e, { path: filePath, xml }) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     if (typeof filePath !== 'string' || !filePath) return { ok: false, error: '保存路径为空' };
     try {
@@ -1102,7 +1131,7 @@ ipcMain.handle('export-grade-preset-xmp', (_e, { path: filePath, xml }) => {
 });
 
 // 批量导入：一个按钮选多个 .xmp，主进程只负责读文本，解析交给渲染进程。
-ipcMain.handle('pick-grade-xmp-files', async (_e) => {
+handleIpc('pick-grade-xmp-files', async (_e) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         const st = loadState();
@@ -1239,7 +1268,7 @@ const hydrateDraftAssets = (draft) => {
     }, 0);
     return { missing, restored };
 };
-ipcMain.handle('draft-externalize', (_e, draft) => {
+handleIpc('draft-externalize', (_e, draft) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         if (!draft || typeof draft !== 'object') return { ok: false, error: '草稿格式无效' };
@@ -1249,7 +1278,7 @@ ipcMain.handle('draft-externalize', (_e, draft) => {
         return { ok: true, draft, json, stats };
     } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
 });
-ipcMain.handle('draft-hydrate', (_e, draft) => {
+handleIpc('draft-hydrate', (_e, draft) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         if (!draft || typeof draft !== 'object') return { ok: false, error: '草稿格式无效' };
@@ -1257,7 +1286,7 @@ ipcMain.handle('draft-hydrate', (_e, draft) => {
         return { ok: true, draft, stats };
     } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
 });
-ipcMain.handle('draft-clear-assets', (_e) => {
+handleIpc('draft-clear-assets', (_e) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         const dir = draftAssetsDir();
@@ -1268,7 +1297,7 @@ ipcMain.handle('draft-clear-assets', (_e) => {
     } catch (e) { return { ok: false, error: String(e) }; }
 });
 
-ipcMain.handle('export-template', async (_e, { name, data }) => {
+handleIpc('export-template', async (_e, { name, data }) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     const st = loadState();
     const baseName = safeLeafName(name || 'template', 'template') + '.json';
@@ -1289,7 +1318,7 @@ ipcMain.handle('export-template', async (_e, { name, data }) => {
     } catch (e) { return { ok: false, error: String(e) }; }
 });
 
-ipcMain.handle('import-template', async () => {
+handleIpc('import-template', async () => {
     const st = loadState();
     const { canceled, filePaths } = await dialog.showOpenDialog({
         title: '导入模板',
@@ -1324,7 +1353,7 @@ const cleanupQfsTmpRoot = () => {
 };
 
 // 导入 Lightroom / Camera Raw 的 XMP 调色预设:只读文本回渲染层,解析与映射在渲染端做
-ipcMain.handle('import-xmp', async () => {
+handleIpc('import-xmp', async () => {
     const st = loadState();
     const { canceled, filePaths } = await dialog.showOpenDialog({
         title: '导入 Lightroom 调色预设 (.xmp)',
@@ -1341,7 +1370,7 @@ ipcMain.handle('import-xmp', async () => {
     } catch (e) { return { ok: false, error: 'XMP 读取失败：' + e.message }; }
 });
 
-ipcMain.handle('qfs-begin-export', async (_e, meta) => {
+handleIpc('qfs-begin-export', async (_e, meta) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     try {
         if (!meta || typeof meta !== 'object') return { ok: false, error: '工程数据无效' };
@@ -1376,7 +1405,7 @@ ipcMain.handle('qfs-begin-export', async (_e, meta) => {
         return { ok: true, id };
     } catch (e) { return { ok: false, error: String(e) }; }
 });
-ipcMain.handle('qfs-add-image', async (_e, payload) => {
+handleIpc('qfs-add-image', async (_e, payload) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     const id = payload && payload.id;
     const s = id && qfsExports.get(id);
@@ -1402,7 +1431,7 @@ ipcMain.handle('qfs-add-image', async (_e, payload) => {
         return { ok: true, count: s.entries.length };
     } catch (e) { return { ok: false, error: String(e) }; }
 });
-ipcMain.handle('qfs-finish-export', async (_e, id) => {
+handleIpc('qfs-finish-export', async (_e, id) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     const s = id && qfsExports.get(id);
     if (!s) return { ok: false, error: '导出会话已失效' };
@@ -1439,7 +1468,7 @@ ipcMain.handle('qfs-finish-export', async (_e, id) => {
         return { ok: false, error: String(e) };
     }
 });
-ipcMain.handle('qfs-cancel-export', (_e, id) => {
+handleIpc('qfs-cancel-export', (_e, id) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     if (id) cleanupQfsSession(id);
     return { ok: true };
@@ -1447,7 +1476,7 @@ ipcMain.handle('qfs-cancel-export', (_e, id) => {
 app.on('will-quit', cleanupQfsTmpRoot);
 app.on('will-quit', () => { try { disposeRaw(); } catch (e) { /* 退出阶段忽略 */ } });
 
-ipcMain.handle('export-qfs', async (_e, data) => {
+handleIpc('export-qfs', async (_e, data) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     const st = loadState();
     const baseName = safeLeafName(data && data.name ? String(data.name) : '未命名工程', '未命名工程') + '.qfs';
@@ -1471,7 +1500,7 @@ ipcMain.handle('export-qfs', async (_e, data) => {
     } catch (e) { return { ok: false, error: String(e) }; }
 });
 
-ipcMain.handle('open-qfs', async () => {
+handleIpc('open-qfs', async () => {
     const st = loadState();
     const { canceled, filePaths } = await dialog.showOpenDialog({
         title: '打开工程 (.qfs)',
@@ -1492,28 +1521,28 @@ ipcMain.handle('open-qfs', async () => {
     } catch (e) { return { ok: false, error: '工程文件格式错误：' + e.message }; }
 });
 
-ipcMain.handle('get-user', () => {
+handleIpc('get-user', () => {
     const st = loadState();
     return st.user || null;
 });
 
-ipcMain.handle('save-user', (_e, user) => {
+handleIpc('save-user', (_e, user) => {
     saveState({ user });
     return { ok: true };
 });
 
-ipcMain.handle('logout-user', () => {
+handleIpc('logout-user', () => {
     saveState({ user: null });
     return { ok: true };
 });
 
 // 界面偏好(导出质量等),与用户资料分开存
-ipcMain.handle('get-prefs', () => {
+handleIpc('get-prefs', () => {
     const st = loadState();
     return st.prefs || {};
 });
 
-ipcMain.handle('save-prefs', (_e, prefs) => {
+handleIpc('save-prefs', (_e, prefs) => {
     if (prefs && typeof prefs === 'object' && !Array.isArray(prefs)) saveState({ prefs });
     return { ok: true };
 });
@@ -1587,7 +1616,7 @@ const cleanupPasteDir = async () => {
     } catch (e) { /* 目录不存在时忽略 */ }
 };
 
-ipcMain.handle('open-image', async () => {
+handleIpc('open-image', async () => {
     const st = loadState();
     const { canceled, filePaths } = await dialog.showOpenDialog({
         title: '选择照片',
@@ -1605,7 +1634,7 @@ ipcMain.handle('open-image', async () => {
     return { name: path.basename(fp), path: fp, size, raw: isRaw(fp), exif: await readPhotoExif(fp) };
 });
 
-ipcMain.handle('open-images', async () => {
+handleIpc('open-images', async () => {
     const st = loadState();
     const { canceled, filePaths } = await dialog.showOpenDialog({
         title: '选择照片（可多选，第一张会成为当前主图）',
@@ -1626,13 +1655,13 @@ ipcMain.handle('open-images', async () => {
 });
 
 // 拖放:渲染进程只拿得到 File 对象,这里把路径交给主进程统一递归收集(含文件夹)
-ipcMain.handle('collect-images', async (_e, paths) => {
+handleIpc('collect-images', async (_e, paths) => {
     if (!Array.isArray(paths) || !paths.length) return { items: [], skipped: 0 };
     const r = await collectImageFiles(paths);
     return { items: await attachExif(r.items), skipped: r.skipped };
 });
 
-ipcMain.handle('open-image-folder', async () => {
+handleIpc('open-image-folder', async () => {
     const st = loadState();
     const { canceled, filePaths } = await dialog.showOpenDialog({
         title: '选择照片文件夹（含子文件夹）',
@@ -1646,7 +1675,7 @@ ipcMain.handle('open-image-folder', async () => {
 });
 
 // 从系统剪贴板读图片(截图/网页复制):落盘为 PNG,后续与普通导入完全一致
-ipcMain.handle('read-clipboard-image', async () => {
+handleIpc('read-clipboard-image', async () => {
     try {
         const img = clipboard.readImage();
         if (!img || img.isEmpty()) return null;
@@ -1666,7 +1695,7 @@ ipcMain.handle('read-clipboard-image', async () => {
     }
 });
 
-ipcMain.handle('read-exif', (_e, filePath) => {
+handleIpc('read-exif', (_e, filePath) => {
     // 与其他敏感处理器对齐：只允许主框架调用，避免被（理论上不存在的）子框架借 EXIF 读取
     // 任意图片元数据（含可能携带的 GPS）。主窗口本身即受信帧，不会误伤正常读取。
     if (!isTrustedFrame(_e)) return {};
@@ -1683,7 +1712,7 @@ ipcMain.handle('read-exif', (_e, filePath) => {
 });
 
 // 贴纸 / 自定义图标:体积小且须内嵌进模板(导出/导入不丢),仍走 base64 dataUrl
-ipcMain.handle('open-sticker-image', async () => {
+handleIpc('open-sticker-image', async () => {
     const st = loadState();
     const { canceled, filePaths } = await dialog.showOpenDialog({
         title: '选择贴纸 / 图标图片',
@@ -1701,7 +1730,7 @@ ipcMain.handle('open-sticker-image', async () => {
     return { name: path.basename(fp), data: fs.readFileSync(fp).toString('base64') };
 });
 
-ipcMain.handle('save-image-base64', async (_e, { data, filename }) => {
+handleIpc('save-image-base64', async (_e, { data, filename }) => {
     if (!isTrustedFrame(_e)) return false;
     const st = loadState();
     const dir = validDir(st.lastExportDir) ? st.lastExportDir : null;
@@ -1730,7 +1759,7 @@ ipcMain.handle('save-image-base64', async (_e, { data, filename }) => {
     return true;
 });
 
-ipcMain.handle('save-images-batch', async (_e, files) => {
+handleIpc('save-images-batch', async (_e, files) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     // files: [{ data, filename }]
     if (!Array.isArray(files) || !files.length || files.length > 1000) return { canceled: true, error: '文件数量不合法' };
@@ -1771,7 +1800,7 @@ ipcMain.handle('save-images-batch', async (_e, files) => {
 
 // 先选好保存位置再导出:多文件选目录,单文件选文件(带默认文件名)
 // 用户在「设置 → 默认导出位置」里指定过文件夹时直接落进去、不再弹框（ask=true 可临时改为询问）。
-ipcMain.handle('pick-export-location', async (_e, payload) => {
+handleIpc('pick-export-location', async (_e, payload) => {
     const { count, hintName, ask } = payload || {};
     const st = loadState();
     const prefDir = (st.prefs && validDir(st.prefs.defaultExportDir)) ? st.prefs.defaultExportDir : null;
@@ -1820,7 +1849,7 @@ ipcMain.handle('pick-export-location', async (_e, payload) => {
 
 // 「设置 → 默认导出位置」：选一个固定文件夹存进 prefs。
 // 存的是用户亲自在系统框里选的目录，所以之后 autoExportTarget 直接复用是安全的。
-ipcMain.handle('pick-default-export-dir', async (event) => {
+handleIpc('pick-default-export-dir', async (event) => {
     if (!isTrustedFrame(event)) return BLOCKED;
     const st = loadState();
     const cur = (st.prefs && validDir(st.prefs.defaultExportDir)) ? st.prefs.defaultExportDir : undefined;
@@ -1841,7 +1870,7 @@ ipcMain.handle('pick-default-export-dir', async (event) => {
 
 // 把已渲染好的导出数据写入选好的位置。
 // 条目带 originalPath 时,经 exif-write 把原图 EXIF 移植进 JPEG 字节(失败静默回退为原字节)。
-ipcMain.handle('write-export-files', async (event, payload) => {
+handleIpc('write-export-files', async (event, payload) => {
     if (!isTrustedFrame(event)) return BLOCKED;
     const files = payload && payload.files;
     if (!Array.isArray(files) || !files.length) return { ok: 0, fail: files ? files.length : 0 };
@@ -1859,7 +1888,9 @@ ipcMain.handle('write-export-files', async (event, payload) => {
             event.sender.send('export-progress', { done: 1, total: 1 });
             return { ok: 1, fail: 0 };
         } catch (e) {
-            return { ok: 0, fail: 1, error: String(e) };
+            const reason = String((e && e.message) || e);
+            return { ok: 0, fail: 1, error: reason,
+                failures: [{ name: path.basename(location.filePath), reason }] };
         }
     }
     if (location.mode !== 'dir') return { ok: 0, fail: files.length, error: '导出位置无效' };
@@ -1867,12 +1898,21 @@ ipcMain.handle('write-export-files', async (event, payload) => {
         const st = fs.statSync(location.dir);
         if (!st.isDirectory()) return { ok: 0, fail: files.length, error: '导出目录无效' };
     } catch (e) { return { ok: 0, fail: files.length, error: '导出目录不存在' }; }
-    let ok = 0, fail = 0;
+    let ok = 0;
+    // 逐文件记下失败项：以前只在 catch 里 fail++，界面只知道「失败 3」，
+    // 不知道是哪 3 张、为什么失败，更没法只重试这 3 张。
+    const failures = [];
+    const failItem = (f, reason) => {
+        failures.push({
+            name: String((f && (f.filename || f.stem)) || '未命名'),
+            reason: String(reason || '写入失败')
+        });
+    };
     const written = new Set();
     try {
         for (const f of files) {
             // 空 data/bytes 也算一格并上报,否则 done 会卡在倒数一格不动
-            if (!f || (!f.data && !f.bytes)) { fail++; }
+            if (!f || (!f.data && !f.bytes)) { failItem(f, '没有图像数据（渲染失败）'); }
             else {
                 try {
                     const destDir = safeSubdir(location.dir, f.subdir);
@@ -1880,20 +1920,20 @@ ipcMain.handle('write-export-files', async (event, payload) => {
                     const fallback = (f.stem ? String(f.stem) : 'photo') + '.' + (f.ext || 'png');
                     const safeName = safeExportName(f.filename || fallback, 'photo.png');
                     const dest = resolveInside(destDir, freeFilePath(destDir, safeName, written));
-                    if (!dest) { fail++; }
+                    if (!dest) { failItem({ filename: safeName }, '文件名无效'); }
                     else {
                         fs.writeFileSync(dest, ensurePngSrgb(await exifWrite.applyExifToExportItem(f)));
                         written.add(path.basename(dest));
                         ok++;
                     }
-                } catch (e) { fail++; }
+                } catch (e) { failItem(f, (e && e.message) || e); }
             }
             // 目录分支原来不发这个事件,渲染层 onExportProgress 永远收不到 →
             // 九宫格批量导出的进度条永远停在 2% / 「写盘 0/N」。逐张上报。
-            event.sender.send('export-progress', { done: ok + fail, total: files.length });
+            event.sender.send('export-progress', { done: ok + failures.length, total: files.length });
         }
-    } catch (e) { return { ok, fail, error: String(e) }; }
-    return { ok, fail };
+    } catch (e) { return { ok, fail: failures.length, error: String(e), failures }; }
+    return { ok, fail: failures.length, failures };
 });
 
     // 重复启动时把已有窗口拉到前台。只调 focus() 在 Windows 上不够:窗口被别的程序
