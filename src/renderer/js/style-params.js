@@ -120,11 +120,14 @@
     // 读到的永远是 UI 值;字段不存在时给 def,但绝不写回模板。
     function get(t, style, p) {
         if (!t) return p.def;
-        const raw = p.path === 'root'
-            ? t[p.key]
-            : (t.styleParams && t.styleParams[String(style).toUpperCase()]
-                ? t.styleParams[String(style).toUpperCase()][p.key] : undefined);
-        return raw == null ? p.def : clamp(p, raw);
+        if (p.path === 'root') return t[p.key] == null ? p.def : clamp(p, t[p.key]);
+        // 导入的工程 / 分享码里的 styleParams 可能不是对象(字符串、数组、null),
+        // 一律当作「没有调过参数」,不让脏结构渗进面板。
+        const root = t.styleParams;
+        if (!root || typeof root !== 'object' || Array.isArray(root)) return p.def;
+        const seg = root[String(style).toUpperCase()];
+        if (!seg || typeof seg !== 'object' || Array.isArray(seg)) return p.def;
+        return seg[p.key] == null ? p.def : clamp(p, seg[p.key]);
     }
 
     // 只有用户真的拖过滑块才调用这里 —— 缺省态保持「模板里没有这个字段」。
@@ -135,8 +138,10 @@
             t[p.key] = n;
         } else {
             const s = String(style).toUpperCase();
-            if (!t.styleParams || typeof t.styleParams !== 'object') t.styleParams = {};
-            if (!t.styleParams[s] || typeof t.styleParams[s] !== 'object') t.styleParams[s] = {};
+            // 数组虽然 typeof 是 object,但 JSON.stringify 会丢掉字符串键 —— 必须纠正成普通对象,
+            // 否则导入过脏 styleParams 的工程里,用户调过的参数保存后再打开就没了。
+            if (!t.styleParams || typeof t.styleParams !== 'object' || Array.isArray(t.styleParams)) t.styleParams = {};
+            if (!t.styleParams[s] || typeof t.styleParams[s] !== 'object' || Array.isArray(t.styleParams[s])) t.styleParams[s] = {};
             t.styleParams[s][p.key] = n;
         }
         return n;
@@ -145,6 +150,8 @@
     // 复位 = 删字段,不是写默认值。删完把空的命名空间也收掉,工程文件保持干净。
     function reset(t, style) {
         if (!t) return;
+        // 复位顺手把导入工程里带进来的脏结构(字符串 / 数组)整个清掉。
+        if (t.styleParams && (typeof t.styleParams !== 'object' || Array.isArray(t.styleParams))) delete t.styleParams;
         const s = String(style).toUpperCase();
         for (const p of forStyle(s)) {
             if (p.path === 'root') delete t[p.key];

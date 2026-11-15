@@ -86,6 +86,27 @@ SP.reset(b, 'BLUR_CLASSIC');
 check(b.blurBackdropDim === undefined, '④ root 项 reset 也是 delete');
 check(SP.clamp(pDim, 999) === 80 && SP.clamp(pDim, -5) === 0, '④ clamp 把越界值夹回声明范围');
 
+/* ④b 导入工程 / 分享码带进来的脏数据与原型安全 */
+const protoBefore = Object.prototype.padX;
+const tProto = { photoFrameStyle: 'card_3d' };
+SP.set(tProto, '__proto__', pPad, 32);
+check(Object.prototype.padX === protoBefore && !('__PROTO__' in Object.prototype),
+    '④ set 的样式名统一转大写，不会写进对象原型');
+check(SP.get({ styleParams: { CARD_3D: { padX: 'oops' } } }, 'CARD_3D', pPad) === 18
+    && SP.get({ styleParams: { CARD_3D: { padX: 1e9 } } }, 'CARD_3D', pPad) === 40,
+    '④ 导入的非数字 / 越界值回退默认或夹回范围');
+const tArr = { photoFrameStyle: 'CARD_3D', styleParams: [] };
+SP.set(tArr, 'CARD_3D', pPad, 30);
+check(!Array.isArray(tArr.styleParams) && tArr.styleParams.CARD_3D.padX === 30
+    && JSON.stringify(tArr).indexOf('padX') >= 0,
+    '④ 导入的 styleParams 是数组时纠正成对象（否则序列化会丢参数）');
+check(SP.get({ styleParams: 'oops' }, 'CARD_3D', pPad) === 18
+    && SP.get({ styleParams: { CARD_3D: 'oops' } }, 'CARD_3D', pPad) === 18,
+    '④ 非对象的 styleParams / 段在 get 里一律当缺省');
+const tReset = { photoFrameStyle: 'CARD_3D', styleParams: 'oops' };
+SP.reset(tReset, 'CARD_3D');
+check(tReset.styleParams === undefined, '④ reset 顺手清掉非对象的脏 styleParams');
+
 /* ⑤ 接线:脚本 / 容器 / 散抄已收口 */
 check(html.includes('js/style-params.js') && html.includes('js/app-style-params.js'),
     '⑤ index.html 按序加载声明表与 UI 模块');
@@ -96,8 +117,9 @@ check(!appSrc.includes('BLUR_ADV_CONTROLS'),
 check(appSrc.includes('QfsStyleParamsUI.bind') && appSrc.includes('QfsStyleParamsUI.refresh')
     && appSrc.includes('QfsStyleParamsUI.updateVisibility') && appSrc.includes('QfsStyleParamsUI.reset'),
     '⑤ app.js 四处散抄已改为调用统一绑定器');
-check(engineSrc.includes('styleParams: (t.styleParams'),
-    '⑤ buildState 把命名空间挂进渲染状态 S');
+check(engineSrc.includes('styleParams: (() =>')
+    && engineSrc.includes('Array.isArray(root)) return null'),
+    '⑤ buildState 只把纯对象的命名空间挂进 S（脏结构一律当缺省）');
 check(engineSrc.includes('function styleParamNum('),
     '⑤ 引擎用统一的 styleParamNum 读取器');
 check(engineSrc.includes('function ticketHoleGeom(')
@@ -105,6 +127,10 @@ check(engineSrc.includes('function ticketHoleGeom(')
     '⑤ 四个绘制函数（票根×3 + 纪念邮票）共用 ticketHoleGeom');
 check(declared.length === 28 && unique.size === 10,
     '② 共 28 条私有参数声明 / 10 个唯一 key', `声明 ${declared.length} / key ${unique.size}`);
+check(engineSrc.includes('Math.max(0, Math.min(3, n / 100))'),
+    '⑤ 引擎倍率统一夹在 0–300%（防负尺寸 / 超大画布）');
+check((engineSrc.match(/const pitch = Math\.max\(4,/g) || []).length === 2,
+    '⑤ 齿孔两处循环步长都有正下界（脏倍率不会死循环）');
 
 console.log('─'.repeat(72));
 if (failures.length) {

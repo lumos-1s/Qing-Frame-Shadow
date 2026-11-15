@@ -28,6 +28,12 @@
         const box = $('styleParamsRows');
         if (!box) return false;
         if (mountedStyle === style && box.childElementCount) return false;
+        // 旧行马上要被销毁。_rangeUi 按 slider id 缓存,重建时同名 entry 会被覆盖,
+        // 不会无限累积;这里仍主动删掉,避免清空到重建之间 updateLabel 短暂同步到
+        // 已脱离文档的元素,也让缓存里不留陈旧引用。
+        if (app && app._rangeUi) {
+            box.querySelectorAll('input[type=range]').forEach((sl) => { delete app._rangeUi[sl.id]; });
+        }
         box.textContent = '';
         for (const p of api.styleParams(style)) {
             const id = ids(style, p);

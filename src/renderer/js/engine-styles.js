@@ -459,7 +459,11 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         const v = SP[k];
         if (v == null) return legacy;
         const n = Number(v);
-        return (isFinite(n) ? Math.max(-1000, Math.min(1000, n)) : legacy * 100) / 100;
+        if (!isFinite(n)) return legacy;
+        // 所有私有参数都是非负倍率/比例(0 = 关掉该效果),UI 上限 220%,取 300% 做宽松上界。
+        // 导入的工程/分享码可以绕过面板直接带脏值:负数会翻转画布几何、
+        // 0 会让齿孔循环步长归零(死循环)、1e9 会撑爆内存。统一在这里夹住。
+        return Math.max(0, Math.min(3, n / 100));
     }
 
     // 票根家族共用:齿孔半径与节距。movieTicket / boardingPass / ticket 三个绘制函数
@@ -468,7 +472,9 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
     function ticketHoleGeom(baseR, S) {
         const spNum = (k, legacy) => styleParamNum(S, k, legacy);
         const r = Math.max(3, Math.round(baseR * spNum('ticketHoleSize', 1)));
-        const pitch = Math.max(r * 4, 9) * spNum('ticketHoleGap', 1);
+        // 步长必须有正下界:styleStamp 的 stampRow 用 span/pitch 算孔数,
+        // pitch 为 0 会得到 Infinity 个孔 → 渲染进程卡死。
+        const pitch = Math.max(4, Math.round(Math.max(r * 4, 9) * spNum('ticketHoleGap', 1)));
         return { r, pitch };
     }
 
@@ -494,7 +500,11 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
     }
     // 邮票齿孔:沿四周外缘打半圆孔(destination-out,露出透明底)
     function stampPerforate(g, w, h, d, pitchK) {
-        const r = d / 2, pitch = Math.max(Math.ceil(d * 1.6), d + 2) * (pitchK == null ? 1 : pitchK);
+        // 同样要有正下界:for (x += pitch) 的步长归零就是死循环(脏工程可触发)。
+        // 缺省 pitchK=1 时 Math.round(整数×1) 不变,视觉基线不受影响。
+        const r = d / 2;
+        const pitch = Math.max(4, Math.round(Math.max(Math.ceil(d * 1.6), d + 2)
+            * (pitchK == null ? 1 : pitchK)));
         g.save();
         g.globalCompositeOperation = 'destination-out';
         for (let x = r; x < w; x += pitch) {
@@ -5497,7 +5507,12 @@ const w = natW;
             blurBrandGap: t.blurBrandGap != null ? clampP(t.blurBrandGap, 0, 300) : null,
             // 样式私有参数(style-params.js 的 path:'style')。null = 用户没动过,
             // 样式函数里的 spNum 会退回原字面量,旧预设与视觉基线逐像素不变。
-            styleParams: (t.styleParams && t.styleParams[String(styleName).toUpperCase()]) || null,
+            styleParams: (() => {
+                const root = t.styleParams;
+                if (!root || typeof root !== 'object' || Array.isArray(root)) return null;
+                const seg = root[String(styleName).toUpperCase()];
+                return (seg && typeof seg === 'object' && !Array.isArray(seg)) ? seg : null;
+            })(),
             paramType: clampP(t.paramType != null ? t.paramType : 0, 0, 2),
             position: positionOf(t.paramPosition),
             useExif: true,

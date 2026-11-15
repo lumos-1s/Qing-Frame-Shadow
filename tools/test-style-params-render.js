@@ -129,6 +129,32 @@ const PROBE = `(async () => {
         };
     }
 
+    // 脏工程 / 分享码绕过面板 clamp:0 / 负数 / 极大值 / 非数字 / 对象
+    // 都不能让渲染崩、卡死循环或画出离谱尺寸的画布。
+    const dirtyStyles = ['CARD_3D', 'STAMP_POSTAGE', 'TICKET_VINTAGE', 'STAMP_GOLD'];
+    out.dirty = {};
+    for (const style of dirtyStyles) {
+        const preset = (A.presets || []).find(p => String(p.photoFrameStyle || '').toUpperCase() === style);
+        A.template = JSON.parse(JSON.stringify(preset || A.defaultTemplate()));
+        A.template.photoFrameStyle = style;
+        if (A.setTpl) A.setTpl(im, A.template);
+        if (A.refreshUI) A.refreshUI();
+        if (A.updatePersonalVisibility) A.updatePersonalVisibility();
+        await nap(100);
+        const bad = {};
+        const dirty = [['zero', 0], ['neg', -500], ['huge', 1e9], ['str', 'oops'], ['obj', {}]];
+        for (const p of SP.styleParams(style)) {
+            for (const [tag, val] of dirty) {
+                A.template.styleParams = { [style]: { [p.key]: val } };
+                await render();
+                const f = fp();
+                bad[p.key + '.' + tag] = !!(f.w > 0 && f.w < 50000 && f.h > 0 && f.h < 50000);
+            }
+        }
+        delete A.template.styleParams;
+        out.dirty[style] = bad;
+    }
+
     // UI 交互细节只在 CARD_3D 上验一遍（三个样式共用同一套绑定器）
     const A3 = A, style3 = 'CARD_3D';
     const preset3 = (A3.presets || []).find(p => String(p.photoFrameStyle || '').toUpperCase() === style3);
@@ -156,6 +182,18 @@ const PROBE = `(async () => {
     if (A3.updatePersonalVisibility) A3.updatePersonalVisibility();
     out.ui.hiddenOther = !!document.getElementById('grpStyleParams')
         && getComputedStyle(document.getElementById('grpStyleParams')).display === 'none';
+    // 反复切样式不能让 _rangeUi 缓存无限累积(旧行销毁时必须删掉对应 entry)。
+    // 首尾都停在同一个样式再比数量,否则「当前样式本身有几行」会被误算成泄漏。
+    A3.template.photoFrameStyle = 'CARD_3D';
+    if (A3.updatePersonalVisibility) A3.updatePersonalVisibility();
+    const uiBefore = A3._rangeUi ? Object.keys(A3._rangeUi).length : 0;
+    for (let i = 0; i < 6; i++) {
+        A3.template.photoFrameStyle = i % 2 ? 'CARD_3D' : 'STAMP_POSTAGE';
+        if (A3.updatePersonalVisibility) A3.updatePersonalVisibility();
+    }
+    A3.template.photoFrameStyle = 'CARD_3D';
+    if (A3.updatePersonalVisibility) A3.updatePersonalVisibility();
+    out.ui.rangeUiDelta = (A3._rangeUi ? Object.keys(A3._rangeUi).length : 0) - uiBefore;
     return out;
 })()`;
 
@@ -200,6 +238,14 @@ async function main() {
     check(o.ui.undoCarries === true, '④ 撤销栈快照全量带上新字段');
     check(o.ui.btnReset === true, '④ 复位按钮走 delete 而不是写默认数字');
     check(o.ui.hiddenOther === true, '① 未声明的样式整组收起');
+    for (const style of Object.keys(o.dirty || {})) {
+        const bad = o.dirty[style] || {};
+        const failed = Object.entries(bad).filter(([, ok]) => !ok).map(([k]) => k);
+        check(failed.length === 0, `⑤ ${style} 脏值渲染不崩 / 不死循环`,
+            failed.length ? failed.join(',') : `${Object.keys(bad).length} 组脏值全过`);
+    }
+    check(o.ui.rangeUiDelta === 0, '⑤ 反复切样式不累积 _rangeUi 缓存',
+        `delta=${o.ui.rangeUiDelta}`);
 
     if (process.env.QF_SP_SHOT) {
         await exec(`(() => {
