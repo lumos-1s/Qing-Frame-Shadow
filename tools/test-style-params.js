@@ -30,14 +30,17 @@ check(badDefaults.length === 0, '① 每个参数的 apply(def) 严格等于引�
 const legacyMap = {};
 for (const m of engineSrc.matchAll(/spNum\('([A-Za-z]\w*)',\s*([\d.]+)\)/g)) legacyMap[m[1]] = Number(m[2]);
 const declared = [];
+const unique = new Map();
 for (const style of Object.keys(SP.TABLE)) {
-    for (const p of SP.styleParams(style)) declared.push([style, p]);
+    for (const p of SP.styleParams(style)) { declared.push([style, p]); unique.set(p.key, p.legacy); }
 }
-check(declared.length > 0 && Object.keys(legacyMap).length === declared.length,
-    '② 引擎 spNum 缺省项数量与声明表一致', `表 ${declared.length} / 引擎 ${Object.keys(legacyMap).length}`);
-for (const [style, p] of declared) {
-    check(legacyMap[p.key] === p.legacy,
-        `② ${style}.${p.key} 引擎字面量未漂移`, `legacy=${p.legacy} engine=${legacyMap[p.key]}`);
+// 多个样式可以共享同一组参数(票根家族五款 → 同一对 key),所以按 key 去重比对引擎调用点。
+check(unique.size > 0 && Object.keys(legacyMap).length === unique.size,
+    '② 引擎 spNum 缺省项(按 key 去重)与声明表一致',
+    `表 ${unique.size} / 引擎 ${Object.keys(legacyMap).length}`);
+for (const [key, legacy] of unique) {
+    check(legacyMap[key] === legacy,
+        `② ${key} 引擎字面量未漂移`, `legacy=${legacy} engine=${legacyMap[key]}`);
 }
 
 /* ③ 表结构 */
@@ -51,7 +54,12 @@ check(all.filter(([, p]) => p.path === 'root').every(([, p]) => p.row && p.slide
     '③ 存量 root 项都带手写 DOM 的 row/slider/label id');
 check(SP.forStyle('BLUR_DATE') === SP.forStyle('BLUR_CLASSIC'),
     '③ BLUR_DATE 与 BLUR_CLASSIC 共用同一组声明');
-check(!SP.has('NONE') && !SP.has('POLAROID'), '③ 未声明的样式返回空数组');
+const TICKET_KEYS = ['TICKET_VINTAGE', 'TICKET_SCRAP', 'TICKET_CONCERT', 'MOVIE_TICKET', 'BOARDING_PASS'];
+check(TICKET_KEYS.every((k) => SP.forStyle(k) === SP.forStyle('TICKET_VINTAGE'))
+    && SP.forStyle('TICKET_VINTAGE').length === 2,
+    '③ 五款票根预设共享同一组声明（改一处表覆盖五款）');
+check(!SP.has('NONE') && !SP.has('POLAROID') && !SP.has('TICKET_STAMP'),
+    '③ 未声明的样式返回空数组（TICKET_STAMP 走另一条绘制路径，暂未覆盖）');
 
 /* ④ 读写与零回归 */
 const t = { photoFrameStyle: 'CARD_3D' };
@@ -90,9 +98,12 @@ check(appSrc.includes('QfsStyleParamsUI.bind') && appSrc.includes('QfsStyleParam
 check(engineSrc.includes('styleParams: (t.styleParams'),
     '⑤ buildState 把命名空间挂进渲染状态 S');
 check(engineSrc.includes('function styleParamNum('),
-    '⑤ 引擎用统一的 styleParamNum 读取器（三个样式共用）');
-check(declared.length === 8,
-    '② 三样式共 8 个私有参数（CARD_3D 4 + 邮票 2 + 胶片 2）', `实际 ${declared.length}`);
+    '⑤ 引擎用统一的 styleParamNum 读取器');
+check(engineSrc.includes('function ticketHoleGeom(')
+    && (engineSrc.match(/ticketHoleGeom\(baseHoleR, S\)/g) || []).length === 3,
+    '⑤ 票根家族三个绘制函数共用 ticketHoleGeom');
+check(declared.length === 18 && unique.size === 10,
+    '② 共 18 条私有参数声明 / 10 个唯一 key', `声明 ${declared.length} / key ${unique.size}`);
 
 console.log('─'.repeat(72));
 if (failures.length) {

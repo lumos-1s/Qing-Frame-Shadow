@@ -462,6 +462,16 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         return (isFinite(n) ? Math.max(-1000, Math.min(1000, n)) : legacy * 100) / 100;
     }
 
+    // 票根家族共用:齿孔半径与节距。movieTicket / boardingPass / ticket 三个绘制函数
+    // 都从这里取,改一处几何即覆盖 TICKET_VINTAGE / SCRAP / CONCERT、MOVIE_TICKET、
+    // BOARDING_PASS 五款预设。缺省倍率 1 → 原 holeR 与原 pitch,基线逐像素不变。
+    function ticketHoleGeom(baseR, S) {
+        const spNum = (k, legacy) => styleParamNum(S, k, legacy);
+        const r = Math.max(3, Math.round(baseR * spNum('ticketHoleSize', 1)));
+        const pitch = Math.max(r * 4, 9) * spNum('ticketHoleGap', 1);
+        return { r, pitch };
+    }
+
     // 仿古邮票:一枚贴在大版张上的纪念邮票。几何同时供 styleDims 使用,
     // 保证登记画布、邮票齿孔和照片位置永远一致。
     function stampPostageGeom(iw, ih, size) {
@@ -1265,7 +1275,8 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         const hasSig = !!(S && S.userSignature);
         const G = movieGeom(iw, ih, size, hasAv, hasSig);
         const side = G.side, headH = G.headH, infoH = G.infoH, footH = G.footH, sigH = G.sigH;
-        const gap = G.gap, holeR = G.holeR, tooth = G.tooth;
+        const gap = G.gap, baseHoleR = G.holeR, tooth = G.tooth;
+        const HG = ticketHoleGeom(baseHoleR, S), holeR = HG.r;
         const tw = G.tw, th = G.th, tearX = G.tearX, w = G.w, h = G.h;
         const pal = {
             paper: '#f7f2e9', band: '#ece4d4', ink: '#2c2720',
@@ -1325,7 +1336,7 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         tg.fillRect(tearX, headH + infoH, tw - tearX, ih + sigH);
 
         // 齿孔:四边 + 四角 + 竖向锯齿撕线(副券)
-        const pitch = Math.max(holeR * 4, 9);
+        const pitch = HG.pitch;
         tg.globalCompositeOperation = 'destination-out';
         tg.fillStyle = '#000000';   // ⚠ 显式设置,别沿用上面的低透明度填充
         const rowX = ticketPerfRow(tw, holeR * 2, pitch);
@@ -1515,7 +1526,8 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         const hasSig = !!(S && S.userSignature);
         const G = boardingGeom(iw, ih, size, hasAv, hasSig);
         const side = G.side, headH = G.headH, infoH = G.infoH, footH = G.footH, sigH = G.sigH;
-        const stubW = G.stubW, gap = G.gap, holeR = G.holeR, tooth = G.tooth;
+        const stubW = G.stubW, gap = G.gap, baseHoleR = G.holeR, tooth = G.tooth;
+        const HG = ticketHoleGeom(baseHoleR, S), holeR = HG.r;
         const tw = G.tw, th = G.th, tearX = G.tearX;
 
         // 配色:旧预设的紫蓝渐变 + 米白字 + 暖金点缀
@@ -1586,7 +1598,7 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         tg.stroke();
 
         // ③ 齿孔:四边 + 四角 + 竖向锯齿撕线(副券,贯穿整条票高)
-        const pitch = Math.max(holeR * 4, 9);
+        const pitch = HG.pitch;
         tg.globalCompositeOperation = 'destination-out';
         tg.fillStyle = '#000000';   // ⚠ 显式设置,别沿用上面的浅色描边(见文件头注释)
         const rowX = ticketPerfRow(tw, holeR * 2, pitch);
@@ -2280,7 +2292,8 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         const hasSig = !!(S && S.userSignature);
         const G = ticketGeom(iw, ih, size, hasAv, hasSig);
         const side = G.side, headH = G.headH, footBase = G.footBase, sigH = G.sigH;
-        const stubH = G.stubH, gap = G.gap, holeR = G.holeR;
+        const stubH = G.stubH, gap = G.gap, baseHoleR = G.holeR;
+        const HG = ticketHoleGeom(baseHoleR, S), holeR = HG.r;
         const tw = G.tw, th = G.th, tearY = G.tearY, w = G.w, h = G.h;
         const dark = variant === 'concert';
         const pal = ({
@@ -2435,7 +2448,7 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         tg.strokeRect(fIn + 5, fIn + 5, tw - (fIn + 5) * 2, th - (fIn + 5) * 2);
 
         // 齿孔:四边 + 四角 + 撕线一列 + 两端咬口
-        const pitch = Math.max(holeR * 4, 9);
+        const pitch = HG.pitch;
         tg.globalCompositeOperation = 'destination-out';
         tg.fillStyle = '#000000';   // ⚠ 显式设置,别沿用上面的低透明度渐变(见文件头注释)
         const rowX = ticketPerfRow(tw, holeR * 2, pitch);

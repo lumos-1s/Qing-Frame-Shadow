@@ -20,7 +20,8 @@ process.stderr.on('error', () => {});
 const ROOT = path.join(__dirname, '..');
 const PRESET_DIR = path.join(ROOT, 'shared', 'presets');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const STYLES = ['CARD_3D', 'STAMP_POSTAGE', 'FILM_TEAR'];
+const STYLES = ['CARD_3D', 'STAMP_POSTAGE', 'FILM_TEAR',
+    'TICKET_VINTAGE', 'TICKET_SCRAP', 'TICKET_CONCERT', 'MOVIE_TICKET', 'BOARDING_PASS'];
 
 const failures = [];
 const check = (ok, label, extra) => {
