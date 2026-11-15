@@ -14,19 +14,9 @@ const ROTATE_CURSOR = 'url("data:image/svg+xml,' + encodeURIComponent(ROTATE_CUR
 // 认 data:image/svg+xml 前缀即可可靠区分「旋转专用光标」。
 const isRotateCursor = (c) => String(c).indexOf('data:image/svg+xml') >= 0;
 
-// 「背景模糊·经典/日期」专属自由度：模板字段 / 滑块 id / 标签 id / 面板默认值。
-// 默认值就是引擎的缺省行为；只有用户拖过滑块才把字段写进模板，
-// 所以旧预设、草稿、.qfs 工程不会平白多出一堆字段。
-// 主体大小不在此列：引擎里它与通用滑块「图片缩放」是同一个乘数，重复了。
-const BLUR_ADV_CONTROLS = [
-    ['blurBackdropDim', 'slBlurBackdropDim', 'lblBlurBackdropDim', 40],
-    ['blurBackdropZoom', 'slBlurBackdropZoom', 'lblBlurBackdropZoom', 100],
-    ['blurSubjectShadow', 'slBlurSubjectShadow', 'lblBlurSubjectShadow', 100],
-    ['blurTextOffset', 'slBlurTextOffset', 'lblBlurTextOffset', 0],
-    ['blurTextGap', 'slBlurTextGap', 'lblBlurTextGap', 100],
-    ['blurBrandGap', 'slBlurBrandGap', 'lblBlurBrandGap', 100],
-];
-// 只对这两个风格露出进阶参数（它们共用 styleBlurCommon，别的风格读不到这些字段）。
+// 样式私有参数的声明与绑定已收进 style-params.js / app-style-params.js，
+// 这里不再维护「字段名 → 滑块 → 标签 → 默认值」的手写数组。
+// 只对这两个风格露出进阶说明文字（它们共用 styleBlurCommon，别的风格读不到这些字段）。
 const BLUR_ADV_STYLES = ['BLUR_CLASSIC', 'BLUR_DATE'];
 
 window.App = {
@@ -896,19 +886,9 @@ window.App = {
                 this.onSettingChanged();
             });
         }
-        // 背景模糊·经典/日期专属自由度：字段名 → 滑块 → 标签。
-        // 只有用户真的拖过才把字段写进模板（见 resetBlurAdvanced 删除字段），
-        // 没拖过的模板保持原样，旧预设 / 工程文件渲染逐像素不变。
-        for (const [field, sid, lid] of BLUR_ADV_CONTROLS) {
-            const sl = document.getElementById(sid);
-            if (!sl) continue;
-            this.updateLabel(lid, sl.value + '%');
-            sl.addEventListener('input', () => {
-                this.template[field] = Number(sl.value);
-                this.updateLabel(lid, sl.value + '%');
-                this.onSettingChanged();
-            });
-        }
+        // 样式私有参数（含背景模糊六项）统一由声明表驱动：按当前样式生成行、绑事件。
+        // 只有用户真的拖过才把字段写进模板，旧预设 / 工程文件渲染逐像素不变。
+        if (window.QfsStyleParamsUI) window.QfsStyleParamsUI.bind(this);
         const btnBlurReset = document.getElementById('btnBlurReset');
         if (btnBlurReset) btnBlurReset.addEventListener('click', () => this.resetBlurAdvanced());
         const btnGotoBlurText = document.getElementById('btnGotoBlurText');
@@ -2040,36 +2020,24 @@ window.App = {
             const pf = String(this.template.photoFrameStyle || '').toUpperCase();
             exifRow.style.display = (pf && pf !== 'NONE') ? 'none' : '';
         }
-        // 背景模糊·经典/日期的进阶参数：能力表只收录「引擎是否读通用滑块」，
-        // 这些行是按风格手工放出来的，得自己管显隐，别让别的风格看到拖了没反应的滑块。
+        // 进阶说明文字 / 复位 / 指路入口按风格显隐（这些不是参数行，不进声明表）。
         const advStyle = String(this.template.photoFrameStyle || '').toUpperCase();
         const advOn = BLUR_ADV_STYLES.indexOf(advStyle) !== -1;
-        // 单行模式（仅参数 / 日期）没有品牌行与型号行：行间距、品牌间距拖了不会变，收起。
-        const twoLine = advOn && Number(this.template.paramType || 0) === 0;
-        for (const id of ['rowBlurBackdropDim', 'rowBlurBackdropZoom', 'rowBlurSubjectShadow',
-            'rowBlurTextOffset', 'btnBlurReset', 'hintBlurAdvanced', 'hintBlurTextWhere']) {
+        for (const id of ['btnBlurReset', 'hintBlurAdvanced', 'hintBlurTextWhere']) {
             const el = document.getElementById(id);
             if (el) el.style.display = advOn ? '' : 'none';
         }
-        for (const id of ['rowBlurTextGap', 'rowBlurBrandGap']) {
-            const el = document.getElementById(id);
-            if (el) el.style.display = twoLine ? '' : 'none';
-        }
+        // 参数行与样式参数组统一由声明表管显隐：当前样式没声明的一律收起，
+        // 单行模式下行距/品牌间距也自动收起。
+        if (window.QfsStyleParamsUI) window.QfsStyleParamsUI.updateVisibility(this);
         this.syncEmptyGroups();
     },
 
     // 一键回到预设默认：把这些字段从模板里删掉，而不是写成 40/100/100/0/100/100。
     // 删掉后引擎走原硬编码分支，渲染与「从未调过」完全一致，工程文件也更干净。
     resetBlurAdvanced() {
-        if (!this.template) return;
-        for (const [field, sid, lid, def] of BLUR_ADV_CONTROLS) {
-            delete this.template[field];
-            const sl = document.getElementById(sid);
-            if (sl) sl.value = def;
-            this.updateLabel(lid, def + '%');
-        }
-        this.onSettingChanged();
-        this.setStatus('已恢复背景模糊默认参数');
+        // 统一走声明表复位（delete 字段，而不是写回默认值）。
+        if (window.QfsStyleParamsUI) window.QfsStyleParamsUI.reset(this);
     },
 
     // 文字栏里的「去调」入口：那三根滑块在画布栏，这里负责把人送过去。
@@ -2264,13 +2232,8 @@ window.App = {
             const biV = this.template.blurIntensity != null ? this.template.blurIntensity : 50;
             if ($('slBgBlurInt')) $('slBgBlurInt').value = biV;
             this.updateLabel('lblBgBlurInt', biV + '%');
-            // 进阶参数：模板里有就回显用户值，没有就显示引擎默认行为对应的数值。
-            for (const [field, sid, lid, def] of BLUR_ADV_CONTROLS) {
-                const v = this.template[field] != null ? Number(this.template[field]) : def;
-                const sl = document.getElementById(sid);
-                if (sl) sl.value = v;
-                this.updateLabel(lid, v + '%');
-            }
+            // 样式私有参数回显：模板里有就显示用户值，没有就显示声明表里的默认值。
+            if (window.QfsStyleParamsUI) window.QfsStyleParamsUI.refresh(this);
             const rowBI2 = document.getElementById('rowBgBlurInt');
             if (rowBI2) rowBI2.style.display = $('chkBgBlur') && $('chkBgBlur').checked ? '' : 'none';
             if ($('cbParamColor')) $('cbParamColor').value = this.template.paramColor || 'auto';

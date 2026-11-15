@@ -5464,6 +5464,9 @@ const w = natW;
             blurTextOffset: t.blurTextOffset != null ? clampP(t.blurTextOffset, -100, 100) : null,
             blurTextGap: t.blurTextGap != null ? clampP(t.blurTextGap, 0, 300) : null,
             blurBrandGap: t.blurBrandGap != null ? clampP(t.blurBrandGap, 0, 300) : null,
+            // 样式私有参数(style-params.js 的 path:'style')。null = 用户没动过,
+            // 样式函数里的 spNum 会退回原字面量,旧预设与视觉基线逐像素不变。
+            styleParams: (t.styleParams && t.styleParams[String(styleName).toUpperCase()]) || null,
             paramType: clampP(t.paramType != null ? t.paramType : 0, 0, 2),
             position: positionOf(t.paramPosition),
             useExif: true,
@@ -6667,12 +6670,23 @@ const w = natW;
 
     // ══ 3D卡片翻转 ══
     function styleCard3D(img, size, g, iw, ih, S) {
-        const padX = Math.round(iw * 0.18);
+        // 私有参数:字段缺省时 spNum 返回 legacy(原来的字面量),换算与 style-params.js
+        // 的 apply 同构(UI 百分数 / 100)。声明表本身不参与渲染,所以 design/regress.html
+        // 只加载引擎时也能照常出图。
+        const SP = (S && S.styleParams) || {};
+        const spNum = (k, legacy) => {
+            const v = SP[k];
+            if (v == null) return legacy;
+            const n = Number(v);
+            return (isFinite(n) ? Math.max(-1000, Math.min(1000, n)) : legacy * 100) / 100;
+        };
+        const padX = Math.round(iw * spNum('padX', 0.18));
         const padTop = Math.round(iw * 0.1);
-        const padBottom = Math.round(iw * 0.2);
+        const padBottom = Math.round(iw * spNum('padBottom', 0.2));
         const w = iw + padX * 2, h = ih + padTop + padBottom;
         const cx = padX, cy = padTop;
-        const thick = Math.max(16, Math.round(iw * 0.025));
+        const thick = Math.max(16, Math.round(iw * spNum('thick', 0.025)));
+        const shK = spNum('shadow', 1);
         const cr = Math.max(10, Math.round(iw * 0.006));
         // 冷灰黑桌面渐变
         const grad = g.createLinearGradient(0, 0, 0, h);
@@ -6692,13 +6706,15 @@ const w = natW;
             { ox: Math.round(iw * 0.012), oy: Math.round(iw * 0.018), blur: Math.round(iw * 0.012), color: 'rgba(0,0,0,0.38)' }
         ];
         g.save();
-        for (const L of shadowLayers) {
-            g.shadowColor = L.color;
-            g.shadowBlur = L.blur;
-            g.shadowOffsetX = L.ox;
-            g.shadowOffsetY = L.oy;
-            g.fillStyle = '#000000';
-            fillRoundRectCtx(g, cx, cy, iw, ih, cr);
+        if (shK > 0) {
+            for (const L of shadowLayers) {
+                g.shadowColor = L.color;
+                g.shadowBlur = L.blur * shK;
+                g.shadowOffsetX = L.ox * shK;
+                g.shadowOffsetY = L.oy * shK;
+                g.fillStyle = '#000000';
+                fillRoundRectCtx(g, cx, cy, iw, ih, cr);
+            }
         }
         g.restore();
         // 卡片厚度(右下露出, 渐变灰)
