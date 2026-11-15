@@ -3713,27 +3713,27 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         const model = str(cam.model).toUpperCase();
         const fp = autoExifSize(S.paramFs, iw);
         const fsBrand = Math.max(16, Math.round(fp * 1.32));
-        const track = Math.max(1, Math.round(fsBrand * 0.24));
+        const track = Math.max(1, Math.round(fsBrand * 0.20));
         const brandY = side + Math.round(topH * 0.60);
 
         // 逐字符绘制拉开字距(Canvas 的 letterSpacing 在部分 Chromium 版本不可靠)
         g.textBaseline = 'alphabetic';
         g.textAlign = 'left';
-        // 与「参数横条」同款:等宽打字机(Courier New),品牌用 700 加粗
-        g.font = '700 ' + fsBrand + 'px "Courier New", monospace';
+        // 与「印象毛玻璃」品牌字同一套衬线(Times New Roman / brandFont),品牌 700
+        g.font = brandFont(fsBrand, 700);
         g.fillStyle = '#1b1b1b';
         const chars = [...brand];
         const brandW = chars.reduce((n, c) => n + g.measureText(c).width + track, 0) - track;
         let bx = (w - brandW) / 2;
         for (const c of chars) { g.fillText(c, bx, brandY); bx += g.measureText(c).width + track; }
 
-        // 型号:品牌下方居中的一行小字
+        // 型号:品牌下方居中的一行小字(与品牌同一套衬线,颜色压深到可读的次要层级)
         if (model) {
             const fsModel = Math.max(9, Math.round(fsBrand * 0.30));
-            g.font = '400 ' + fsModel + 'px "Courier New", monospace';
-            g.fillStyle = '#8d8d8d';
+            g.font = brandFont(fsModel, 400);
+            g.fillStyle = '#3a3a3a';
             g.textAlign = 'center';
-            g.letterSpacing = Math.max(1, Math.round(fsModel * 0.14)) + 'px';
+            g.letterSpacing = Math.max(1, Math.round(fsModel * 0.16)) + 'px';
             g.fillText(model, w / 2, brandY + Math.round(fsBrand * 0.68));
             g.letterSpacing = '0px';
         }
@@ -3748,17 +3748,17 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         if (iso) parts.push('ISO ' + iso);
         const line = parts.join('   ');
         if (line) {
-            const fsParam = Math.max(8, Math.round(fsBrand * 0.26));
+            const fsParam = Math.max(9, Math.round(fsBrand * 0.28));
             let f = fsParam;
-            g.font = '400 ' + f + 'px "Courier New", monospace';
+            g.font = paramValueFont(f);
             const maxW = w - side * 2;
             if (g.measureText(line).width > maxW) {
-                f = Math.max(7, Math.floor(f * maxW / g.measureText(line).width));
-                g.font = '400 ' + f + 'px "Courier New", monospace';
+                f = Math.max(8, Math.floor(f * maxW / g.measureText(line).width));
+                g.font = paramValueFont(f);
             }
-            g.fillStyle = '#666666';
+            g.fillStyle = '#2b2b2b';
             g.textAlign = 'center';
-            g.letterSpacing = Math.max(0.5, Math.round(f * 0.08)) + 'px';
+            g.letterSpacing = Math.max(0.5, Math.round(f * 0.10)) + 'px';
             g.fillText(line, w / 2, py + ih + Math.round(botH * 0.58));
             g.letterSpacing = '0px';
         }
@@ -5409,6 +5409,12 @@ const w = natW;
 
     function brandFont(fs, weight) {
         return (weight || 700) + ' ' + fs + 'px ' + BRAND_SERIF;
+    }
+
+    // 参数值字体:与「印象毛玻璃」的三行参数值同款(粗体无衬线)。
+    // 相机铭牌等「参数行」类风格复用它,避免同一个数字在两种预设里换字形。
+    function paramValueFont(fs) {
+        return '700 ' + fs + 'px sans-serif';
     }
 
     function brandTextWidth(g, text, fs, track) {
