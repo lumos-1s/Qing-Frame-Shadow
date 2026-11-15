@@ -186,7 +186,10 @@ const RUN = `(async () => {
     window.qingframe = Object.assign({}, window.qingframe || {}, {
       pickExportLocation: async () => ({ mode: 'dir', dir: 'qfs-test-export' }),
       writeExportFiles: async (payload) => {
-        EXPORTED = (payload && payload.files) || [];
+        // 渲染层写盘成功后会就地清空同一批 file 对象的 data/bytes 释放内存
+        // (app-export.js 的 pending.forEach)，桩若只存数组引用，第⑤项读尺寸时
+        // 手里只剩空壳。这里浅拷贝一层，把编码结果留在自己手里。
+        EXPORTED = ((payload && payload.files) || []).map(f => ({ ...f }));
         return { ok: EXPORTED.length, fail: 0 };
       },
       showItemInFolder: async () => ({ ok: true })
