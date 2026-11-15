@@ -88,8 +88,9 @@
           hint: '相邻齿孔的中心距；越小越密，默认 100%' }
     ];
 
-    // ── 第三批:票根家族。三个绘制函数共用引擎的 ticketHoleGeom,五款预设共享这组声明。
-    //    TICKET_STAMP 走 styleStamp 另一条绘制路径,不在此列(留给下一批)。 ──
+    // ── 齿孔家族(第三批票根 + 第四批纪念邮票):十个样式共用这一组声明。
+    //    引擎侧三处票根绘制 + styleStamp 都调 ticketHoleGeom,改一处几何覆盖十款。
+    //    key 沿用了第三批的 ticketHole*,是内部标识,面板只显示「齿孔大小 / 齿孔间距」。 ──
     const TICKET = [
         { key: 'ticketHoleSize', label: '齿孔大小', min: 50, max: 200, step: 10, def: 100, unit: '%',
           path: 'style', legacy: 1, apply: pct, group: '齿孔',
@@ -102,7 +103,9 @@
     const TABLE = { BLUR_CLASSIC: BLUR, BLUR_DATE: BLUR, CARD_3D: CARD_3D,
         STAMP_POSTAGE: STAMP_POSTAGE, FILM_TEAR: FILM_TEAR,
         TICKET_VINTAGE: TICKET, TICKET_SCRAP: TICKET, TICKET_CONCERT: TICKET,
-        MOVIE_TICKET: TICKET, BOARDING_PASS: TICKET };
+        MOVIE_TICKET: TICKET, BOARDING_PASS: TICKET,
+        TICKET_STAMP: TICKET, STAMP_KRAFT: TICKET, STAMP_BLUEPRINT: TICKET,
+        STAMP_REDSEAL: TICKET, STAMP_GOLD: TICKET };
 
     function styleOf(t) { return String((t && t.photoFrameStyle) || '').toUpperCase(); }
     function forStyle(style) { return TABLE[String(style || '').toUpperCase()] || []; }

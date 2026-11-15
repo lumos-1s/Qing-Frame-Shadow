@@ -54,12 +54,13 @@ check(all.filter(([, p]) => p.path === 'root').every(([, p]) => p.row && p.slide
     '③ 存量 root 项都带手写 DOM 的 row/slider/label id');
 check(SP.forStyle('BLUR_DATE') === SP.forStyle('BLUR_CLASSIC'),
     '③ BLUR_DATE 与 BLUR_CLASSIC 共用同一组声明');
-const TICKET_KEYS = ['TICKET_VINTAGE', 'TICKET_SCRAP', 'TICKET_CONCERT', 'MOVIE_TICKET', 'BOARDING_PASS'];
-check(TICKET_KEYS.every((k) => SP.forStyle(k) === SP.forStyle('TICKET_VINTAGE'))
+const PERF_KEYS = ['TICKET_VINTAGE', 'TICKET_SCRAP', 'TICKET_CONCERT', 'MOVIE_TICKET', 'BOARDING_PASS',
+    'TICKET_STAMP', 'STAMP_KRAFT', 'STAMP_BLUEPRINT', 'STAMP_REDSEAL', 'STAMP_GOLD'];
+check(PERF_KEYS.every((k) => SP.forStyle(k) === SP.forStyle('TICKET_VINTAGE'))
     && SP.forStyle('TICKET_VINTAGE').length === 2,
-    '③ 五款票根预设共享同一组声明（改一处表覆盖五款）');
-check(!SP.has('NONE') && !SP.has('POLAROID') && !SP.has('TICKET_STAMP'),
-    '③ 未声明的样式返回空数组（TICKET_STAMP 走另一条绘制路径，暂未覆盖）');
+    '③ 齿孔家族十款预设共享同一组声明（改一处表覆盖十款）');
+check(!SP.has('NONE') && !SP.has('POLAROID') && !SP.has('CARD_SIMPLE'),
+    '③ 未声明的样式返回空数组');
 
 /* ④ 读写与零回归 */
 const t = { photoFrameStyle: 'CARD_3D' };
@@ -100,10 +101,10 @@ check(engineSrc.includes('styleParams: (t.styleParams'),
 check(engineSrc.includes('function styleParamNum('),
     '⑤ 引擎用统一的 styleParamNum 读取器');
 check(engineSrc.includes('function ticketHoleGeom(')
-    && (engineSrc.match(/ticketHoleGeom\(baseHoleR, S\)/g) || []).length === 3,
-    '⑤ 票根家族三个绘制函数共用 ticketHoleGeom');
-check(declared.length === 18 && unique.size === 10,
-    '② 共 18 条私有参数声明 / 10 个唯一 key', `声明 ${declared.length} / key ${unique.size}`);
+    && (engineSrc.match(/const HG = ticketHoleGeom\(/g) || []).length === 4,
+    '⑤ 四个绘制函数（票根×3 + 纪念邮票）共用 ticketHoleGeom');
+check(declared.length === 28 && unique.size === 10,
+    '② 共 28 条私有参数声明 / 10 个唯一 key', `声明 ${declared.length} / key ${unique.size}`);
 
 console.log('─'.repeat(72));
 if (failures.length) {

@@ -1967,8 +1967,11 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         g.drawImage(bg, 0, 0);
         // 票面+齿孔: 离屏canvas做带半孔齿孔的米白票面(孔中心落在票面边缘线上,半圆天然只咬进票面内),
         // 孔内透明露出下层模糊背景; 一次性叠上, 避免逐孔重复绘制导致缩放卡顿
-        const holeR = Math.max(3, Math.round(size * 0.225));
-        const pitch = Math.max(9, holeR * 4);   // 边孔间距=孔径+孔径
+        // 与票根家族共用 ticketHoleGeom:缺省倍率 1 → 原 holeR 与原 pitch
+        // (原来 max(9, holeR*4) 与共享函数里的 max(holeR*4, 9) 等价)。
+        const HG = ticketHoleGeom(Math.round(size * 0.225), S);
+        const holeR = HG.r;
+        const pitch = HG.pitch;
         // 角孔两侧平直齿尖长: 至少等于孔直径, 图片越大自动加长(随 min(iw,ih) 缩放)
         const toothL = Math.max(Math.round(holeR * 2), Math.round(Math.min(iw, ih) * 0.012));
         const margin = holeR * 2 + toothL;  // 角点(45度角孔圆心)到第一边孔圆心
