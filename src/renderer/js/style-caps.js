@@ -85,6 +85,7 @@
         BLUR_DATE: { pf: true, cr: true, isc: true, bi: true },
         BOARDING_PASS: { cr: true, isc: true },
         BURNED_EDGE: { cr: true },
+        CAMERA_PLATE: { pf: true, cr: true },
         CARD_3D: { cr: true },
         CARD_APPLE: { pf: true, cr: true, isc: true },
         CARD_IMMERSION: { pf: true },

@@ -91,14 +91,20 @@ async function main() {
     })()`);
     check(setup.ok, 'App 与预设墙就绪（显式打开）', setup.error || `presets=${setup.presets} tiles=${setup.tiles}`);
 
-    // 0. 无障碍：只有第 0 份拷贝参与 Tab 与读屏（否则 360 个 Tab 停点、同一张卡播报四遍）
-    const a11y = await exec(`(() => ({
-        all: document.querySelectorAll('.pw-tile').length,
-        focusable: document.querySelectorAll('.pw-tile[tabindex="0"]').length,
-        ariaHidden: document.querySelectorAll('.pw-tile[aria-hidden="true"]').length
-    }))()`);
-    check(a11y.all === 360 && a11y.focusable === 90 && a11y.ariaHidden === 270,
-        'Tab 停点只有 90 个（3 份拷贝 aria-hidden）', JSON.stringify(a11y));
+    // 0. 无障碍：只有第 0 份拷贝参与 Tab 与读屏（否则每块格数 ×4 个 Tab 停点、同一张卡播报四遍）
+    const a11y = await exec(`(() => {
+        const blocks = document.querySelectorAll('.pw-block');
+        const perBlock = blocks.length ? blocks[0].querySelectorAll('.pw-tile').length : 0;
+        return {
+            all: document.querySelectorAll('.pw-tile').length,
+            focusable: document.querySelectorAll('.pw-tile[tabindex="0"]').length,
+            ariaHidden: document.querySelectorAll('.pw-tile[aria-hidden="true"]').length,
+            perBlock
+        };
+    })()`);
+    check(a11y.all === a11y.perBlock * 4 && a11y.focusable === a11y.perBlock
+        && a11y.ariaHidden === a11y.perBlock * 3,
+        'Tab 停点只有每块格数（3 份拷贝 aria-hidden）', JSON.stringify(a11y));
 
     // 0.5 首屏对齐格心：没有任何预设时也要让中心卡是 1.25，而不是落在格间隙的 1.05
     const bootFocus = await exec(`(() => {
@@ -123,7 +129,7 @@ async function main() {
     })()`);
     check(wallVisible, '启动默认显示预设墙');
 
-    // 2. 90 格周期网格渲染（87 张预设循环填充）+ 每张有封面图
+    // 2. 周期网格渲染（预设循环填充）+ 每张有封面图
     const tiles = await exec(`(() => {
         const g = document.getElementById('presetWallGrid');
         const list = Array.from(g.querySelectorAll('.pw-tile'));
@@ -137,6 +143,8 @@ async function main() {
         }).length;
         return {
             blocks: g.querySelectorAll('.pw-block').length,
+            perBlock: g.querySelectorAll('.pw-block').length
+                ? g.querySelectorAll('.pw-block')[0].querySelectorAll('.pw-tile').length : 0,
             count: list.length,
             noCover: list.filter(t => !t.querySelector('.pw-tile-cover img')).length,
             noName: list.filter(t => !t.querySelector('.pw-tile-name') || !t.querySelector('.pw-tile-name').textContent).length,
@@ -145,11 +153,20 @@ async function main() {
             // 封面是「照片+边框」的合成图，object-fit 必须是 contain：
             // 改 cover 会切掉边框和主体，用户一眼就能看出"图没显示全"
             objectFit: list.length ? getComputedStyle(list[0].querySelector('.pw-tile-cover img')).objectFit : '',
+            // 第 0 份拷贝里出现过的预设下标数：格位必须装得下全部预设，
+            // 否则最后几款会永远挤不上墙（固定 9×10 时就漏过第 91 款）。
+            uniqueIdx: new Set(list.filter(t => t.parentElement.dataset.copy === '0')
+                .map(t => t.dataset.idx)).size,
+            presets: App.presets.length,
             sub: (document.getElementById('pwSub') || {}).textContent || ''
         };
     })()`);
-    check(tiles.count === 360 && tiles.blocks === 4, '4 份拷贝 × 90 格 = 360 张卡片',
-        `blocks=${tiles.blocks} count=${tiles.count}`);
+    check(tiles.count === tiles.perBlock * 4 && tiles.blocks === 4,
+        '4 份拷贝 × 每块格数 = 全部卡片',
+        `blocks=${tiles.blocks} perBlock=${tiles.perBlock} count=${tiles.count}`);
+    check(tiles.uniqueIdx === tiles.presets,
+        '墙上能看到全部预设（格位装得下，不丢最后一款）',
+        `unique=${tiles.uniqueIdx} presets=${tiles.presets} perBlock=${tiles.perBlock}`);
     check(tiles.noCover === 0, '每张卡片都有封面图', `noCover=${tiles.noCover}`);
     check(tiles.noName === 0, '每张卡片都有名称', `noName=${tiles.noName}`);
     check(tiles.clipped === 0, '名称落在卡片可视区内（没被封面图挤出 overflow）', `clipped=${tiles.clipped}`);
@@ -238,12 +255,15 @@ async function main() {
       await new Promise((x) => setTimeout(x, 120));
       const ox2 = App._wallOffsetX;
       const spanW = App.wallWrapSpan().w;
+      const perBlock = document.querySelectorAll('.pw-block').length
+          ? document.querySelectorAll('.pw-block')[0].querySelectorAll('.pw-tile').length : 0;
       const wrapped = ox2 <= 0 && ox2 > -b.BW;
       const coveredAtWrap = coversViewport();
-      return { tileCount: tiles.length, covers, maxS, centerDist, centerFocus, ox1, oy1, wallMoved,
+      return { tileCount: tiles.length, perBlock, covers, maxS, centerDist, centerFocus, ox1, oy1, wallMoved,
                coversAfterDrag, ox2, wrapped, coveredAtWrap, spanW, bw: b.BW, bh: b.BH, vw: g.clientWidth, vh: g.clientHeight };
     })()`);
-    check(wall.tileCount === 360, '拖动后仍是 4 份 × 90 格（360 张）', `count=${wall.tileCount}`);
+    check(wall.tileCount === wall.perBlock * 4, '拖动后仍是 4 份 × 每块格数',
+        `perBlock=${wall.perBlock} count=${wall.tileCount}`);
     check(wall.covers, '周期块覆盖视口（无限墙基础）', `BW=${wall.bw} BH=${wall.bh} vw=${wall.vw} vh=${wall.vh}`);
     check(wall.centerFocus, '最中间的图片最显眼', `scale=${wall.maxS} dist=${Math.round(wall.centerDist)}`);
     check(wall.wallMoved, '按住拖动后整墙跟随鼠标平移', `pan=${Math.round(wall.ox1)},${Math.round(wall.oy1)}`);
@@ -387,12 +407,14 @@ async function main() {
             wrapped: ox <= 0 && ox > -b.BW && oy <= 0 && oy > -b.BH,
             stored: localStorage.getItem('qfs_wall_mode'),
             restored,
+            perBlock: document.querySelectorAll('.pw-block').length
+                ? document.querySelectorAll('.pw-block')[0].querySelectorAll('.pw-tile').length : 0,
             sub: document.getElementById('pwSub').textContent
         };
     })()`);
-    check(backToInfinite.tiles === 360 && backToInfinite.blocks === 4,
-        '切回无限墙：恢复 2×2 份拷贝（360 张）',
-        `tiles=${backToInfinite.tiles} blocks=${backToInfinite.blocks}`);
+    check(backToInfinite.tiles === backToInfinite.perBlock * 4 && backToInfinite.blocks === 4,
+        '切回无限墙：恢复 2×2 份拷贝',
+        `tiles=${backToInfinite.tiles} perBlock=${backToInfinite.perBlock} blocks=${backToInfinite.blocks}`);
     check(backToInfinite.wrapped && !backToInfinite.railShown,
         '切回无限墙：重新取模回绕、进度条隐藏', `wrapped=${backToInfinite.wrapped} rail=${backToInfinite.railShown}`);
     check(backToInfinite.stored === 'infinite' && backToInfinite.restored === 'infinite',

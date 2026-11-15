@@ -2884,7 +2884,7 @@ AV_OVERLAY:63,
 AV_OVERLAY_TR:64,
 AV_OVERLAY_BR:65,
 AV_OVERLAY_BC:66,
-AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:71, PHOTO_CREDIT:72, PARAM_CREDIT:73, CARD_APPLE:74, XIAOMI_LEICA:75 };
+AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:71, PHOTO_CREDIT:72, PARAM_CREDIT:73, CARD_APPLE:74, XIAOMI_LEICA:75, CAMERA_PLATE:76 };
     const MASK48 = 0xffffffffffffn, MULT = 0x5deece66dn, INC = 0xbn;
     function javaRandom(seed64) {
         let s = (BigInt(seed64) ^ MULT) & MASK48;
@@ -2974,6 +2974,8 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         else if (styleName === 'PARAM_CREDIT') { b='CANON'; m='ILCE-7CM2'; }
         else if (['CARD_SIMPLE','PARAM_TOP_LEFT','PARAM_BOTTOM_LEFT','OVERLAY_PARAM_RIGHT'].includes(styleName)) { b='CANON'; m='EOS R5'; }
         else if (styleName === 'CARD_APPLE') { b='Apple'; m='iPhone'; }
+        // 相机铭牌:无 EXIF 时也要有品牌/型号与一行参数，否则白卡顶部只剩 "CAMERA"、底部空着。
+        else if (styleName === 'CAMERA_PLATE') { b='HASSELBLAD'; m='X2D 100C'; }
         else return { brand: '', model: '', focal: '', aperture: '', iso: '', shutter: '' };
         return { brand: b, model: m, focal: f(), aperture: a(), iso: i(), shutter: s() };
     }
@@ -3694,6 +3696,74 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
             drawTextL(g, ps, w - pad - 12 - pm.w, pBaseline, 'rgb(35,35,35)', pFs, true, false, 0);
         }
     }
+    // 相机铭牌:白卡 + 顶部品牌(斜体衬线、宽字距)与型号 + 底部一行拍摄参数。
+    // 品牌、型号、参数全部跟着 EXIF 自动识别走,不写死某个厂商。
+    function styleCameraPlate(img, size, g, iw, ih, S) {
+        const side = Math.max(10, Math.round(iw * 0.026));
+        const topH = Math.max(56, Math.round(iw * 0.115));
+        const botH = Math.max(48, Math.round(iw * 0.09));
+        const w = iw + side * 2, h = ih + side * 2 + topH + botH;
+        const px = side, py = side + topH;
+        g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+        g.drawImage(img, px, py);
+
+        const cam = S.cam || {};
+        const str = (v) => (v == null ? '' : String(v).trim());
+        const brand = (prettyBrand(str(cam.brand)) || 'CAMERA').toUpperCase();
+        const model = str(cam.model).toUpperCase();
+        const fp = autoExifSize(S.paramFs, iw);
+        const fsBrand = Math.max(16, Math.round(fp * 1.32));
+        const track = Math.max(1, Math.round(fsBrand * 0.24));
+        const brandY = side + Math.round(topH * 0.60);
+
+        // 逐字符绘制拉开字距(Canvas 的 letterSpacing 在部分 Chromium 版本不可靠)
+        g.textBaseline = 'alphabetic';
+        g.textAlign = 'left';
+        // 与「参数横条」同款:等宽打字机(Courier New),品牌用 700 加粗
+        g.font = '700 ' + fsBrand + 'px "Courier New", monospace';
+        g.fillStyle = '#1b1b1b';
+        const chars = [...brand];
+        const brandW = chars.reduce((n, c) => n + g.measureText(c).width + track, 0) - track;
+        let bx = (w - brandW) / 2;
+        for (const c of chars) { g.fillText(c, bx, brandY); bx += g.measureText(c).width + track; }
+
+        // 型号:品牌下方居中的一行小字
+        if (model) {
+            const fsModel = Math.max(9, Math.round(fsBrand * 0.30));
+            g.font = '400 ' + fsModel + 'px "Courier New", monospace';
+            g.fillStyle = '#8d8d8d';
+            g.textAlign = 'center';
+            g.letterSpacing = Math.max(1, Math.round(fsModel * 0.14)) + 'px';
+            g.fillText(model, w / 2, brandY + Math.round(fsBrand * 0.68));
+            g.letterSpacing = '0px';
+        }
+
+        // 底部参数:与参考图一致的「标签 + 值」一行式,缺失的 EXIF 项自动跳过
+        const shutter = str(cam.shutter).replace(/s$/i, '');
+        const iso = str(cam.iso).replace(/^ISO\s*/i, '');
+        const parts = [];
+        if (str(cam.focal)) parts.push('FL ' + str(cam.focal));
+        if (str(cam.aperture)) parts.push('Aperture ' + str(cam.aperture));
+        if (shutter) parts.push('Shutter ' + shutter);
+        if (iso) parts.push('ISO ' + iso);
+        const line = parts.join('   ');
+        if (line) {
+            const fsParam = Math.max(8, Math.round(fsBrand * 0.26));
+            let f = fsParam;
+            g.font = '400 ' + f + 'px "Courier New", monospace';
+            const maxW = w - side * 2;
+            if (g.measureText(line).width > maxW) {
+                f = Math.max(7, Math.floor(f * maxW / g.measureText(line).width));
+                g.font = '400 ' + f + 'px "Courier New", monospace';
+            }
+            g.fillStyle = '#666666';
+            g.textAlign = 'center';
+            g.letterSpacing = Math.max(0.5, Math.round(f * 0.08)) + 'px';
+            g.fillText(line, w / 2, py + ih + Math.round(botH * 0.58));
+            g.letterSpacing = '0px';
+        }
+    }
+
     function styleImpFrosted(img, size, g, iw, ih, S) {
         // 横版:左侧文字区,右侧照片
         const gm = S.globalMargin || 1;
@@ -5781,6 +5851,13 @@ const w = natW;
                 // 旧版此处用 size*2/size,画布比内容右侧/底部各多出 size/2 透明区,补边后两边不对称
                 const hp = Math.max(14, Math.floor(size / 2));
                 return { w: iw + hp * 2, h: ih + hp + hbBar };
+            }
+            case 'CAMERA_PLATE': {
+                // 与 styleCameraPlate 同源:四边细白边 + 顶部品牌区 + 底部参数区
+                const side = Math.max(10, Math.round(iw * 0.026));
+                const topH = Math.max(56, Math.round(iw * 0.115));
+                const botH = Math.max(48, Math.round(iw * 0.09));
+                return { w: iw + side * 2, h: ih + side * 2 + topH + botH };
             }
             case 'DROP_SHADOW': {
                 const offset = Math.max(8, Math.floor(size / 2));
@@ -8547,6 +8624,9 @@ const w = natW;
             PARAM_STRIP: styleParamStrip,
             PHOTO_CREDIT: stylePhotoCredit,
             PARAM_CREDIT: styleParamCredit,
+            // 新样式一律追加在末尾:视觉基线的用例顺序跟着这张表走,插在中间会让
+            // 后面所有风格的基线整体平移,26MB 的 baseline.json 产生几十万行伪 diff。
+            CAMERA_PLATE: styleCameraPlate,
         }[styleName];
         const S = buildState(app, styleName, iw, ih, size);
 

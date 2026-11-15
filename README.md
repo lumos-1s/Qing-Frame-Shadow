@@ -9,7 +9,7 @@
 </p>
 
 <p align="center"><sub>
-  A local-first Windows desktop app — 90 presets and 95 frame styles, live colour grading,
+  A local-first Windows desktop app — 91 presets and 96 frame styles, live colour grading,
   RAW developing, watermarks and batch export. No account, no uploads.
 </sub></p>
 
@@ -62,7 +62,7 @@
 
 | | |
 |---|---|
-| **90 款内置边框 · 95 种风格** | 杂志、拍立得、邮票、撕纸、胶片、渐变卡、3D 卡、水印与头像叠加；选中即套用，鼠标悬停先预览 |
+| **91 款内置边框 · 96 种风格** | 杂志、拍立得、邮票、撕纸、胶片、渐变卡、3D 卡、水印与头像叠加；选中即套用，鼠标悬停先预览 |
 | **调色** | 按 Camera Raw 分成「亮 / 颜色 / 效果」三段：直方图、曲线、混色器、校准、蒙版、黑白、锐化；每段可单独收起与复位 |
 | **RAW 直读显影** | arw / cr2 / cr3 / nef / raf / dng 等三十余种，LibRaw 解码；先出 1600px 代理，切到照片后自动补到全尺寸，可裁切旋转 |
 | **文字 · Logo · EXIF** | 品牌 Logo 与自定义图标、相机参数自动读取、签名与头像排版；文字可拖拽定位、改字号与颜色 |
@@ -82,7 +82,7 @@
 
 <p align="center"><sub>六张预设均由引擎实际渲染 · 示例照片为项目自绘 / Six real engine renders, self-drawn sample photo</sub></p>
 
-90 款边框覆盖复古胶片、拍立得、邮票、报纸、杂志、撕纸、胶带、漫画、签名与拼图等方向，每一款都能继续改边距、圆角、纹理、光影与文字。启动时也能直接进入封面墙，用方向键、滚轮或拖动浏览，点一下就进编辑。
+91 款边框覆盖复古胶片、拍立得、邮票、报纸、杂志、撕纸、胶带、漫画、签名与拼图等方向，每一款都能继续改边距、圆角、纹理、光影与文字。启动时也能直接进入封面墙，用方向键、滚轮或拖动浏览，点一下就进编辑。
 
 <a id="whats-new"></a>
 ## 最近更新 · What's New
@@ -139,7 +139,7 @@ npm run dist           # 打包 Windows 安装版 + 便携版
 ```
 ├─ src/main/          # Electron 主进程：窗口、菜单、文件 IPC、模板读写
 ├─ src/renderer/      # 渲染进程：UI 与 Canvas 2D 渲染引擎
-├─ shared/presets/    # 90 built-in preset templates (JSON)
+├─ shared/presets/    # 91 built-in preset templates (JSON)
 ├─ shared/textures/   # 纹理素材 / texture assets (10)
 ├─ assets/readme/     # README 头图、界面截图与预设效果墙
 ├─ tools/             # 构建、校验与 Electron 测试辅助脚本

@@ -570,7 +570,10 @@ window.App = Object.assign(window.App || {}, {
         const th = Math.round(tw / 1.407) + 36;
         const data = window.PRESET_WALL;
         const n = (data && Array.isArray(data.items) && data.items.length) || 87;
-        const P = 9, Q = 10;
+        const P = 9;
+        // 行数跟着预设数量长：固定 10 行时第 91 款预设永远挤不进 9×10 的格位，
+        // 墙上就少一款（无限墙取模、有限墙直接跳过），用户以为预设没装上。
+        const Q = Math.max(1, Math.ceil(n / P));
         return {
             mode, pad, gap, tw, th, P, Q, n,
             BW: pad * 2 + P * tw + (P - 1) * gap,
