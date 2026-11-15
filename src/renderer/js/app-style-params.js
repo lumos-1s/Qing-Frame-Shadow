@@ -111,8 +111,12 @@
         if (grp) grp.style.display = api.styleParams(style).length ? '' : 'none';
         const title = $('styleParamsTitle');
         if (title) {
-            const name = (app.template && app.template.templateName) || style;
-            title.textContent = `${name} · 样式参数`;
+            // 只改 photoFrameStyle 时 templateName 可能还是上一款预设的名字,
+            // 所以先按当前样式找回预设名,别让组标题张冠李戴。
+            const hit = ((app.presets || []).find((p) =>
+                String(p.photoFrameStyle || '').toUpperCase() === style));
+            const own = String((app.template && app.template.templateName) || '').trim();
+            title.textContent = `${(hit && hit.templateName) || own || style} · 样式参数`;
         }
     }
 

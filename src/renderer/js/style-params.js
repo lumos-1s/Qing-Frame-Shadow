@@ -70,7 +70,26 @@
           hint: '三层递进投影的位移与模糊倍率，默认 100% = 预设原样' }
     ];
 
-    const TABLE = { BLUR_CLASSIC: BLUR, BLUR_DATE: BLUR, CARD_3D: CARD_3D };
+    // ── 第二批:齿孔家族。两个样式各开放「大小 / 间距」,倍率缺省都是 1 ──
+    const STAMP_POSTAGE = [
+        { key: 'stampHoleSize', label: '齿孔大小', min: 50, max: 200, step: 10, def: 100, unit: '%',
+          path: 'style', legacy: 1, apply: pct, group: '齿孔',
+          hint: '邮票四周半圆齿孔的直径；默认 100% = 预设原样' },
+        { key: 'stampHolePitch', label: '齿孔间距', min: 60, max: 220, step: 10, def: 100, unit: '%',
+          path: 'style', legacy: 1, apply: pct, group: '齿孔',
+          hint: '齿孔沿四边排布的节距；越小越密，默认 100%' }
+    ];
+    const FILM_TEAR = [
+        { key: 'filmHoleSize', label: '齿孔大小', min: 50, max: 200, step: 10, def: 100, unit: '%',
+          path: 'style', legacy: 1, apply: pct, group: '齿孔',
+          hint: '胶片轨上方孔的尺寸；默认 100% = 预设原样' },
+        { key: 'filmHoleGap', label: '齿孔间距', min: 60, max: 220, step: 10, def: 100, unit: '%',
+          path: 'style', legacy: 1, apply: pct, group: '齿孔',
+          hint: '相邻齿孔的中心距；越小越密，默认 100%' }
+    ];
+
+    const TABLE = { BLUR_CLASSIC: BLUR, BLUR_DATE: BLUR, CARD_3D: CARD_3D,
+        STAMP_POSTAGE: STAMP_POSTAGE, FILM_TEAR: FILM_TEAR };
 
     function styleOf(t) { return String((t && t.photoFrameStyle) || '').toUpperCase(); }
     function forStyle(style) { return TABLE[String(style || '').toUpperCase()] || []; }

@@ -1,11 +1,13 @@
 // 样式私有参数骨架 · 真实渲染回归
 //   node tools/run-electron.js tools/test-style-params-render.js
+//   QF_SP_SHOT=<path> 时额外拍一张面板图（仅供人工验收，不参与断言）
 //
-// 纯 node 的 test-style-params.js 管声明与接线,这里管「真的画出来了」:
-//  ① 声明表生成 4 行控件、组按样式显隐
+// 纯 node 的 test-style-params.js 管声明与接线,这里管「真的画出来了」。
+// 对每个已声明 path:'style' 的样式逐一验证:
+//  ① 声明表生成控件、组按样式显隐
 //  ② 把默认值写进模板 与「完全不写字段」逐像素一致（零回归的硬证据）
 //  ③ 每个参数推到极值都真的改变画面（不出现拖了没反应的假控件）
-//  ④ 滑块输入 → 写进 t.styleParams[STYLE];复位按钮 → delete 干净
+//  ④ 复位回基线、字段 delete 干净;滑块输入/序列化/撤销栈走通
 'use strict';
 
 const fs = require('fs');
@@ -18,6 +20,7 @@ process.stderr.on('error', () => {});
 const ROOT = path.join(__dirname, '..');
 const PRESET_DIR = path.join(ROOT, 'shared', 'presets');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const STYLES = ['CARD_3D', 'STAMP_POSTAGE', 'FILM_TEAR'];
 
 const failures = [];
 const check = (ok, label, extra) => {
@@ -49,7 +52,8 @@ ipcMain.handle('get-app-info', () => ({
 const PROBE = `(async () => {
     const A = window.App, SP = window.StyleParams;
     const nap = (ms) => new Promise(r => setTimeout(r, ms));
-    const out = { errs: [] };
+    const STYLES = ${JSON.stringify(STYLES)};
+    const out = { styles: {}, ui: {}, errs: [] };
     if (!SP || !window.QfsStyleParamsUI) return { errs: ['声明表或 UI 模块未加载'] };
 
     const c0 = document.createElement('canvas'); c0.width = 800; c0.height = 600;
@@ -63,16 +67,6 @@ const PROBE = `(async () => {
         exif: { make: 'SONY', model: 'A7 IV', fNumber: 2.8, focalLength: 50, iso: 100, exposureTime: 0.008 },
         customSettings: null, grade: null };
     for (let i = 0; i < 80 && (!A.presets || !A.presets.length); i++) await nap(100);
-    const preset = (A.presets || []).find(p => String(p.photoFrameStyle || '').toUpperCase() === 'CARD_3D');
-    A.images = [im]; A.image = im; A.currentIdx = 0; A.selectedIdx = [0];
-    A.template = JSON.parse(JSON.stringify(preset || A.defaultTemplate()));
-    A.template.photoFrameStyle = 'CARD_3D';
-    if (A.setTpl) A.setTpl(im, A.template);
-    if (A.updateEmptyState) A.updateEmptyState();
-    if (A.switchTab) A.switchTab('canvas');
-    if (A.refreshUI) A.refreshUI();
-    if (A.updatePersonalVisibility) A.updatePersonalVisibility();
-    await nap(200);
 
     const cv = document.getElementById('previewCanvas');
     const fp = () => {
@@ -84,71 +78,82 @@ const PROBE = `(async () => {
     };
     const same = (a, b) => a.w === b.w && a.h === b.h && a.hash === b.hash;
     const render = async () => { A.renderPreview(); await nap(90); };
-    const specs = SP.forStyle('CARD_3D');
-    const clear = () => { delete A.template.styleParams; };
 
-    // ① UI 生成与显隐
-    const grp = document.getElementById('grpStyleParams');
-    out.group = { exists: !!grp, shown: !!grp && getComputedStyle(grp).display !== 'none',
-        inCanvas: !!(grp && grp.closest('#panel-canvas')) };
-    out.rows = specs.map(p => {
-        const row = document.getElementById('row_sp_CARD_3D_' + p.key);
-        const sl = document.getElementById('sl_sp_CARD_3D_' + p.key);
-        return { key: p.key, row: !!row, slider: !!sl,
-            label: row ? (row.querySelector('label') || {}).textContent : null,
-            min: sl ? Number(sl.min) : null, max: sl ? Number(sl.max) : null };
-    });
+    for (const style of STYLES) {
+        const preset = (A.presets || []).find(p => String(p.photoFrameStyle || '').toUpperCase() === style);
+        A.images = [im]; A.image = im; A.currentIdx = 0; A.selectedIdx = [0];
+        A.template = JSON.parse(JSON.stringify(preset || A.defaultTemplate()));
+        A.template.photoFrameStyle = style;
+        if (A.setTpl) A.setTpl(im, A.template);
+        if (A.updateEmptyState) A.updateEmptyState();
+        if (A.switchTab) A.switchTab('canvas');
+        if (A.refreshUI) A.refreshUI();
+        if (A.updatePersonalVisibility) A.updatePersonalVisibility();
+        await nap(180);
 
-    // ② 缺省态 = 写满默认值
-    clear(); await render();
-    const base = fp();
-    out.base = base;
-    for (const p of specs) SP.set(A.template, 'CARD_3D', p, p.def);
-    await render();
-    out.defSame = same(base, fp());
+        const specs = SP.styleParams(style);
+        const clear = () => { delete A.template.styleParams; };
+        const grp = document.getElementById('grpStyleParams');
+        const rows = specs.map(p => {
+            const row = document.getElementById('row_sp_' + style + '_' + p.key);
+            const sl = document.getElementById('sl_sp_' + style + '_' + p.key);
+            return { key: p.key, row: !!row, slider: !!sl,
+                label: row ? (row.querySelector('label') || {}).textContent : null,
+                min: sl ? Number(sl.min) : null, max: sl ? Number(sl.max) : null };
+        });
 
-    // ③ 每个参数推到极值都要真的改变画面
-    out.changed = {};
-    for (const p of specs) {
-        clear();
-        SP.set(A.template, 'CARD_3D', p, p.max);
+        clear(); await render();
+        const base = fp();
+        for (const p of specs) SP.set(A.template, style, p, p.def);
         await render();
-        const now = fp();
-        out.changed[p.key] = { diff: !same(base, now), w: now.w, h: now.h };
+        const defSame = same(base, fp());
+
+        const changed = {};
+        for (const p of specs) {
+            clear();
+            SP.set(A.template, style, p, p.max);
+            await render();
+            const now = fp();
+            changed[p.key] = { diff: !same(base, now), w: now.w, h: now.h };
+        }
+
+        SP.reset(A.template, style);
+        await render();
+        const resetSame = same(base, fp());
+        out.styles[style] = {
+            presetFound: !!preset, specCount: specs.length, base, defSame, changed,
+            resetSame, resetClean: A.template.styleParams === undefined,
+            groupShown: !!grp && getComputedStyle(grp).display !== 'none', rows
+        };
     }
 
-    // ④ 复位回基线 + 字段清理
-    SP.reset(A.template, 'CARD_3D');
-    await render();
-    out.resetSame = same(base, fp());
-    out.resetClean = A.template.styleParams === undefined;
-
-    // ④ 真实滑块输入 → 写字段;复位按钮 → delete
-    clear();
-    if (A.refreshUI) A.refreshUI();
-    if (A.updatePersonalVisibility) A.updatePersonalVisibility();
-    await nap(80);
+    // UI 交互细节只在 CARD_3D 上验一遍（三个样式共用同一套绑定器）
+    const A3 = A, style3 = 'CARD_3D';
+    const preset3 = (A3.presets || []).find(p => String(p.photoFrameStyle || '').toUpperCase() === style3);
+    A3.template = JSON.parse(JSON.stringify(preset3 || A3.defaultTemplate()));
+    A3.template.photoFrameStyle = style3;
+    if (A3.setTpl) A3.setTpl(im, A3.template);
+    if (A3.refreshUI) A3.refreshUI();
+    if (A3.updatePersonalVisibility) A3.updatePersonalVisibility();
+    await nap(120);
+    delete A3.template.styleParams;
     const slPad = document.getElementById('sl_sp_CARD_3D_padX');
-    if (slPad) {
-        slPad.value = '32';
-        slPad.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    out.inputWrite = !!(A.template.styleParams && A.template.styleParams.CARD_3D
-        && A.template.styleParams.CARD_3D.padX === 32);
-    out.serialized = JSON.stringify(A.template).indexOf('styleParams') >= 0;
-    if (A.cloneTemplate) {
-        const snap = A.cloneTemplate();
-        out.undoCarries = !!(snap.styleParams && snap.styleParams.CARD_3D
+    if (slPad) { slPad.value = '32'; slPad.dispatchEvent(new Event('input', { bubbles: true })); }
+    out.ui.inputWrite = !!(A3.template.styleParams && A3.template.styleParams.CARD_3D
+        && A3.template.styleParams.CARD_3D.padX === 32);
+    out.ui.serialized = JSON.stringify(A3.template).indexOf('styleParams') >= 0;
+    if (A3.cloneTemplate) {
+        const snap = A3.cloneTemplate();
+        out.ui.undoCarries = !!(snap.styleParams && snap.styleParams.CARD_3D
             && snap.styleParams.CARD_3D.padX === 32);
     }
     const btn = document.getElementById('btnStyleParamsReset');
     if (btn) btn.click();
-    out.btnReset = A.template.styleParams === undefined;
-
-    // 切到未声明的样式:整组收起,不留假滑块
-    A.template.photoFrameStyle = 'CARD_SIMPLE';
-    if (A.updatePersonalVisibility) A.updatePersonalVisibility();
-    out.hiddenOther = !!grp && getComputedStyle(grp).display === 'none';
+    out.ui.btnReset = A3.template.styleParams === undefined;
+    A3.template.photoFrameStyle = 'CARD_SIMPLE';
+    if (A3.updatePersonalVisibility) A3.updatePersonalVisibility();
+    out.ui.hiddenOther = !!document.getElementById('grpStyleParams')
+        && getComputedStyle(document.getElementById('grpStyleParams')).display === 'none';
     return out;
 })()`;
 
@@ -173,30 +178,32 @@ async function main() {
         app.exit(1);
         return;
     }
-    check(!!o.base && o.base.w > 100 && o.base.h > 100, '⓪ CARD_3D 真实渲染有画面',
-        JSON.stringify(o.base));
-    check(o.group.exists && o.group.shown && o.group.inCanvas,
-        '① 样式参数组出现在画布栏且可见', JSON.stringify(o.group));
-    check(o.rows.length === 4 && o.rows.every(r => r.row && r.slider && r.label && r.max > r.min),
-        '① 声明表生成 4 行控件（标签 + 滑块 + 范围）', JSON.stringify(o.rows));
-    check(o.defSame === true, '② 写满默认值与完全不写字段逐像素一致', JSON.stringify(o.base));
-    for (const p of ['padX', 'padBottom', 'thick', 'shadow']) {
-        check(o.changed[p] && o.changed[p].diff, `③ ${p} 推到极值真的改变画面`,
-            JSON.stringify(o.changed[p]));
+    for (const style of STYLES) {
+        const s = o.styles[style] || {};
+        check(s.presetFound === true, `⓪ ${style} 找到内置预设`);
+        check(!!s.base && s.base.w > 100 && s.base.h > 100, `⓪ ${style} 真实渲染有画面`, JSON.stringify(s.base));
+        check(s.groupShown === true, `① ${style} 样式参数组可见`);
+        check(s.specCount > 0 && s.rows.length === s.specCount
+            && s.rows.every(r => r.row && r.slider && r.label && r.max > r.min),
+            `① ${style} 按声明生成 ${s.specCount} 行控件`, JSON.stringify(s.rows));
+        check(s.defSame === true, `② ${style} 写满默认值 ≡ 完全不写字段`, JSON.stringify(s.base));
+        for (const [key, r] of Object.entries(s.changed || {})) {
+            check(r.diff === true, `③ ${style}.${key} 极值真的改变画面`, JSON.stringify(r));
+        }
+        check(s.resetSame === true && s.resetClean === true,
+            `④ ${style} 复位回基线且字段删干净`, `same=${s.resetSame} clean=${s.resetClean}`);
     }
-    check(o.resetSame === true && o.resetClean === true,
-        '④ 复位后画面回基线、字段删干净', `same=${o.resetSame} clean=${o.resetClean}`);
-    check(o.inputWrite === true, '④ 真实滑块输入写进 t.styleParams.CARD_3D');
-    check(o.serialized === true, '④ 新字段随模板序列化（工程/分享码自动带上）');
-    check(o.undoCarries === true, '④ 撤销栈快照全量带上新字段');
-    check(o.btnReset === true, '④ 复位按钮走 delete 而不是写默认数字');
-    check(o.hiddenOther === true, '① 未声明的样式整组收起');
+    check(o.ui.inputWrite === true, '④ 真实滑块输入写进 t.styleParams.CARD_3D');
+    check(o.ui.serialized === true, '④ 新字段随模板序列化（工程/分享码自动带上）');
+    check(o.ui.undoCarries === true, '④ 撤销栈快照全量带上新字段');
+    check(o.ui.btnReset === true, '④ 复位按钮走 delete 而不是写默认数字');
+    check(o.ui.hiddenOther === true, '① 未声明的样式整组收起');
 
-    // QF_SP_SHOT=<path> 时顺手拍一张面板图(仅供人工验收,不参与断言)
     if (process.env.QF_SP_SHOT) {
         await exec(`(() => {
             const A = window.App;
-            A.template.photoFrameStyle = 'CARD_3D';
+            A.template.photoFrameStyle = ${JSON.stringify(process.env.QF_SP_SHOT_STYLE || 'CARD_3D')};
+            if (A.refreshUI) A.refreshUI();
             if (A.updatePersonalVisibility) A.updatePersonalVisibility();
             const grp = document.getElementById('grpStyleParams');
             const b = document.querySelector('.insp-body');

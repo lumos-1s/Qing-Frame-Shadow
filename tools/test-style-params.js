@@ -29,12 +29,15 @@ check(badDefaults.length === 0, '① 每个参数的 apply(def) 严格等于引�
 /* ② 声明表 ↔ 引擎字面量（静态提取 spNum('key', legacy)） */
 const legacyMap = {};
 for (const m of engineSrc.matchAll(/spNum\('([A-Za-z]\w*)',\s*([\d.]+)\)/g)) legacyMap[m[1]] = Number(m[2]);
-const card = SP.forStyle('CARD_3D');
-check(card.length > 0 && Object.keys(legacyMap).length === card.length,
-    '② 引擎 spNum 缺省项数量与声明表一致', `表 ${card.length} / 引擎 ${Object.keys(legacyMap).length}`);
-for (const p of card) {
+const declared = [];
+for (const style of Object.keys(SP.TABLE)) {
+    for (const p of SP.styleParams(style)) declared.push([style, p]);
+}
+check(declared.length > 0 && Object.keys(legacyMap).length === declared.length,
+    '② 引擎 spNum 缺省项数量与声明表一致', `表 ${declared.length} / 引擎 ${Object.keys(legacyMap).length}`);
+for (const [style, p] of declared) {
     check(legacyMap[p.key] === p.legacy,
-        `② CARD_3D.${p.key} 引擎字面量未漂移`, `legacy=${p.legacy} engine=${legacyMap[p.key]}`);
+        `② ${style}.${p.key} 引擎字面量未漂移`, `legacy=${p.legacy} engine=${legacyMap[p.key]}`);
 }
 
 /* ③ 表结构 */
@@ -52,7 +55,7 @@ check(!SP.has('NONE') && !SP.has('POLAROID'), '③ 未声明的样式返回空�
 
 /* ④ 读写与零回归 */
 const t = { photoFrameStyle: 'CARD_3D' };
-const pPad = card.find((p) => p.key === 'padX');
+const pPad = SP.forStyle('CARD_3D').find((p) => p.key === 'padX');
 check(SP.get(t, 'CARD_3D', pPad) === 18 && t.styleParams === undefined,
     '④ 缺省读 def,且绝不往模板里写字段');
 SP.set(t, 'CARD_3D', pPad, 30);
@@ -86,6 +89,10 @@ check(appSrc.includes('QfsStyleParamsUI.bind') && appSrc.includes('QfsStyleParam
     '⑤ app.js 四处散抄已改为调用统一绑定器');
 check(engineSrc.includes('styleParams: (t.styleParams'),
     '⑤ buildState 把命名空间挂进渲染状态 S');
+check(engineSrc.includes('function styleParamNum('),
+    '⑤ 引擎用统一的 styleParamNum 读取器（三个样式共用）');
+check(declared.length === 8,
+    '② 三样式共 8 个私有参数（CARD_3D 4 + 邮票 2 + 胶片 2）', `实际 ${declared.length}`);
 
 console.log('─'.repeat(72));
 if (failures.length) {

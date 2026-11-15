@@ -450,6 +450,18 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
     // 确定性噪声:同照片同风格下渲染结果稳定(基于照片尺寸+盐的 Java LCG)
     function styleNoise(iw, ih, salt) { return javaRandom(iw * 7919 + ih * 104729 + salt); }
 
+    // 样式私有参数读取(style-params.js 的 path:'style')。字段缺省时返回 legacy,
+    // 也就是样式函数里原来的字面量 —— 旧预设与视觉基线逐像素不变。
+    // 刻意不依赖声明表本身:design/regress.html 只加载引擎、不加载那张表。
+    // UI 值统一是百分数,引擎量 = UI 值 / 100(与声明表的 apply 同构)。
+    function styleParamNum(S, k, legacy) {
+        const SP = (S && S.styleParams) || {};
+        const v = SP[k];
+        if (v == null) return legacy;
+        const n = Number(v);
+        return (isFinite(n) ? Math.max(-1000, Math.min(1000, n)) : legacy * 100) / 100;
+    }
+
     // 仿古邮票:一枚贴在大版张上的纪念邮票。几何同时供 styleDims 使用,
     // 保证登记画布、邮票齿孔和照片位置永远一致。
     function stampPostageGeom(iw, ih, size) {
@@ -471,8 +483,8 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         };
     }
     // 邮票齿孔:沿四周外缘打半圆孔(destination-out,露出透明底)
-    function stampPerforate(g, w, h, d) {
-        const r = d / 2, pitch = Math.max(Math.ceil(d * 1.6), d + 2);
+    function stampPerforate(g, w, h, d, pitchK) {
+        const r = d / 2, pitch = Math.max(Math.ceil(d * 1.6), d + 2) * (pitchK == null ? 1 : pitchK);
         g.save();
         g.globalCompositeOperation = 'destination-out';
         for (let x = r; x < w; x += pitch) {
@@ -533,6 +545,7 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         };
     }
     function styleStampPostage(img, size, g, iw, ih, S) {
+        const spNum = (k, legacy) => styleParamNum(S, k, legacy);
         const G = stampPostageGeom(iw, ih, size);
         const { padX, padTop, padBottom, d, stampW, stampH, stampX, stampY,
             sheetX, sheetY, sheetW, sheetH, sheetBottom, w, h } = G;
@@ -591,7 +604,9 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         sg.fillStyle = 'rgba(96,79,54,0.58)';
         sg.fillText('POSTAGE & REVENUE', stampW / 2, stampH - Math.round(padBottom * 0.22));
         sg.restore();
-        stampPerforate(sg, stampW, stampH, d);
+        // 齿孔大小 / 间距:缺省都是 100%(倍率 1),回退到原 d 与原 pitch。
+        const perfD = Math.max(9, Math.round(d * spNum('stampHoleSize', 1)));
+        stampPerforate(sg, stampW, stampH, perfD, spNum('stampHolePitch', 1));
 
         // 邮票投影 + 贴到版张上。
         g.save();
@@ -6671,15 +6686,8 @@ const w = natW;
     // ══ 3D卡片翻转 ══
     function styleCard3D(img, size, g, iw, ih, S) {
         // 私有参数:字段缺省时 spNum 返回 legacy(原来的字面量),换算与 style-params.js
-        // 的 apply 同构(UI 百分数 / 100)。声明表本身不参与渲染,所以 design/regress.html
-        // 只加载引擎时也能照常出图。
-        const SP = (S && S.styleParams) || {};
-        const spNum = (k, legacy) => {
-            const v = SP[k];
-            if (v == null) return legacy;
-            const n = Number(v);
-            return (isFinite(n) ? Math.max(-1000, Math.min(1000, n)) : legacy * 100) / 100;
-        };
+        // 的 apply 同构(UI 百分数 / 100)。统一走模块级 styleParamNum。
+        const spNum = (k, legacy) => styleParamNum(S, k, legacy);
         const padX = Math.round(iw * spNum('padX', 0.18));
         const padTop = Math.round(iw * 0.1);
         const padBottom = Math.round(iw * spNum('padBottom', 0.2));
@@ -7086,6 +7094,7 @@ const w = natW;
     // ══ 复古胶片撕裂 ══
     // 暗房桌面 + 一条撕断的 35mm 负片:齿孔、片边码、划痕、日期戳都在底片上。
     function styleFilmTear(img, size, g, iw, ih, S) {
+        const spNum = (k, legacy) => styleParamNum(S, k, legacy);
         const G = filmTearGeom(iw, ih, size);
         const { vertical, framePad, rail, endPad, tornPad, deskPad,
             filmW, filmH, photoX, photoY, tearY, tearX, w, h } = G;
@@ -7134,19 +7143,21 @@ const w = natW;
         fg.strokeStyle = 'rgba(0,0,0,0.40)'; fg.lineWidth = 1;
         fg.strokeRect(photoX - 3.5, photoY - 3.5, iw + 7, ih + 7);
 
-        // 齿孔:竖条在左右轨,横条在上下轨。
+        // 齿孔:竖条在左右轨,横条在上下轨。大小/间距缺省都是 100% → 原字面量。
+        const holeK = spNum('filmHoleSize', 1);
+        const gapK = spNum('filmHoleGap', 1);
         fg.fillStyle = 'rgba(232,220,196,0.92)';
         if (vertical) {
-            const hw = Math.max(8, Math.round(rail * 0.36)), hh = Math.max(12, Math.round(rail * 0.55));
-            const step = Math.max(hw + 4, Math.round(rail * 0.92));
+            const hw = Math.max(8, Math.round(rail * 0.36 * holeK)), hh = Math.max(12, Math.round(rail * 0.55 * holeK));
+            const step = Math.max(hw + 4, Math.round(rail * 0.92 * gapK));
             for (let y = Math.round(endPad * 0.45); y < filmH - Math.round(tornPad * 0.45); y += step) {
                 for (const cx of [rail / 2, filmW - rail / 2]) {
                     fillRoundRectCtx(fg, Math.round(cx - hw / 2), y, hw, hh, Math.min(hw, hh) * 0.28);
                 }
             }
         } else {
-            const hw = Math.max(12, Math.round(rail * 0.55)), hh = Math.max(8, Math.round(rail * 0.36));
-            const step = Math.max(hw + 4, Math.round(rail * 0.92));
+            const hw = Math.max(12, Math.round(rail * 0.55 * holeK)), hh = Math.max(8, Math.round(rail * 0.36 * holeK));
+            const step = Math.max(hw + 4, Math.round(rail * 0.92 * gapK));
             for (let x = Math.round(endPad * 0.45); x < filmW - Math.round(tornPad * 0.45); x += step) {
                 for (const cy of [rail / 2, filmH - rail / 2]) {
                     fillRoundRectCtx(fg, x, Math.round(cy - hh / 2), hw, hh, Math.min(hw, hh) * 0.28);
