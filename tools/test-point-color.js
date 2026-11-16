@@ -610,6 +610,42 @@ async function main() {
             e2e.ok ? `hue=${e2e.hue} ${e2e.before} -> ${e2e.after} @${e2e.at}` : `why=${e2e.why}`);
     }
 
+    /* ⑭ 删除当前选中项之前的样本：选中的颜色不能被后一个颜色顶掉。
+       复现：A/B/C 选中 B，删 A 后列表变 B/C，idx 若只夹上界会停在 1 → 滑块改到 C。 */
+    const idxFix = await exec(`(async () => {
+        const A = window.App;
+        A.setGrade({ samples: [
+            { hue: 0, sat: 0.9, light: 0.5, range: 30, dh: 10, ds: 0, dl: 0, dv: 0 },
+            { hue: 120, sat: 0.9, light: 0.5, range: 30, dh: 20, ds: 0, dl: 0, dv: 0 },
+            { hue: 240, sat: 0.9, light: 0.5, range: 30, dh: 30, ds: 0, dl: 0, dv: 0 }
+        ] });
+        A._pc.idx = 1;
+        A._pcRefresh();
+        const before = {
+            n: A._pcSamples().length,
+            idx: A._pc.idx,
+            active: Number(document.querySelector('#pcStrip .pc-chip.active').dataset.i),
+            slider: document.getElementById('slPcH').value
+        };
+        document.querySelector('#pcStrip [data-del="0"]').click();
+        await new Promise((r) => setTimeout(r, 60));
+        const list = A._pcSamples();
+        return {
+            before,
+            after: {
+                n: list.length,
+                idx: A._pc.idx,
+                hue: list[A._pc.idx] ? list[A._pc.idx].hue : null,
+                active: Number(document.querySelector('#pcStrip .pc-chip.active').dataset.i),
+                slider: document.getElementById('slPcH').value
+            }
+        };
+    })()`);
+    check(idxFix.after.n === 2 && idxFix.after.idx === 0 && idxFix.after.hue === 120
+          && idxFix.after.active === 0 && idxFix.after.slider === '20',
+        '⑭ 删除前面的样本后，仍选中原来的颜色（滑块不串到下一个样本）',
+        JSON.stringify(idxFix));
+
     console.log('────────────────────────────────────────────────────────────');
     if (skips.length) console.log(`SKIP ${skips.length} 项（环境不支持，见上）`);
     console.log(failures.length ? `FAILED: ${failures.length}` : 'ALL PASS');

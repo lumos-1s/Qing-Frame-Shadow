@@ -59,6 +59,10 @@ contextBridge.exposeInMainWorld('qingframe', {
 // 测试标记：page 主世界可读。app.js 据此跳过「启动即开预设墙」——
 // 老用例是在墙出现之前写的，墙的 fixed 覆盖层会把真实鼠标事件全挡在画布外。
 contextBridge.exposeInMainWorld('__qfTest', true);
+// 默认测试不恢复开发机上残留的 qfs_last_state（否则上一次手工选过的预设
+// 会悄悄改掉每个用例的初始外观）。启动恢复用例用 additionalArguments 打开。
+contextBridge.exposeInMainWorld('__qfAllowLastState',
+    Array.isArray(process.argv) && process.argv.indexOf('--qf-allow-last-state') !== -1);
 
 contextBridge.exposeInMainWorld('__measure', {
     testImage: () => ipcRenderer.invoke('measure:test-image')

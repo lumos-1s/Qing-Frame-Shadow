@@ -35,7 +35,8 @@ ipcMain.handle('write-export-files', (_e, payload) => {
     return exportResult;
 });
 ipcMain.handle('show-item-in-folder', (_e, p) => { openedPath = p; return { ok: true, opened: 'dir' }; });
-ipcMain.handle('pick-export-location', () => ({ mode: 'dir', dir: 'C:\\out', token: 'tok' }));
+let exportLoc = { mode: 'dir', dir: 'C:\\out', token: 'tok' };
+ipcMain.handle('pick-export-location', () => exportLoc);
 ipcMain.handle('list-presets', () => fs.readdirSync(PRESET_DIR).filter((n) => n.endsWith('.json')).map((n) => n.replace(/\.json$/, '')));
 ipcMain.handle('load-preset', (_e, n) => {
     try { return JSON.parse(fs.readFileSync(path.join(PRESET_DIR, n + '.json'), 'utf8')); } catch (_) { return null; }
@@ -234,6 +235,64 @@ ipcMain.handle('get-app-info', () => ({ version: '0.1.26', electron: '45', chrom
           && Array.isArray(full.retryNames) && full.retryNames.length === 1,
         '完整导出：只留失败那 1 张可重试，成功产物可一键定位', JSON.stringify(full));
     check(writeCalls.length >= 2, '完整导出确实逐张调用了写盘桩', String(writeCalls.length));
+
+    // ── ⑨ 单张 / 文件模式写盘失败：必须有重试入口，且不能谎报「已存到」 ──
+    // pending 分支和目录多张分支是两条路：单张走 pending，最容易漏掉重试收集。
+    callSeq = 0;
+    writeCalls.length = 0;
+    exportResult = { ok: 0, fail: 1, failures: [{ name: 'single.jpg', reason: '磁盘已满' }] };
+    exportLoc = { mode: 'file', filePath: 'C:\\out\\single.jpg', token: 'tok' };
+    const single = await exec(`(async () => {
+        const A = window.App;
+        try {
+            const c = document.createElement('canvas'); c.width = 240; c.height = 180;
+            const g = c.getContext('2d'); g.fillStyle = '#567'; g.fillRect(0, 0, 240, 180);
+            const el = new Image();
+            await new Promise(r => { el.onload = r; el.onerror = r; el.src = c.toDataURL('image/png'); });
+            const im = { el, name: 'single.png', path: null, w: 240, h: 180, exif: {}, customSettings: null, grade: null };
+            A.images = [im]; A.image = im; A.currentIdx = 0;
+            A.selectedIdx = [0]; A.batchSel = [0];
+            A.template = A.defaultTemplate(); A.setTpl(im, A.template);
+            A.updateEmptyState(); A.scheduleRender(true);
+            await new Promise(r => setTimeout(r, 350));
+            await A.exportImage();
+            await new Promise(r => setTimeout(r, 250));
+            return {
+                status: A.statusMsg,
+                retry: !!(A._exportRetry && A._exportRetry.files.length === 1),
+                retryShown: document.getElementById('btnExportRetry').style.display !== 'none',
+                openShown: document.getElementById('btnExportOpen').style.display !== 'none',
+                lastDest: A._lastExportDest
+            };
+        } catch (e) { return { error: String((e && e.stack) || e).slice(0, 500) }; }
+    })()`);
+    check(!single.error && /成功 0/.test(single.status || '') && /失败 1/.test(single.status || '')
+          && /single\.jpg/.test(single.status || '') && /磁盘已满/.test(single.status || '')
+          && !/已存到/.test(single.status || ''),
+        '单张导出失败：状态栏不谎报已存到，并给出失败文件与原因', JSON.stringify(single));
+    check(!single.error && single.retry && single.retryShown && !single.openShown && single.lastDest === null,
+        '单张导出失败：出现「重试失败 1 张」，打开位置保持隐藏', JSON.stringify(single));
+
+    // 重试成功后补回「打开导出位置」：首轮全失败时 _lastExportDest 原本是 null。
+    exportResult = { ok: 1, fail: 0 };
+    const singleRetry = await exec(`(async () => {
+        const A = window.App;
+        await A._retryFailedExport();
+        await new Promise(r => setTimeout(r, 100));
+        return {
+            status: A.statusMsg,
+            lastDest: A._lastExportDest,
+            retryShown: document.getElementById('btnExportRetry').style.display !== 'none',
+            openShown: document.getElementById('btnExportOpen').style.display !== 'none'
+        };
+    })()`);
+    check(!singleRetry.error && /重试完成：1 张已写入/.test(singleRetry.status || '')
+          && String(singleRetry.lastDest || '').replace(/\//g, '\\') === 'C:\\out'
+          && singleRetry.openShown && !singleRetry.retryShown,
+        '单张重试成功：补回打开导出位置并收起重试按钮', JSON.stringify(singleRetry));
+    check(writeCalls.length >= 2 && writeCalls[writeCalls.length - 1].location.mode === 'file'
+          && writeCalls[writeCalls.length - 1].files.length === 1,
+        '单张重试只重发失败的那 1 张', String(writeCalls.length));
 
     console.log(failures.length ? `\n${failures.length} FAILURE(S)` : '\nALL PASS');
     win.destroy();

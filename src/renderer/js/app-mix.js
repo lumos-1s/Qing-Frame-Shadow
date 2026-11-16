@@ -752,7 +752,10 @@
                         const list = this._pcSamples().slice();
                         list.splice(i, 1);
                         this.setGrade({ samples: list.length ? list : null });
-                        if (st.idx >= list.length) st.idx = Math.max(0, list.length - 1);
+                        // 删除当前选中项之前的样本时，后面的样本整体前移一格。
+                        // 只夹上界会让 idx 原地指向"下一个颜色"，滑块静默改错样本。
+                        if (i < st.idx) st.idx--;
+                        else if (st.idx >= list.length) st.idx = Math.max(0, list.length - 1);
                         this._pcRefresh();
                         this.setStatus(list.length ? '已删除这个样本' : '样本已清空');
                         return;

@@ -295,7 +295,12 @@ window.App = Object.assign(window.App || {}, {
                 if (r.error && !(r.failures && r.failures.length)) {
                     failures.push({ name: (files[0] && files[0].filename) || '照片', reason: r.error });
                 }
-                pending.forEach(f => { f.data = null; f.bytes = null; });
+                // 单张 / 文件模式也走这里。写盘失败时保留编码结果，纳入「只重试失败项」；
+                // 直接清掉会让最常见的单张导出在磁盘满、文件被占用时彻底没有补救入口。
+                // pending 在实际流程里最多 1 张（多张目录模式已在上面逐张写盘），
+                // 因此失败时整批保留、成功时整批释放即可。
+                if (r.ok) pending.forEach(f => { f.data = null; f.bytes = null; });
+                else retryFiles.push(...pending);
             }
             const failN = failures.length;
             const failNote = failN
@@ -311,7 +316,10 @@ window.App = Object.assign(window.App || {}, {
             const destDir = loc && (loc.mode === 'dir' ? loc.dir
                 : (loc.filePath ? String(loc.filePath).replace(/[\\/][^\\/]+$/, '') : ''));
             const destName = destDir ? String(destDir).split(/[\\/]/).filter(Boolean).pop() : '';
-            this.setStatus((!aborted && destName ? `${m} · 已存到 ${destName}` : m) + rawNote);
+            // 一张都没写成功时不能说「已存到」：失败清单后面跟一句"已存到 out"，
+            // 会让用户以为文件其实落盘了，转头去文件夹里找。
+            const savedNote = (!aborted && destName && okCount > 0) ? ` · 已存到 ${destName}` : '';
+            this.setStatus(m + savedNote + rawNote);
             // 成功产物可一键定位；失败项留着编码结果供「只重试失败项」。
             // 失败太多就不缓存位图了(几十张 4K 成品常驻会吃掉几百 MB),只留清单。
             this._lastExportDest = (!aborted && okCount > 0) ? destDir : null;
@@ -1302,6 +1310,15 @@ window.App = Object.assign(window.App || {}, {
         const ok = res.ok || 0, fail = res.fail || 0;
         // 写完就释放位图：重试是补救动作，不无限留着，也避免反复重试写出 _1 副本
         r.files.forEach(f => { f.data = null; f.bytes = null; });
+        // 首轮全部失败时 _lastExportDest 是 null，重试成功后要把它补回来，
+        // 否则用户看到「已写入」却仍然没有「打开导出位置」。
+        if (ok > 0) {
+            const loc = r.loc || {};
+            const dir = loc.mode === 'dir' ? loc.dir
+                : (loc.filePath ? String(loc.filePath).replace(/[\\/][^\\/]+$/, '') : '');
+            if (dir) this._lastExportDest = dir;
+        }
+        this._syncExportActions();
         const why = (res.failures && res.failures[0] && res.failures[0].reason) || res.error || '写入失败';
         const names = (res.failures || []).slice(0, 2).map(f => f.name).join('、');
         this.setStatus(fail

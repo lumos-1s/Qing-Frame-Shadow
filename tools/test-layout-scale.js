@@ -66,6 +66,11 @@ async function main() {
             localStorage.removeItem('qfs_sidebar_collapsed');
             localStorage.removeItem('qfs_inspector_collapsed');
             localStorage.removeItem('qfs_settings_tab');
+            // 这些宽度是用户拖拽后持久化的。上一次手工把参数栏拖到 236px 时，
+            // 容器查询会把页签内边距改成 4px，收起按钮贴着窗口边 4px；
+            // 下面的「不出屏」断言就会拿到因机器状态而异的 right，误报为回归。
+            localStorage.removeItem('qfs_inspector_width');
+            localStorage.removeItem('qfs_sidebar_width');
         } catch (_) {}
         return true;
     })()`);
@@ -88,8 +93,12 @@ async function main() {
         const tabsWrap = document.getElementById('inspTabs');
         const tabs = [...tabsWrap.querySelectorAll('.tab')].filter((t) => t.getClientRects().length > 0);
         const vis = (el) => !!el && el.getClientRects().length > 0;
-        const rightEls = ['btnSettings', 'btnTheme', 'btnInspectorCollapse']
+        // 「顶栏按钮不出屏」只量真正的顶栏按钮。参数栏的收起按钮在右栏最右端，
+        // 设计上就允许离窗口边只有几像素（窄栏时容器查询把内边距压到 4px），
+        // 混在一起量会让断言随用户上次拖过的栏宽时红时绿。
+        const rightEls = ['btnSettings', 'btnTheme']
             .map((id) => document.getElementById(id)).filter(vis);
+        const collapseEl = document.getElementById('btnInspectorCollapse');
         return {
             scale: getComputedStyle(document.documentElement).getPropertyValue('--font-scale').trim(),
             innerW: window.innerWidth, innerH: window.innerHeight,
@@ -102,6 +111,7 @@ async function main() {
                 labels: [...tb.querySelectorAll('.tbtn-label')].filter(vis).length
             },
             rightmost: rightEls.length ? Math.round(Math.max(...rightEls.map((el) => el.getBoundingClientRect().right))) : -1,
+            collapseRight: (collapseEl && vis(collapseEl)) ? Math.round(collapseEl.getBoundingClientRect().right) : -1,
             tabsWrapH: Math.round(tabsWrap.getBoundingClientRect().height),
             tabMaxH: tabs.reduce((m, t) => Math.max(m, t.getBoundingClientRect().height), 0),
             tabs: tabs.map((t) => ({
@@ -155,6 +165,8 @@ async function main() {
         JSON.stringify(base.toolbar));
     check(base.rightmost > 0 && base.rightmost <= base.innerW - 8,
         '顶栏最右侧按钮（设置）完整留在窗口内', String(base.rightmost));
+    check(base.collapseRight > 0 && base.collapseRight <= base.innerW - 1,
+        '参数栏收起按钮完整留在窗口内', String(base.collapseRight));
     check(base.sidebarCollapsed && base.railVisible,
         '1000px 窄窗口自动收起左侧素材栏，并留出展开轨', JSON.stringify({ c: base.sidebarCollapsed, rail: base.railVisible }));
 

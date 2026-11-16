@@ -68,23 +68,38 @@ window.App = {
     _puzzleDropTarget: null, // 拖拽互换预备目标格
     _skipPuzzleCapture: false,
     _bgBlurDefault: null,    // 背景模糊默认记忆:null=跟随预设, 1=默认开, 0=默认关
+    _presetsLoaded: false,   // loadPresets 完成(含失败)后置 true，迟到恢复要在它之后跑
+    _lastStateApplied: false,// qfs_last_state 只恢复一次，避免 loadPresets 重入时覆盖用户选择
 
     restoreLastState() {
+        // 测试默认不继承开发机上残留的 qfs_last_state；需要验证恢复的用例
+        // 通过 preload-measure 的 --qf-allow-last-state 显式打开。
+        if (window.__qfTest && !window.__qfAllowLastState) return;
+        if (this._lastStateApplied) return;
+        // loadPresets 是异步的，init 里调用本方法时 this.presets 还是 []，
+        // 按名字永远找不到；等 loadPresets 末尾置 true 后再调用。
+        if (!this._presetsLoaded) return;
         try {
             const raw = localStorage.getItem('qfs_last_state');
             if (!raw) return;
             const s = JSON.parse(raw);
+            if (!s || typeof s !== 'object') return;
+            // 已经有照片（手动导入 / 恢复草稿）时以当前会话为准，别拿上次状态盖掉。
+            if (this.images && this.images.length) return;
             // 「联名水印」旧版默认对齐是左下(0)，与联名水印官方版式(底部居中)不符。
             // 老草稿没有 xmAlignV 标记时迁移一次为居中；用户之后手动选左下会带标记保存，正常记住。
             if (s.xmLeica && typeof s.xmLeica === 'object' && Number(s.xmAlignV) < 2) s.xmLeica.align = 1;
             // 找到对应预设并选中
-            if (s.presetName && this.presets) {
+            if (s.presetName && Array.isArray(this.presets)) {
                 // 去品牌化改名：旧草稿里还写着旧名字，映射到新预设，避免恢复时丢掉选中态
                 const PRESET_RENAMED = { '小米徕卡水印': '联名水印' };
                 const wanted = PRESET_RENAMED[s.presetName] || s.presetName;
-                const p = this.presets.find(x => x.name === wanted);
+                // 预设 JSON 的字段叫 templateName；这个查询曾按 x.name 找，
+                // 91 个预设里一个都匹配不到，所以即使 saved presetName 正常也永远走兜底。
+                const p = this.presets.find(x => x && (x.templateName === wanted || x._fileName === wanted));
                 if (p) {
                     this.selectPreset(p);
+                    this._lastStateApplied = true;
                     // 预设只提供外观基线:上次改过的苹果信息卡(文本/颜色/字号/显隐)优先恢复
                     if (s.appleCard && typeof s.appleCard === 'object' && this.template) {
                         this.template.appleCard = s.appleCard;
@@ -100,34 +115,43 @@ window.App = {
                     return;
                 }
             }
-            // 没找到预设就只恢复关键字段
-            if (s.photoFrameStyle && this.template) {
-                this.template.photoFrameStyle = s.photoFrameStyle;
-                if (s.userSignature) this.template.userSignature = s.userSignature;
-                if (s.signFont) this.template.signFont = s.signFont;
-                if (s.signColor) this.template.signColor = s.signColor;
-                if (s.signIncludeModel != null) this.template.signIncludeModel = s.signIncludeModel;
-                if (s.creditMode != null) this.template.creditMode = s.creditMode;
-                if (s.avatarScale) this.template.avatarScale = s.avatarScale;
-                if (s.signSize) this.template.signSize = s.signSize;
-                if (s.avatarShow !== undefined) this.template.avatarShow = s.avatarShow;
-                if (s.signBgBlur != null) this.template.signBgBlur = s.signBgBlur;
-                if (s.paramColor) this.template.paramColor = s.paramColor;
-                if (s.paramFontSize) this.template.paramFontSize = s.paramFontSize;
-                if (s.brandSize) this.template.brandSize = s.brandSize;
-                if (s.brandLogo != null) this.template.brandLogo = s.brandLogo;
-                if (s.paramScale) this.template.paramScale = s.paramScale;
-                if (s.liquidGlassSize) this.template.liquidGlassSize = s.liquidGlassSize;
-                if (s.liquidGlassDate != null) this.template.liquidGlassDate = s.liquidGlassDate;
-                if (typeof s.polaroidCaption === 'string') this.template.polaroidCaption = s.polaroidCaption;
-                if (typeof s.hassyCaption === 'string') this.template.hassyCaption = s.hassyCaption;
-                if (s.appleCard && typeof s.appleCard === 'object') this.template.appleCard = s.appleCard;
-                if (s.xmLeica && typeof s.xmLeica === 'object') this.template.xmLeica = s.xmLeica;
-                // 用户显式记忆过「背景模糊默认开/关」时，它优先于旧草稿里的单次值。
-                if (typeof this.applyBgBlurDefault === 'function') this.applyBgBlurDefault(this.template);
-                this.refreshUI();
-                this.scheduleRender();
+            // 没找到预设就只恢复关键字段（预设改名/被删时的兜底）。
+            // 启动时 this.template 还没被创建；不先建模板，下面所有赋值都会静默跳过
+            // —— 这正是旧版「自动恢复」在启动阶段完全失效的原因。
+            if (!this.template) this.template = this.defaultTemplate();
+            if (s.photoFrameStyle) this.template.photoFrameStyle = s.photoFrameStyle;
+            // 圆角分别存在 cornerConfig（全局圆角）和顶层 borderRadius（图层边框）里，
+            // 旧版只存不取，重启后圆角白改。
+            if (s.cornerRadiusAll) {
+                const cc = this.template.cornerConfig || (this.template.cornerConfig = {});
+                cc.cornerRadiusAll = s.cornerRadiusAll;
             }
+            if (s.borderRadius) this.template.borderRadius = s.borderRadius;
+            if (s.userSignature) this.template.userSignature = s.userSignature;
+            if (s.signFont) this.template.signFont = s.signFont;
+            if (s.signColor) this.template.signColor = s.signColor;
+            if (s.signIncludeModel != null) this.template.signIncludeModel = s.signIncludeModel;
+            if (s.creditMode != null) this.template.creditMode = s.creditMode;
+            if (s.avatarScale) this.template.avatarScale = s.avatarScale;
+            if (s.signSize) this.template.signSize = s.signSize;
+            if (s.avatarShow !== undefined) this.template.avatarShow = s.avatarShow;
+            if (s.signBgBlur != null) this.template.signBgBlur = s.signBgBlur;
+            if (s.paramColor) this.template.paramColor = s.paramColor;
+            if (s.paramFontSize) this.template.paramFontSize = s.paramFontSize;
+            if (s.brandSize) this.template.brandSize = s.brandSize;
+            if (s.brandLogo != null) this.template.brandLogo = s.brandLogo;
+            if (s.paramScale) this.template.paramScale = s.paramScale;
+            if (s.liquidGlassSize) this.template.liquidGlassSize = s.liquidGlassSize;
+            if (s.liquidGlassDate != null) this.template.liquidGlassDate = s.liquidGlassDate;
+            if (typeof s.polaroidCaption === 'string') this.template.polaroidCaption = s.polaroidCaption;
+            if (typeof s.hassyCaption === 'string') this.template.hassyCaption = s.hassyCaption;
+            if (s.appleCard && typeof s.appleCard === 'object') this.template.appleCard = s.appleCard;
+            if (s.xmLeica && typeof s.xmLeica === 'object') this.template.xmLeica = s.xmLeica;
+            // 用户显式记忆过「背景模糊默认开/关」时，它优先于旧草稿里的单次值。
+            if (typeof this.applyBgBlurDefault === 'function') this.applyBgBlurDefault(this.template);
+            this._lastStateApplied = true;
+            this.refreshUI();
+            this.scheduleRender();
         } catch (_) {}
     },
 
@@ -202,8 +226,9 @@ window.App = {
         if (this.initGradePresets) this.initGradePresets();
         if (this.initRawPanel) this.initRawPanel();
         this.loadPrefs();
+        // 状态恢复要等预设加载完：预设名要能查到、模板也要有默认值可落。
+        // 具体触发点在 loadPresets 末尾（restoreLastState 自身也有就绪守卫）。
         this._presetsReady = this.loadPresets();   // 墙/侧栏点击要等它就绪，否则头一秒点卡片会点空
-        this.restoreLastState();
         this.loadLogos();
         this.loadTextures();
         this.populateFonts();
@@ -277,7 +302,8 @@ window.App = {
         // 替换 this.template,此时引用不再等于启动时的引用,选择被安全跳过。
         const bootTpl = this.template;
         const pickFirst = () => {
-            if (this.presets && this.presets.length && this.template === bootTpl && !this._wallActive) this.selectPreset(this.presets[0]);
+            if (this.presets && this.presets.length && this.template === bootTpl
+                && !this._wallActive && !this._lastStateApplied) this.selectPreset(this.presets[0]);
             this.updateEmptyState();
         };
         if (typeof requestIdleCallback === 'function') requestIdleCallback(pickFirst, { timeout: 1500 });

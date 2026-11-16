@@ -18,7 +18,10 @@ window.App = Object.assign(window.App || {}, {
         try {
             if (!this.template) return;
             const s = {
-                presetName: this.currentPresetName || '',
+                // currentPresetName 从来没有被赋值过，旧版这里永远存空串，
+                // 重启后 restoreLastState 自然找不到预设。模板自己的 templateName
+                // 才是当前预设名（applyPreset 克隆预设时带过来）。
+                presetName: (this.template && this.template.templateName) || this.currentPresetName || '',
                 photoFrameStyle: this.template.photoFrameStyle || '',
                 userSignature: this.template.userSignature || '',
                 signFont: this.template.signFont || '',

@@ -657,9 +657,13 @@ window.App = Object.assign(window.App || {}, {
         this.splashStatus('正在加载预设…');
         try { this.presets = await window.__loadAllPresets(); }
         catch (e) { this.presets = []; }
+        // 预设（含失败时的空数组）已经尘埃落定，启动状态恢复必须在这之后：
+        // 早于这里的 restoreLastState 按名字找不到预设，template 也还是 null。
+        this._presetsLoaded = true;
         if (typeof this.updateStatsText === 'function') this.updateStatsText();
         this.buildTree();
         this.refreshCamLibSelect();
+        if (typeof this.restoreLastState === 'function') this.restoreLastState();
         // 首帧预设选择不在启动路径上执行:先把窗口/预设树渲染出来,选择推迟到
         // init() 末尾的空闲回调(见 app.js),恢复草稿/用户手动选择都不会被覆盖。
         this.splashTick();
