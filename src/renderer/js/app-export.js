@@ -989,12 +989,80 @@ window.App = Object.assign(window.App || {}, {
         const info = this._updateInfo;
         let note = (info && (info.releaseNotes || info.releaseNotesString)) || '';
         if (Array.isArray(note)) {
-            const last = note[note.length - 1];
-            note = last && (last.note || last.body || '');
+            // 多版本 releaseNotes 时优先展示当前待更新版本，取不到再退回最后一条
+            const pick = note.find(n => n && String(n.version || '') === String((info && info.version) || ''))
+                || note[note.length - 1];
+            note = pick && (pick.note || pick.body || '');
         }
-        const html = this.mdToHtml(String(note || '').trim());
+        const html = this.releaseNotesToHtml(String(note || '').trim());
         b.innerHTML = html || '<div class="rn-line">暂无更新说明</div>';
         m.style.display = 'flex';
+    },
+    releaseNotesToHtml(text) {
+        const raw = String(text || '').trim();
+        if (!raw) return '';
+        // electron-builder / GitHub 有时把 releaseNotes 写成 HTML（<h2>、<ul>、<a>…），
+        // 旧实现直接丢给 mdToHtml 会先转义，用户看到的是一屏标签源码。
+        // 只有出现块级标签才走 HTML 分支：Markdown 里零星的 <br> 仍按 Markdown 渲染。
+        if (!/<(?:p|div|ul|ol|li|h[1-6]|blockquote|pre|table|section|article|details|summary)\b[^>]*>/i.test(raw)) {
+            return this.mdToHtml(raw);
+        }
+        const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        // 从远端来的内容只保留排版标签；脚本/样式/图片/表单等整棵子树丢弃。
+        const BLOCKED = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'img',
+            'picture', 'source', 'video', 'audio', 'svg', 'math', 'form', 'input', 'button',
+            'textarea', 'select', 'option', 'template', 'base', 'canvas']);
+        const doc = new DOMParser().parseFromString(raw, 'text/html');
+        const inline = (node) => {
+            if (node.nodeType === 3) return esc(node.nodeValue);
+            if (node.nodeType !== 1) return '';
+            const tag = node.tagName.toLowerCase();
+            if (BLOCKED.has(tag)) return '';
+            if (tag === 'br') return '<br>';
+            const inner = [...node.childNodes].map(inline).join('');
+            if (tag === 'strong' || tag === 'b') return `<strong>${inner}</strong>`;
+            if (tag === 'em' || tag === 'i') return `<em>${inner}</em>`;
+            if (tag === 'code' || tag === 'kbd') return `<code>${inner}</code>`;
+            if (tag === 'del' || tag === 's') return `<del>${inner}</del>`;
+            if (tag === 'a') {
+                const href = (node.getAttribute('href') || '').trim();
+                return /^(https?:|mailto:)/i.test(href)
+                    ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+                    : inner;
+            }
+            return inner;
+        };
+        const block = (node) => {
+            if (node.nodeType === 3) {
+                const t = String(node.nodeValue || '').replace(/\s+/g, ' ').trim();
+                return t ? `<div class="rn-line">${esc(t)}</div>` : '';
+            }
+            if (node.nodeType !== 1) return '';
+            const tag = node.tagName.toLowerCase();
+            if (BLOCKED.has(tag)) return '';
+            if (tag === 'br') return '';
+            if (/^h[1-6]$/.test(tag)) return `<div class="rn-h">${[...node.childNodes].map(inline).join('')}</div>`;
+            if (tag === 'ul' || tag === 'ol') {
+                const lis = [...node.children].filter(c => c.tagName.toLowerCase() === 'li');
+                if (!lis.length) return [...node.childNodes].map(block).join('');
+                return `<ul class="rn-list">${lis.map(li => `<li>${[...li.childNodes].map(inline).join('')}</li>`).join('')}</ul>`;
+            }
+            if (tag === 'p') {
+                const inner = [...node.childNodes].map(inline).join('');
+                return inner.trim() ? `<div class="rn-line">${inner}</div>` : '';
+            }
+            if (tag === 'pre') {
+                const t = String(node.textContent || '').trim();
+                return t ? `<div class="rn-line"><code>${esc(t).replace(/\r?\n/g, '<br>')}</code></div>` : '';
+            }
+            if (tag === 'li') {
+                const inner = [...node.childNodes].map(inline).join('');
+                return inner.trim() ? `<div class="rn-line">${inner}</div>` : '';
+            }
+            // div/section/details/summary/table 等容器：继续按块级渲染子节点
+            return [...node.childNodes].map(block).join('');
+        };
+        return [...doc.body.childNodes].map(block).join('');
     },
     hideUpdateNotes() {
         const m = document.getElementById('updateNotesModal');

@@ -168,6 +168,58 @@ app.whenReady().then(async () => {
     s = await exec(`document.getElementById('aboutUpdateStatus').textContent`);
     check(s.includes('开发模式'), '开发模式提示', s);
 
+    // 更新详情：releaseNotes 可能是 GitHub 生成的 HTML（<h2>/<ul>/<a>），
+    // 旧实现把它交给 Markdown 渲染器转义，弹窗里直接显示标签源码。
+    await exec(`(() => {
+        window.App._updateInfo = {
+            version: '0.1.22',
+            releaseNotes: [
+                { version: '0.1.22', note: '<h2>本次更新</h2><ul><li><strong>导出</strong>支持重试</li><li><a href="https://github.com/example/repo">提交说明</a></li></ul><script>window.__rnXss = 1</script><img src=x onerror="window.__rnXss = 2">' },
+                { version: '0.1.21', note: '<p>旧版本</p>' }
+            ]
+        };
+        window.App.showUpdateNotes();
+    })()`);
+    const rn = await exec(`(() => {
+        const b = document.getElementById('updateNotesBody');
+        const a = b.querySelector('a');
+        return {
+            display: document.getElementById('updateNotesModal').style.display,
+            text: (b.textContent || '').replace(/\\s+/g, ' ').trim(),
+            rawTag: /<(?:h2|ul|li|script)\\b/i.test(b.textContent || ''),
+            heading: !!b.querySelector('.rn-h'),
+            items: b.querySelectorAll('.rn-list li').length,
+            href: a ? a.getAttribute('href') : '',
+            target: a ? a.getAttribute('target') : '',
+            xss: !!window.__rnXss
+        };
+    })()`);
+    check(rn.display === 'flex' && !rn.rawTag && rn.heading && rn.items === 2
+          && rn.text.includes('本次更新') && rn.text.includes('导出支持重试')
+          && !rn.text.includes('旧版本'),
+        '更新详情：HTML releaseNotes 渲染为富文本，不再显示标签源码', JSON.stringify(rn));
+    check(rn.href === 'https://github.com/example/repo' && rn.target === '_blank'
+          && !rn.xss, '更新详情：只保留安全链接，脚本/图片被丢弃', JSON.stringify(rn));
+    await exec('window.App.hideUpdateNotes()');
+
+    // Markdown 仍走原渲染路径（不能被 HTML 分支误吞）
+    await exec(`(() => {
+        window.App._updateInfo = { version: '0.1.22', releaseNotes: '## 标题\\n这是一段 **加粗** 文本\\n- 条目' };
+        window.App.showUpdateNotes();
+    })()`);
+    const rnMd = await exec(`(() => {
+        const b = document.getElementById('updateNotesBody');
+        return {
+            heading: !!b.querySelector('.rn-h'),
+            items: b.querySelectorAll('.rn-list li').length,
+            strong: !!b.querySelector('strong'),
+            text: b.textContent
+        };
+    })()`);
+    check(rnMd.heading && rnMd.items === 1 && rnMd.strong && !rnMd.text.includes('**'),
+        '更新详情：Markdown releaseNotes 仍正常渲染', JSON.stringify(rnMd));
+    await exec('window.App.hideUpdateNotes()');
+
     // Tab 焦点循环:设置弹窗内最后一个可聚焦元素按 Tab 回到关闭按钮;关闭按钮 Shift+Tab 回到最后一个。
     const lastFocus = await exec(`(() => {
         const items = [...document.querySelectorAll('#settingsModal button:not([disabled]), #settingsModal summary')]
