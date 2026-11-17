@@ -7,8 +7,9 @@
  *    所以连续点两次得到同一组参数（不会产生"越调越重"的累积）。
  * 2) 只给基础 11 档里的色调/白平衡一个保守建议，不碰曲线、蒙版、混色器、
  *    颜色分级这些"表达意图"的参数；算出多少就是多少，用户能看见滑块落点。
- * 3) 幅度刻意压得比 LR 的 Auto 小：曝光不超过 ±0.8EV，白平衡不超过 ±18，
- *    宁可"差一点"也不要把肤色和夕阳一锅端成中性灰。
+ * 4) RAW 单独走 suggestRaw：解码层已经做了自动曝光基线 + 高光肩，
+ *    所以显影层只校白平衡（色温/色调），不重复拉曝光；调色层的「自动」
+ *    在 RAW 上会跳过色温/色调，两层合起来才是一次完整自动调整。
  */
 (function () {
     const MAX_EDGE = 256;
@@ -46,7 +47,7 @@
         return 255;
     }
 
-    function suggest(im) {
+    function suggest(im, opts) {
         const data = sample(im);
         if (!data) return null;
         const hist = new Uint32Array(256);
@@ -92,8 +93,35 @@
             vib = Math.round(clamp((0.16 - satSum / brightN) * 45, 0, 10));
         }
 
+        // RAW 照片在显影层做白平衡（见 suggestRaw），调色层这里必须跳过，避免双重校正。
+        if (opts && opts.skipWhiteBalance) { temp = 0; tint = 0; }
+
         return { exp, con, sat: 0, vib, temp, tint, hi: 0, sh: 0, white, black, gam: 0 };
     }
 
-    window.QfsAutoGrade = { suggest };
+    // RAW 显影白平衡：只输出 raw.params 的色温/色调，曝光和高光保持解码默认值。
+    // 取样偏严（亮部 + 低饱和）是为了不把红衣服、蓝天、夕阳当成色偏。
+    function suggestRaw(im) {
+        const data = sample(im);
+        if (!data) return null;
+        let n = 0, sr = 0, sg = 0, sb = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            const R = data[i], G = data[i + 1], B = data[i + 2];
+            const y = (R * 77 + G * 150 + B * 29) >> 8;
+            if (y < 145 || y > 245) continue;
+            const mx = Math.max(R, G, B), mn = Math.min(R, G, B);
+            if (mx && (mx - mn) / mx > 0.22) continue;   // 只信接近中性的像素
+            n++; sr += R; sg += G; sb += B;
+        }
+        if (n < 32) return { temperature: 0, tint: 0 };
+        const r = sr / n / 255, g = sg / n / 255, b = sb / n / 255;
+        // raw-tonemap 的通道增益：R = 1+0.32t，B = 1-0.30t。
+        // 要抵消 R>B 的暖偏，t 取负；系数按这个增益斜率换算，留一半余量。
+        const temperature = Math.round(clamp(-(r - b) * 55, -20, 20));
+        // 洋红偏（R+B > 2G）往绿拉；tint 正档是洋红，同样取负号。
+        const tint = Math.round(clamp(-((r + b) / 2 - g) * 70, -12, 12));
+        return { temperature, tint };
+    }
+
+    window.QfsAutoGrade = { suggest, suggestRaw };
 })();

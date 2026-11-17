@@ -47,6 +47,7 @@ app.whenReady().then(async () => {
             if (kind === 'dark') { R = G = B = 28 + v; }
             else if (kind === 'bright') { R = G = B = 170 + v; }
             else if (kind === 'cast') { R = 225 + (v >> 2); G = 200; B = 150; }
+            else if (kind === 'rawcast') { R = 215 + (v >> 2); G = 200; B = 185; }
             else { R = G = B = 50 + v * 2; }
             d.data[i] = R; d.data[i+1] = G; d.data[i+2] = B; d.data[i+3] = 255;
         }
@@ -84,6 +85,20 @@ app.whenReady().then(async () => {
     const stable = ['dark', 'bright', 'cast', 'neutral'].every((k) =>
         JSON.stringify(sugg[k]) === JSON.stringify(sugg[k + 'Again']));
     check(stable, '同一张原图重复估算结果不变（无累积/无随机）');
+
+    const rawSugg = await exec(`(() => {
+        const warm = window.__agMake('rawcast');
+        const neutral = window.__agMake('neutral');
+        return { warm: window.QfsAutoGrade.suggestRaw({ el: warm }),
+                 neutral: window.QfsAutoGrade.suggestRaw({ el: neutral }),
+                 skip: window.QfsAutoGrade.suggest({ el: warm }, { skipWhiteBalance: true }) };
+    })()`);
+    check(rawSugg.warm && rawSugg.warm.temperature < 0 && Math.abs(rawSugg.warm.temperature) <= 20,
+        'RAW 白平衡：暖偏照片给负色温（往冷校），幅度保守', JSON.stringify(rawSugg.warm));
+    check(rawSugg.neutral && Math.abs(rawSugg.neutral.temperature) <= 2,
+        'RAW 白平衡：中性照片不动色温', JSON.stringify(rawSugg.neutral));
+    check(rawSugg.skip && rawSugg.skip.temp === 0 && rawSugg.skip.tint === 0 && rawSugg.skip.exp !== 0,
+        'RAW 跳过调色层白平衡，避免双重校正', JSON.stringify(rawSugg.skip));
 
     // UI 链路：按钮在直方图脚、点击落参数、压一次撤销；opts.global 保证不滑进蒙版
     const ui = await exec(`(async () => {
@@ -125,6 +140,42 @@ app.whenReady().then(async () => {
     check(ui.afterUndoExp === null || ui.afterUndoExp === 0, '撤销回到自动调色前的中性参数', String(ui.afterUndoExp));
     check(ui.global, '即使有活动蒙版也作用于整张照片（global）', String(ui.global));
     check(/自动调色/.test(ui.status), '状态栏给出本地计算/可撤销反馈', ui.status.slice(0, 90));
+
+    // RAW 链路：显影白平衡 + 调色层跳过白平衡 + 显影重解 + 撤销
+    const rawUi = await exec(`(async () => {
+        const A = window.App;
+        const el = window.__agMake('rawcast');
+        const im = { el, name: 'raw-auto', path: 'x.dng', w: el.width, h: el.height, exif: {},
+            customSettings: null, grade: null,
+            raw: { params: { exposure: 0, contrast: 0, highlights: 25, temperature: 0, tint: 0 },
+                   crop: null, seq: 0, full: false, error: false } };
+        A.images = [im]; A.image = im; A.currentIdx = 0;
+        if (A.ensureGrade) A.ensureGrade(im);
+        if (A.setTpl) { A.template = A.defaultTemplate(); A.setTpl(im, A.template); }
+        let reloadEdge = null, queued = false, captured = null;
+        const oReload = A._rawReload, oQueue = A._rawQueueFull, oSet = A.setGrade;
+        A._rawReload = (x, edge) => { reloadEdge = edge; return Promise.resolve(true); };
+        A._rawQueueFull = () => { queued = true; };
+        A.setGrade = (patch, opts) => { captured = { patch, opts }; return true; };
+        const before = A.undoStack ? A.undoStack.length : 0;
+        A.autoGrade();
+        await new Promise((r) => setTimeout(r, 60));
+        const got = { undoDelta: (A.undoStack ? A.undoStack.length : 0) - before,
+            rawParams: JSON.parse(JSON.stringify(im.raw.params)),
+            patch: captured && captured.patch, global: !!(captured && captured.opts && captured.opts.global),
+            reloadEdge, queued, status: (document.getElementById('stCanvas') || {}).textContent || '' };
+        A._rawReload = oReload; A._rawQueueFull = oQueue; A.setGrade = oSet;
+        return got;
+    })()`);
+    check(rawUi.rawParams && rawUi.rawParams.temperature < 0,
+        'RAW：自动把暖偏写进显影白平衡', JSON.stringify(rawUi.rawParams));
+    check(rawUi.patch && rawUi.patch.temp === 0 && rawUi.patch.tint === 0 && rawUi.patch.exp !== 0,
+        'RAW：调色层跳过色温/色调，只做色调', JSON.stringify(rawUi.patch));
+    check(rawUi.undoDelta === 1 && rawUi.global, 'RAW：一次点击一条撤销，且仍走 global',
+        JSON.stringify({ undoDelta: rawUi.undoDelta, global: rawUi.global }));
+    check(rawUi.reloadEdge === 1600 && rawUi.queued === true, 'RAW：改完白平衡重解代理图并排队全尺寸',
+        JSON.stringify({ edge: rawUi.reloadEdge, queued: rawUi.queued }));
+    check(/RAW/.test(rawUi.status), 'RAW：状态栏说明做了显影白平衡', rawUi.status.slice(0, 90));
 
     console.log(failures.length ? `\n未通过 ${failures.length} 项：` + failures.map((f) => '\n - ' + f).join('') : '\nALL PASS');
     win.destroy();

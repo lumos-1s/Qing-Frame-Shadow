@@ -1553,13 +1553,34 @@
                 if (this.setStatus) this.setStatus('先导入照片，再点自动调色');
                 return false;
             }
-            const suggest = window.QfsAutoGrade && window.QfsAutoGrade.suggest;
-            const patch = typeof suggest === 'function' ? suggest(im) : null;
+            const A = window.QfsAutoGrade || {};
+            const isRaw = !!im.raw;
+            // RAW：显影层校白平衡，调色层只做色调/黑白场，避免两层都校一次色温。
+            const rawPatch = isRaw && typeof A.suggestRaw === 'function' ? A.suggestRaw(im) : null;
+            const patch = typeof A.suggest === 'function'
+                ? A.suggest(im, { skipWhiteBalance: isRaw }) : null;
             if (!patch) {
-                if (this.setStatus) this.setStatus('这张照片读不到像素，自动调色未执行');
+                if (this.setStatus) this.setStatus('这张照片读不到像素，自动调整未执行');
                 return false;
             }
+            const wbChanged = !!(rawPatch && (rawPatch.temperature || rawPatch.tint));
             if (this.pushUndo) this.pushUndo();
+            if (isRaw && wbChanged) {
+                im.raw.params = Object.assign({}, this.rawParamsOf ? this.rawParamsOf(im) : {}, rawPatch);
+                this._rawInvalidate && this._rawInvalidate(im);
+                if (this._rawReload) {
+                    const edge = this.RAW_PROXY_EDGE || 1600;
+                    const p = this._rawReload(im, edge);
+                    if (p && typeof p.then === 'function') {
+                        p.then((ok) => {
+                            if (ok && this._rawQueueFull) this._rawQueueFull(400);
+                            else if (!ok && im.raw.error && this.setStatus) {
+                                this.setStatus('RAW 白平衡已写入，但显影失败：点「重试显影」');
+                            }
+                        });
+                    }
+                }
+            }
             this.setGrade(patch, { global: true });
             clearTimeout(this._autoGradeSettle);
             this._autoGradeSettle = setTimeout(() => {
@@ -1567,7 +1588,13 @@
                 if (window.QfsHistogram) window.QfsHistogram.redraw();
             }, 180);
             if (window.QfsHistogram) window.QfsHistogram.redraw();
-            if (this.setStatus) this.setStatus('已按直方图自动调色（本地计算，可撤销）');
+            if (this.setStatus) {
+                this.setStatus(isRaw
+                    ? (wbChanged
+                        ? '已自动校正 RAW 白平衡并调色（本地计算，可撤销）'
+                        : '已按直方图自动调色，RAW 白平衡已接近中性（可撤销）')
+                    : '已按直方图自动调色（本地计算，可撤销）');
+            }
             return true;
         },
 
