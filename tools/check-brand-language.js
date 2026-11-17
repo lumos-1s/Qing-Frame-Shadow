@@ -9,7 +9,8 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const RENDERER = path.join(ROOT, 'src', 'renderer');
 const DOCS = ['README.md', 'PRIVACY.md', 'ARCHITECTURE.md', 'THIRD-PARTY-ASSETS.md',
-    'assets/readme/hero.svg'];
+    'assets/readme/hero.svg',
+    'frames/SKILL.md', 'skills/qingframe/SKILL.md'];
 
 const LEGACY_BRAND = /Frame Studio|QingFramShadow/gi;
 // 只扫彩色图形字符区间（U+1F300–U+1FAFF + 变体选择符），不误伤语义符号。

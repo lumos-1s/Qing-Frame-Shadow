@@ -154,6 +154,20 @@ async function preview(args) {
     console.log(`预览：${path.relative(ROOT, out)}  ${r.W}×${r.H}  路径=${r.path}`);
 }
 
+// 不带参数：打印完整手册（frames/SKILL.md 去掉 frontmatter），让 agent / 人都能自描述地读到全部说明。
+function printManual(args) {
+    if (args._.length && args._[0] === 'help') {
+        // `qfs-frame help <主题>` 预留：现在只支持整体手册，主题参数忽略并提示。
+        console.log('（本原型只有一份手册，直接显示全部）\n');
+    }
+    const manual = path.join(ROOT, 'frames', 'SKILL.md');
+    if (!fs.existsSync(manual)) return die(`找不到手册：${manual}`);
+    let text = fs.readFileSync(manual, 'utf8');
+    // 去掉 YAML frontmatter（--- 包裹的第一段）
+    text = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+    process.stdout.write(text);
+}
+
 function die(msg) { console.error('✗ ' + msg); process.exitCode = 1; }
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -168,10 +182,9 @@ async function main() {
         case 'check': return check(args);
         case 'preview': return await preview(args);
         default:
-            console.log('qfs frame —— AI 边框工作流原型');
-            console.log('  init   <风格/预设名> [-o 路径]              从内置预设拷出工作底稿');
-            console.log('  check  <frame.json>                         体检（结构/风格/参数/默认值）');
-            console.log('  preview <frame.json> [--image 本地图] [-o out.png]  真实引擎渲染预览');
+            // 自描述：不带参数就打印完整手册（对标 openfilm 不带参数打印 manual）。
+            // 手册唯一来源是 frames/SKILL.md，避免入口与手册两份内容漂移。
+            return printManual(args);
     }
 }
 main().catch((e) => { console.error('✗ ' + (e && e.stack ? e.stack : e)); process.exitCode = 1; });

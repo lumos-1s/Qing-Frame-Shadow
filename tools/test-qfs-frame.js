@@ -58,5 +58,18 @@ fs.writeFileSync(f4, JSON.stringify({ photoFrameStyle: 'CARD_3D' }), 'utf8');
 r = run(['check', f4]);
 check(r.code !== 0 && /templateName/.test(r.out), 'check 抓缺失 templateName', r.out.trim().slice(-100));
 
+// 6) CLI 自描述：不带参数打印完整手册（含关键段，且不含 frontmatter）
+r = run([]);
+check(r.code === 0 && /可用风格/.test(r.out) && /硬规则/.test(r.out) && /工作流/.test(r.out)
+    && !/^---/.test(r.out.trim()), 'CLI 无参数打印完整手册（去 frontmatter）',
+    JSON.stringify({ code: r.code, hasStyles: /可用风格/.test(r.out), hasRules: /硬规则/.test(r.out) }));
+
+// 7) 入口 skill 结构：skills/qingframe/SKILL.md 有标准 frontmatter
+const entrySkill = path.join(ROOT, 'skills', 'qingframe', 'SKILL.md');
+const sk = fs.existsSync(entrySkill) ? fs.readFileSync(entrySkill, 'utf8') : '';
+check(/^---\r?\n/.test(sk) && /name:\s*qingframe/.test(sk) && /description:/.test(sk)
+    && /qfs-frame\.js/.test(sk), '入口 skill 有标准 frontmatter 并指向 CLI',
+    JSON.stringify({ exists: !!sk, name: /name:\s*qingframe/.test(sk), pointsToCli: /qfs-frame\.js/.test(sk) }));
+
 console.log(failures.length ? `\n未通过 ${failures.length} 项：${failures.join(', ')}` : '\nALL PASS');
 process.exitCode = failures.length ? 1 : 0;
