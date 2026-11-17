@@ -273,6 +273,39 @@ ctx.font = px + 'px ' + (mono ? 'monospace' : 'sans-serif');
         ctx.drawImage(img, sx * kx, sy * ky, sw * kx, sh * ky, dx, dy, dw, dh);
     }
 
+    // 离屏画照片 + destination-out 镂空圆角外侧再 1:1 贴回：圆角边缘由照片自身的
+    // 不透明像素决定，不会像 ctx.clip() 那样让下面用于投影的白色衬底从弧边透出白边。
+    function drawPhotoPunched(g, img, dx, dy, dw, dh, radius) {
+        const sc = Math.abs(g.getTransform().a) || 1;
+        const tmpW = Math.max(1, Math.round(dw * sc));
+        const tmpH = Math.max(1, Math.round(dh * sc));
+        const tmp = newCanvas(tmpW, tmpH);
+        const tg = tmp.getContext('2d');
+        tg.setTransform(sc, 0, 0, sc, 0, 0);
+        tg.drawImage(img, 0, 0, dw, dh);
+        if (radius > 0) {
+            tg.save();
+            tg.globalCompositeOperation = 'destination-out';
+            tg.fillStyle = '#000';
+            tg.beginPath();
+            tg.rect(0, 0, dw, dh);
+            if (tg.roundRect) tg.roundRect(0, 0, dw, dh, radius);
+            else {
+                const r = Math.min(radius, Math.floor(Math.min(dw, dh) / 2));
+                tg.moveTo(r, 0); tg.lineTo(dw - r, 0); tg.arcTo(dw, 0, dw, r, r);
+                tg.lineTo(dw, dh - r); tg.arcTo(dw, dh, dw - r, dh, r);
+                tg.lineTo(r, dh); tg.arcTo(0, dh, 0, dh - r, r);
+                tg.lineTo(0, r); tg.arcTo(0, 0, r, 0, r); tg.closePath();
+            }
+            tg.fill('evenodd');
+            tg.restore();
+        }
+        g.save();
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.drawImage(tmp, Math.round(dx * sc), Math.round(dy * sc), tmpW, tmpH);
+        g.restore();
+    }
+
     // ── 阶段一核心风格(纯几何/颜色,无相机无 Logo)──
     function styleSimple(img, size, g, iw, ih) {
         g.fillStyle = '#ffffff';
@@ -3179,9 +3212,7 @@ AV_OVERLAY_BC2:67, GALLERY_MAT:68, BOARDING_PASS:69, FILM_TEAR:70, PARAM_STRIP:7
         g.shadowBlur = 0;
         g.shadowOffsetY = 0;
         g.shadowOffsetX = 0;
-        roundRectPath(g, dx, dy, dw, dh, radius);
-        g.clip();
-        g.drawImage(img, dx, dy, dw, dh);
+        drawPhotoPunched(g, img, dx, dy, dw, dh, radius);
         for (const [wd, al] of [[Math.max(1, scaledPx(2)), 28], [Math.max(1, scaledPx(5)), 16], [Math.max(1, scaledPx(8)), 8]]) {
             g.strokeStyle = 'rgba(120,120,120,' + (al / 255).toFixed(3) + ')';
             g.lineWidth = wd;

@@ -570,6 +570,24 @@ function punchRoundedCorners(ctx, x, y, w, h, tl, tr, bl, br) {
     ctx.restore();
 }
 
+// 在无 clip 的离屏画布上画照片并镂空四角，再按设备像素 1:1 贴回主画布。
+// 这样圆角边缘由照片自身的不透明像素决定，不会透出背景模糊卡片 Step 1 的白色衬底。
+function drawPhotoWithCorners(ctx, img, x, y, w, h, tl, tr, bl, br) {
+    const sc = Math.abs(ctx.getTransform().a) || 1;
+    const tmpW = Math.max(1, Math.round(w * sc));
+    const tmpH = Math.max(1, Math.round(h * sc));
+    const tmp = document.createElement('canvas');
+    tmp.width = tmpW; tmp.height = tmpH;
+    const tg = tmp.getContext('2d');
+    tg.setTransform(sc, 0, 0, sc, 0, 0);
+    tg.drawImage(img, 0, 0, w, h);
+    punchRoundedCorners(tg, 0, 0, w, h, tl, tr, bl, br);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(tmp, Math.round(x * sc), Math.round(y * sc), tmpW, tmpH);
+    ctx.restore();
+}
+
 // 照片绘制(投影 + 圆角裁剪),与原??drawOriginImage 一??
 function drawOriginImage(ctx, img, margin, cw, ch, template) {
     // 照片同步画幅:画布比例非「原始」且开启同步时,照片按画布(内容区)比例 cover 填满,
@@ -1421,12 +1439,9 @@ function renderCardStyle(app) {
     ctx.fill();
     ctx.restore();
 
-    // Step 2: 清晰照片(圆角裁剪)
-    ctx.save();
-    buildRoundedPath(ctx, drawX, drawY, drawW, drawH, prTL, prTR, prBL, prBR);
-    ctx.clip();
-    ctx.drawImage(img, drawX, drawY, drawW, drawH);
-    ctx.restore();
+    // Step 2: 清晰照片。用离屏画布 + destination-out 镂空圆角外侧再贴回，
+    // 不走 ctx.clip() —— clip 的抗锯齿边缘会让 Step 1 的白色衬底从弧边透出白边。
+    drawPhotoWithCorners(ctx, img, drawX, drawY, drawW, drawH, prTL, prTR, prBL, prBR);
 
     // 8. 全局光影
     applyGlobalLight(ctx, template.lightEffect, canvasW, canvasH);
