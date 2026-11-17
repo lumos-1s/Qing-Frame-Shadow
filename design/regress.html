@@ -231,6 +231,47 @@ window.__QR = {
   async run(cases) {
     await buildFixture();
     return cases.map(renderCase);
+  },
+  // ── AI 边框工作流的扩展（下列新增能力不影响上面的 run / 视觉回归）──
+  // 用一张自定义图作为渲染底图（本地 data URL，不联网、不上传）。传 null 恢复默认合成图。
+  async setPhoto(dataUrl) {
+    if (!dataUrl) { built = false; photoImg = null; await buildFixture(); return; }
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+    photoImg = img;
+    built = true;
+  },
+  // 渲染一份完整预设 JSON（就是 App 直接加载的那种），返回 PNG dataURL + 尺寸 + 渲染期警告。
+  // 供 tools/qfs-frame.js preview 使用：agent 改完 frame.json 走真实引擎看结果。
+  async renderFrame(preset) {
+    await buildFixture();
+    if (!photoImg) return { error: '没有底图' };
+    const template = (preset && typeof preset === 'object') ? JSON.parse(JSON.stringify(preset)) : {};
+    const app = {
+      template,
+      displayMax: 4000,
+      selectedEls: [],
+      uiDprOverride: 1,
+      image: { el: photoImg, exif: (preset && preset.manualExif) || {} },
+      dom: { canvas: cEl },
+      logos: [],
+      logoImgCache: {},
+      scheduleRender() {}, applyZoomStyle() {}
+    };
+    // 内置预设可能带品牌 logo 引用（brandLogoImg），这里没有素材就用空 logos，引擎走文字兜底。
+    window.EngineStyles.clearCaches();
+    Math.random = PRNG;
+    const takeMsgs = hookConsole();
+    let error = null;
+    try { window.__render(app); }
+    catch (e) { error = String((e && e.message) || e); }
+    const warnLog = takeMsgs();
+    if (!error && warnLog.length) error = warnLog.join(' | ');
+    const pfs = template.photoFrameStyle;
+    const path = (pfs && pfs !== 'NONE') ? 'style'
+      : ((template.baseMargin || {}).bgBlurEnable === 1) ? 'card'
+      : ((template.layerList || []).length) ? 'layer' : 'simple';
+    return { png: cEl.toDataURL('image/png'), W: cEl.width, H: cEl.height, path, error };
   }
 };
 </script>

@@ -44,3 +44,5 @@ nwu2027/
 
 # 临时脚本与截图(.tmp 下是开发期产物,不入库)
 .tmp/
+# AI 边框工作流：预览图是产物，SKILL.md / frame.json 是作品（入库）
+frames/*.png
