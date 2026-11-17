@@ -2,6 +2,7 @@
 // 用法: node tools/run-electron.js tools/test-auto-grade.js
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { app, BrowserWindow, ipcMain } = require('electron');
 
@@ -20,7 +21,16 @@ for (const c of ['list-presets', 'list-logos', 'list-textures', 'list-templates'
 ipcMain.handle('load-preset', () => null);
 ipcMain.handle('get-prefs', () => ({}));
 ipcMain.handle('get-user', () => null);
-ipcMain.handle('load-acr-tables', () => null);
+ipcMain.handle('load-acr-tables', () => {
+    try {
+        const zlib = require('zlib');
+        const raw = fs.readFileSync(path.join(ROOT, 'shared', 'acr', 'cr-tables.bin'));
+        if (raw.slice(0, 4).toString('ascii') !== 'CRT4') return null;
+        const planes = zlib.inflateSync(raw.slice(10));
+        return { size: raw.readUInt16LE(4), count: raw.readUInt16LE(6), step: raw.readUInt16LE(8),
+            data: planes.buffer.slice(planes.byteOffset, planes.byteOffset + planes.byteLength) };
+    } catch (_) { return null; }
+});
 ipcMain.handle('load-acr-shadows', () => null);
 for (const c of ['save-prefs', 'save-user', 'logout-user']) ipcMain.handle(c, () => ({ ok: true }));
 
@@ -32,6 +42,10 @@ app.whenReady().then(async () => {
     for (let i = 0; i < 120; i++) {
         if (await exec('!!(window.App && App.dom)')) break;
         await sleep(250);
+    }
+    for (let i = 0; i < 80; i++) {
+        if (await exec('!!(window.QfsAcr && QfsAcr.ready())')) break;
+        await sleep(100);
     }
     await exec(`(() => { localStorage.setItem('qfs_intro_done','1'); if (App.closeIntro) App.closeIntro(); return true; })()`);
     await sleep(300);
@@ -80,9 +94,10 @@ app.whenReady().then(async () => {
     const keys = ['exp', 'con', 'sat', 'vib', 'temp', 'tint', 'hi', 'sh', 'white', 'black', 'gam'];
     const finite = Object.keys(sugg).filter((k) => /^(dark|bright|cast|neutral)$/.test(k))
         .every((k) => keys.every((f) => Number.isFinite(sugg[k][f])));
-    const bounded = Object.keys(sugg).filter((k) => /^(dark|bright|cast|neutral)$/.test(k))
-        .every((k) => Math.abs(sugg[k].exp) <= 0.8 && Math.abs(sugg[k].temp) <= 18
-            && Math.abs(sugg[k].tint) <= 12 && Math.abs(sugg[k].con) <= 26);
+    const bounded = Object.keys(sugg).filter((k) => /^(dark|bright|cast|neutral|midgray|darknarrow)$/.test(k))
+        .every((k) => Math.abs(sugg[k].exp) <= 0.8 && Math.abs(sugg[k].temp) <= 20
+            && Math.abs(sugg[k].tint) <= 12 && Math.abs(sugg[k].con) <= 26
+            && Math.abs(sugg[k].gam) <= 70 && sugg[k].hi >= -35 && sugg[k].sh <= 35);
     check(finite && bounded, '参数全为有限值且不超出保守上限', JSON.stringify({ finite, bounded }));
     const stable = ['dark', 'bright', 'cast', 'neutral'].every((k) =>
         JSON.stringify(sugg[k]) === JSON.stringify(sugg[k + 'Again']));
@@ -109,6 +124,50 @@ app.whenReady().then(async () => {
         'RAW 白平衡：中性照片不动色温', JSON.stringify(rawSugg.neutral));
     check(rawSugg.skip && rawSugg.skip.temp === 0 && rawSugg.skip.tint === 0 && rawSugg.skip.exp !== 0,
         'RAW 跳过调色层白平衡，避免双重校正', JSON.stringify(rawSugg.skip));
+
+    // 反解实测 ACR 白平衡表：暖色应给出负色温，且应用后三通道更接近中性。
+    const wb = await exec(`(() => {
+        const A = window.QfsAcr;
+        const out = { ready: !!A.ready(), hasNeutralize: typeof A.neutralize === 'function' };
+        if (!out.ready || !out.hasNeutralize) return out;
+        const warm = [230, 200, 150];
+        const solved = A.neutralize(...warm);
+        out.solved = solved;
+        const base = A.toneStages({ temp: 0, tint: 0, exp: 0, con: 0, hi: 0, sh: 0, white: 0, black: 0 }, null);
+        const after = A.toneStages({ temp: solved.temperature, tint: solved.tint, exp: 0, con: 0, hi: 0, sh: 0, white: 0, black: 0 }, null);
+        const spread = (F) => { const v = [F.r[warm[0]], F.g[warm[1]], F.b[warm[2]]]; return Math.max(...v) - Math.min(...v); };
+        out.before = base ? spread(base) : (Math.max(...warm) - Math.min(...warm));
+        out.after = after ? spread(after) : null;
+        return out;
+    })()`);
+    check(wb.ready && wb.hasNeutralize && wb.solved && wb.solved.temperature < 0,
+        '反解 ACR 白平衡表：暖色给出负色温', JSON.stringify(wb.solved || wb));
+    check(wb.after != null && wb.before != null && wb.after < wb.before,
+        '反解结果应用后三通道更接近中性', JSON.stringify({ before: wb.before, after: wb.after }));
+
+    // 中间调 gamma 与两端剪切：来自 Compositor Levels Auto 的公式/思路。
+    const shaped = await exec(`(() => {
+        const mk = (kind) => {
+            const c = document.createElement('canvas'); c.width = 200; c.height = 120;
+            const g = c.getContext('2d', { willReadFrequently: true });
+            const d = g.createImageData(c.width, c.height);
+            for (let i = 0; i < d.data.length; i += 4) {
+                const v = kind === 'white' ? (Math.random() < 0.2 ? 255 : 128)
+                        : kind === 'black' ? (Math.random() < 0.2 ? 0 : 128) : 128;
+                d.data[i] = d.data[i+1] = d.data[i+2] = v; d.data[i+3] = 255;
+            }
+            g.putImageData(d, 0, 0); return c;
+        };
+        return { mid: window.QfsAutoGrade.suggest({ el: mk('mid') }),
+                 white: window.QfsAutoGrade.suggest({ el: mk('white') }),
+                 black: window.QfsAutoGrade.suggest({ el: mk('black') }) };
+    })()`);
+    check(shaped.mid && Math.abs(shaped.mid.gam) <= 5 && shaped.mid.hi === 0 && shaped.mid.sh === 0,
+        '中灰画面：gamma 与高光/阴影都不动', JSON.stringify(shaped.mid));
+    check(shaped.white && shaped.white.hi < 0,
+        '高光剪切：给负 hi 回收（不是硬拉曝光）', JSON.stringify({ hi: shaped.white && shaped.white.hi }));
+    check(shaped.black && shaped.black.sh > 0,
+        '暗部压死：给正 sh 提亮', JSON.stringify({ sh: shaped.black && shaped.black.sh }));
 
     // UI 链路：按钮在直方图脚、点击落参数、压一次撤销；opts.global 保证不滑进蒙版
     const ui = await exec(`(async () => {

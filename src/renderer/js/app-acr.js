@@ -809,6 +809,35 @@
         } catch (_) { return null; }
     }
 
+    // ── 反解白平衡（Compositor 的 neutralize 思路）──
+    // 在实测表的 9×9 温度/色调网格上搜，使一个颜色经过 WB stage 后三通道最接近。
+    // 比手调系数精确：结果直接对上我们自己的渲染器。
+    function neutralizeColor(red, green, blue) {
+        if (!T) return null;
+        const ch = (v) => Math.max(0, Math.min(255, Math.round(v)));
+        const r = ch(red), g = ch(green), b = ch(blue);
+        function spread(t, ti) {
+            const F = toneStages({ temp: t, tint: ti }, null);
+            if (!F) return Infinity;
+            const R = F.r[r], G = F.g[g], B = F.b[b];
+            return Math.max(R, G, B) - Math.min(R, G, B);
+        }
+        let bt = 0, bi = 0, bs = Infinity;
+        for (let t = -100; t <= 100; t += 10) {
+            for (let ti = -100; ti <= 100; ti += 10) {
+                const s = spread(t, ti);
+                if (s < bs) { bs = s; bt = t; bi = ti; }
+            }
+        }
+        for (let t = Math.max(-100, bt - 10); t <= Math.min(100, bt + 10); t += 2) {
+            for (let ti = Math.max(-100, bi - 10); ti <= Math.min(100, bi + 10); ti += 2) {
+                const s = spread(t, ti);
+                if (s < bs) { bs = s; bt = t; bi = ti; }
+            }
+        }
+        return { temperature: bt, tint: bi, spread: bs };
+    }
+
     window.QfsAcr = {
         ensure,
         ready: () => !!T,
@@ -818,6 +847,10 @@
         parametricDiag,
         measureBrightness,
         dehazeHaze,
+        // 反解白平衡表：找一个 Temperature/Tint，使给定 sRGB 颜色经过 WB stage 后三通道最接近。
+        // 与 Compositor 的 CameraRawTables.neutralize 同一个思路：不求解析解，直接在
+        // 实测表的 9×9 网格上搜，再在邻居里细化；结果对本渲染器是"精确"的。
+        neutralize: neutralizeColor,
         diag256: (stage) => T ? { r: toLut256(stage.r), g: toLut256(stage.g), b: toLut256(stage.b) } : null
     };
 
