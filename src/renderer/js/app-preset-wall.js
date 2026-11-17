@@ -386,7 +386,32 @@ window.App = Object.assign(window.App || {}, {
         // 滚轮：Folia 的墙是可以用滚轮走的。鼠标滚轮按格累加后逐帧追（τ=80ms），
         // 触控板/高分辨率滚轮增量小、自带惯性，直接跟手，否则再平滑一次会发飘。
         el.grid.addEventListener('wheel', (e) => {
-            if (e.ctrlKey || e.metaKey) return; // 缩放组合键不夺
+            // Ctrl / Cmd + 滚轮 = 缩放卡片（触控板 pinch 在 Chromium 里也是这个组合键）。
+            // 必须 preventDefault，否则 Electron 会去做页面级缩放，整块 UI 跟着变大。
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                if (this._wallDrag.id !== null) return;
+                let dy = e.deltaY;
+                if (e.deltaMode === 1) dy *= 16;        // 按行 → px
+                else if (e.deltaMode === 2) dy *= 120;  // 按页 → 约一格
+                if (!isFinite(dy) || dy === 0) return;
+                // 乘法步进：每 100px 约 ±10%；小增量（pinch）连续自然，且不会越界。
+                const cur = (this._wallZoomTarget != null) ? this._wallZoomTarget : this.wallCardScale();
+                this._wallZoomTarget = Math.min(WALL_CARD_SCALE_MAX, Math.max(WALL_CARD_SCALE_MIN,
+                    cur * Math.exp(-dy * 0.001)));
+                if (!this._wallWheelZoomRaf) {
+                    this._wallWheelZoomRaf = requestAnimationFrame(() => {
+                        this._wallWheelZoomRaf = 0;
+                        const v = this._wallZoomTarget;
+                        this._wallZoomTarget = null;
+                        if (v == null) return;
+                        this.setWallCardScale(v);
+                        this.syncWallZoomUI();
+                        if (this.setStatus) this.setStatus('卡片大小 ' + Math.round(v * 100) + '%');
+                    });
+                }
+                return;
+            }
             e.preventDefault();
             if (this._wallDrag.id !== null) return;
             tiltRest(); // 滚轮平移时同样撤掉 3D 倾斜卡，避免它跟着每帧重栅格
@@ -514,7 +539,7 @@ window.App = Object.assign(window.App || {}, {
         range.title = label;
         range.setAttribute('aria-valuetext', pct + '%');
         const box = document.getElementById('pwZoom');
-        if (box) box.title = label + '（拖动调节）';
+        if (box) box.title = label + '（拖动调节，或在墙上按住 Ctrl / ⌘ 滚轮）';
     },
 
     bindWallZoom() {
