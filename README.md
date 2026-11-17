@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://github.com/lumos-1s/Qing-Fram-Shadow/stargazers"><img src="https://img.shields.io/github/stars/lumos-1s/Qing-Fram-Shadow?style=flat-square&color=blue" alt="GitHub stars"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/lumos-1s/Qing-Fram-Shadow?style=flat-square&color=green" alt="MIT License"></a>
-  <a href="https://github.com/lumos-1s/Qing-Fram-Shadow/releases"><img src="https://img.shields.io/badge/version-0.1.27-orange?style=flat-square" alt="Version 0.1.27"></a>
+  <a href="https://github.com/lumos-1s/Qing-Fram-Shadow/releases"><img src="https://img.shields.io/badge/version-0.1.28-orange?style=flat-square" alt="Version 0.1.28"></a>
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-45-47848F?style=flat-square" alt="Electron 45"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?style=flat-square" alt="Windows 10/11">
 </p>
@@ -33,7 +33,7 @@
 <a id="download"></a>
 ## 下载 · Download
 
-**当前版本 v0.1.27** — 从 [GitHub Releases](https://github.com/lumos-1s/Qing-Fram-Shadow/releases) 获取 Windows 安装版（NSIS）或便携版。
+**当前版本 v0.1.28** — 从 [GitHub Releases](https://github.com/lumos-1s/Qing-Fram-Shadow/releases) 获取 Windows 安装版（NSIS）或便携版。
 
 > **English** — Grab the Windows installer or portable build from Releases. Everything is rendered on your machine; no account, no upload.
 
@@ -86,6 +86,12 @@
 
 <a id="whats-new"></a>
 ## 最近更新 · What's New
+
+### v0.1.28 · 2026-11-18
+
+- **预设墙缩放** — 按住 Ctrl / ⌘ 滚轮即可放大缩小卡片，顶部滑块也同步；缩放以视口中心的卡片为锚点，画面不飘。
+- **墙头简化** — 去掉启动页的标题与副标题，只留品牌报头，首屏更干净。
+- **打磨** — 清理遗留死代码，补齐视觉回归等测试覆盖。
 
 ### v0.1.27 · 2026-11-17
 
