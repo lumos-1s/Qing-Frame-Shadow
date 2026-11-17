@@ -2346,6 +2346,46 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .grid-preview-cap { padding: 5px var(--sp-1-5); font-size: var(--fs-11); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-2-5); margin-top: 14px; }
 
+/* ── 新手引导 ──
+   像暗房里的一张流程卡：金色品牌标记 + 等宽步号 + 发丝线分步，
+   不再用①②③圆圈、卡片底板和内联样式堆出「欢迎页」的观感。 */
+.intro-card { width: calc(560px * var(--font-scale)); max-width: 92vw; }
+.intro-masthead {
+    display: flex; align-items: center; gap: calc(13px * var(--font-scale));
+    padding: calc(18px * var(--font-scale)) calc(22px * var(--font-scale)) calc(15px * var(--font-scale));
+    border-bottom: 1px solid var(--border);
+}
+.intro-mark { width: 30px; height: 30px; flex: 0 0 auto; }
+.intro-eyebrow {
+    font-size: var(--fs-10); font-weight: 600; letter-spacing: .16em;
+    color: var(--brand-gold-text);
+}
+.intro-title {
+    margin-top: calc(4px * var(--font-scale));
+    font-size: var(--fs-20); font-weight: 600; letter-spacing: .02em; color: var(--text);
+}
+.intro-body { padding: calc(16px * var(--font-scale)) calc(22px * var(--font-scale)) 0; }
+.intro-lead { margin: 0 0 calc(14px * var(--font-scale)); font-size: var(--fs-12); line-height: 1.7; color: var(--text-3); }
+.intro-steps { list-style: none; margin: 0; padding: 0; }
+.intro-step {
+    display: flex; gap: calc(14px * var(--font-scale)); align-items: flex-start;
+    padding: calc(13px * var(--font-scale)) 0;
+    border-top: 1px solid var(--border);
+}
+.intro-num {
+    flex: 0 0 calc(28px * var(--font-scale));
+    font: 600 var(--fs-12)/1.6 ui-monospace, 'JetBrains Mono', 'Cascadia Code', monospace;
+    font-variant-numeric: tabular-nums; color: var(--brand-gold);
+}
+.intro-step-title { font-size: var(--fs-13); font-weight: 600; color: var(--text); }
+.intro-step-desc { margin: calc(4px * var(--font-scale)) 0 0; font-size: var(--fs-12); line-height: 1.65; color: var(--text-2); }
+.intro-actions {
+    margin-top: 0;
+    padding: calc(12px * var(--font-scale)) calc(22px * var(--font-scale)) calc(16px * var(--font-scale));
+    border-top: 1px solid var(--border);
+}
+.intro-footnote { margin-right: auto; font-size: var(--fs-10); color: var(--text-3); }
+
 /* ── 自定义切图比例（列 × 行） ──
    两个数字框固定 44px，避免列数变大时把“列/行”说明挤出面板。 */
 .grid-ratio-ctl { flex: 1; min-width: 0; display: flex; align-items: center; gap: calc(4px * var(--font-scale)); }

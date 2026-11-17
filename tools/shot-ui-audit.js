@@ -115,6 +115,10 @@ async function main() {
     win.setContentSize(1280, 860);
     await sleep(900);
     await shot('wall-narrow', '#presetWall');
+    // 新手引导：从「关于」重新打开，截首屏流程卡
+    await exec(`App.closePresetWall(false); App.showIntroAgain(); true`);
+    await sleep(400);
+    await shot('intro', '#introModal');
     win.destroy();
     app.exit(0);
 }

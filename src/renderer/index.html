@@ -2250,17 +2250,53 @@
 
     <!-- ═══ 新手引导(首次启动, 3 步上手) ═══ -->
     <div id="introModal" class="modal-overlay" style="display:none">
-        <div class="modal-card" style="max-width:500px;width:90%;">
-            <div class="modal-header">
-                <span class="modal-title">欢迎使用 清框影</span>
+        <div class="modal-card intro-card">
+            <div class="intro-masthead">
+                <svg class="intro-mark" viewBox="0 0 18 18" aria-hidden="true">
+                    <defs>
+                        <linearGradient id="introGold" gradientUnits="userSpaceOnUse" x1="4" y1="4" x2="14" y2="14">
+                            <stop offset="0" stop-color="#F6E3AC"/>
+                            <stop offset="0.45" stop-color="#DCBA79"/>
+                            <stop offset="1" stop-color="#A6814B"/>
+                        </linearGradient>
+                    </defs>
+                    <rect x="3.3" y="4" width="11.4" height="10" rx="1.8" fill="none" stroke="url(#introGold)" stroke-width="1.5"/>
+                    <path d="M9 5.2 V12.8" stroke="url(#introGold)" stroke-width="1.1" stroke-linecap="round"/>
+                    <path d="M9 9 H13.6" stroke="url(#introGold)" stroke-width="1.1" stroke-linecap="round"/>
+                </svg>
+                <div class="intro-masthead-text">
+                    <div class="intro-eyebrow">QINGFRAME · 三步上手</div>
+                    <div class="intro-title">从一张照片开始</div>
+                </div>
             </div>
-            <div class="modal-body" style="line-height:1.9;font-size:13px;color:var(--text);">
-                <div style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">三步上手，全程本地处理，照片与设置不上传。</div>
-                <div class="intro-step" style="background:var(--bg-soft,#f2f4f3);border:1px solid var(--border,#dfe4e1);border-radius:10px;padding:12px 14px;margin-bottom:10px;"><b>① 选择风格</b><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">启动即进入风格墙：现成风格直接套用（<span id="introStatsText">91 款边框</span>），点卡片即可开始编辑</div></div>
-                <div class="intro-step" style="background:var(--bg-soft,#f2f4f3);border:1px solid var(--border,#dfe4e1);border-radius:10px;padding:12px 14px;margin-bottom:10px;"><b>② 导入照片</b><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">进入编辑后点「导入照片 / 导入文件夹」，或直接把图片、文件夹拖进窗口；也支持 Ctrl+V 粘贴截图</div></div>
-                <div class="intro-step" style="background:var(--bg-soft,#f2f4f3);border:1px solid var(--border,#dfe4e1);border-radius:10px;padding:12px 14px;margin-bottom:6px;"><b>③ 调参导出</b><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">右侧调整参数 / 签名 / Logo / 品牌水印，满意后点「导出」</div></div>
+            <div class="modal-body intro-body">
+                <p class="intro-lead">全部在本地完成。没有账号，照片与设置不上传。</p>
+                <ol class="intro-steps">
+                    <li class="intro-step">
+                        <span class="intro-num" aria-hidden="true">01</span>
+                        <div class="intro-step-text">
+                            <div class="intro-step-title">挑一个边框</div>
+                            <p class="intro-step-desc">启动页就是风格墙，现成样式直接套用（<span id="introStatsText">91 款边框</span>）；点卡片进入编辑。</p>
+                        </div>
+                    </li>
+                    <li class="intro-step">
+                        <span class="intro-num" aria-hidden="true">02</span>
+                        <div class="intro-step-text">
+                            <div class="intro-step-title">放进你的照片</div>
+                            <p class="intro-step-desc">点工具栏「导入」，或直接把图片 / 文件夹拖进窗口；Ctrl+V 可粘贴截图。</p>
+                        </div>
+                    </li>
+                    <li class="intro-step">
+                        <span class="intro-num" aria-hidden="true">03</span>
+                        <div class="intro-step-text">
+                            <div class="intro-step-title">调整，然后导出</div>
+                            <p class="intro-step-desc">右侧改参数 / 签名 / Logo / 水印，满意后点「导出」。导出始终是原图分辨率。</p>
+                        </div>
+                    </li>
+                </ol>
             </div>
-            <div class="modal-actions">
+            <div class="modal-actions intro-actions">
+                <span class="intro-footnote">可在「设置 → 关于」重新查看</span>
                 <button id="btnIntroDone" class="ub-btn primary">开始使用</button>
             </div>
         </div>
