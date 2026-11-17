@@ -47,7 +47,6 @@ async function main() {
         const r = {};
         const btn = document.getElementById('pwCovers');
         const grid = document.getElementById('presetWallGrid');
-        const sub = document.getElementById('pwSub');
         const pickTile = () => [...document.querySelectorAll('.pw-tile')].find((x) => {
             const b = x.getBoundingClientRect();
             return b.left > 80 && b.top > 80 && b.right < innerWidth - 80 && b.bottom < innerHeight - 80;
@@ -60,6 +59,7 @@ async function main() {
         const cb = tile.querySelector('.pw-tile-coverbtn');
         const st = getComputedStyle(cb);
         r.idle = { opacity: st.opacity, pe: st.pointerEvents, tabIndex: cb.tabIndex, text: cb.textContent };
+        r.idleTitle = btn.title;
 
         // ② 进入封面模式
         btn.click();
@@ -68,7 +68,7 @@ async function main() {
             text: btn.textContent,
             cls: grid.classList.contains('pw-cover-mode'),
             pressed: btn.getAttribute('aria-pressed'),
-            sub: sub.textContent,
+            title: btn.title,
             opacity: getComputedStyle(cb).opacity,
             pe: getComputedStyle(cb).pointerEvents,
         };
@@ -209,7 +209,7 @@ async function main() {
     check(out.idle.tabIndex === -1, '按钮不进 Tab 焦点序（360 张卡不会各多一个焦点）', String(out.idle.tabIndex));
     check(out.modeOn.text === '完成' && out.modeOn.cls === true && out.modeOn.pressed === 'true', '顶部「换封面」进入封面模式', JSON.stringify(out.modeOn));
     check(out.modeOn.opacity === '1' && out.modeOn.pe === 'auto', '模式内入口常显可点');
-    check(/点任意卡片/.test(out.modeOn.sub), '副标题给出模式内操作说明', out.modeOn.sub);
+    check(out.modeOn.text === '完成' && /换封面/.test(out.idleTitle || ''), '进入封面模式后按钮变为「完成」', JSON.stringify({ on: out.modeOn.text, idle: out.idleTitle }));
     check(out.modeClick.picked === out.name && out.modeClick.entered === null && out.modeClick.stillWall, '模式内点卡片 = 换封面（不会误进编辑器）', JSON.stringify(out.modeClick));
     check(out.afterEsc.text === '换封面' && out.afterEsc.cls === false && out.afterEsc.opacity === '0', 'Esc 退出模式并复原', JSON.stringify(out.afterEsc));
     check(out.afterPick.sameName >= 1 && out.afterPick.marked === out.afterPick.sameName, '同一预设的所有拷贝一起换上自定义封面', out.afterPick.marked + '/' + out.afterPick.sameName);

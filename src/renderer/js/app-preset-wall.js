@@ -63,7 +63,6 @@ window.App = Object.assign(window.App || {}, {
             grid: $('presetWallGrid'),
             wall: null,   // wrapper：整墙 transform 平移
             block: null,  // 周期网格块（90 格）
-            sub: $('pwSub'),
             skip: $('pwSkip'),
             photo: $('pwPhoto'),
             mode: $('pwMode'),
@@ -521,8 +520,6 @@ window.App = Object.assign(window.App || {}, {
         }
         const rail = (this._wallDom && this._wallDom.rail) || document.getElementById('pwRail');
         if (rail) rail.hidden = mode !== 'finite';
-        const sub = (this._wallDom && this._wallDom.sub) || document.getElementById('pwSub');
-        if (sub) sub.textContent = this.wallSubText();
         this.updateWallRail();
         this.syncWallZoomUI();
         return mode;
@@ -562,22 +559,6 @@ window.App = Object.assign(window.App || {}, {
         range.addEventListener('change', () => {
             if (typeof this.setStatus === 'function') this.setStatus('卡片大小 ' + range.value + '%');
         });
-    },
-
-    // 副标题：有限墙把"不循环"直接写在脸上，比任何图标都省解释
-    wallSubText() {
-        const data = window.PRESET_WALL;
-        const n = (data && Array.isArray(data.items) && data.items.length) || 87;
-        if (this._wallPhotoMode) {
-            const done = Math.min(this._wallPhotoDone || 0, n);
-            if (this._wallPhotoRunning && done < n) {
-                return '当前照片 · 正在渲染 ' + done + '/' + n + ' …';
-            }
-            return n + ' 种预设 · 当前照片实时预览 · 点击卡片套用';
-        }
-        return this.wallMode() === 'finite'
-            ? n + ' 种预设 · 单屏不循环 · 拖到头即止 · 点击卡片进入编辑'
-            : n + ' 种预设 · 按住拖动浏览 · 点击卡片进入编辑';
     },
 
     // 墙的几何：两种模式共用同一张 9×10 网格、同一套卡片尺寸 —— 切模式时墙不该"换个版面"，
@@ -996,9 +977,6 @@ window.App = Object.assign(window.App || {}, {
                 ? '退出封面编辑'
                 : '给预设换封面：点这里，再点任意卡片选图（也可以直接把鼠标移到卡片上点「换封面」）';
         }
-        if (el.sub) el.sub.textContent = next
-            ? '点任意卡片更换封面 · 右键可恢复默认 · 再点一次「完成」退出'
-            : this.wallSubText();
         // 进模式时强制扫一次：按钮描金依赖"这预设有没有自定义封面"，用户可能刚在文件管理器里放过图
         if (next) this.refreshWallCovers(true);
         if (!next && typeof this.closeCtx === 'function') this.closeCtx();
@@ -1417,7 +1395,6 @@ window.App = Object.assign(window.App || {}, {
     updateWallPhotoProgress() {
         const el = this._wallDom;
         if (!el) return;
-        if (el.sub && this._wallPhotoMode) el.sub.textContent = this.wallSubText();
         if (el.grid) el.grid.setAttribute('aria-busy', this._wallPhotoRunning ? 'true' : 'false');
     },
 
@@ -1430,7 +1407,6 @@ window.App = Object.assign(window.App || {}, {
             ? window.PRESET_WALL
             : null;
         if (!data || !data.items.length) {
-            if (el.sub) el.sub.textContent = '预设数据加载失败';
             return;
         }
         const wall = document.createElement('div');
@@ -1547,7 +1523,6 @@ window.App = Object.assign(window.App || {}, {
         this.layoutWallTiles();
         // 墙整体淡入（卡片自身不做动画，transform 由 JS 接管）；降级动效时直接出现
         if (!this.wallReducedMotion()) wall.style.animation = 'pwWallIn .55s ease-out both';
-        if (el.sub) el.sub.textContent = this.wallSubText();
         // 重建后每个 tile 的 img 又回到内置封面：把用户自备的封面重新贴回来，
         // 否则「无限/有限」切一下，换过的封面就变回原样（要等下次开墙才回来）。
         this.refreshWallCovers();

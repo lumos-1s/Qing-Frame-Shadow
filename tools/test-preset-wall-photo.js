@@ -16,7 +16,6 @@ process.stderr.on('error', () => {});
 const ROOT = path.join(__dirname, '..');
 const PRESET_DIR = path.join(ROOT, 'shared', 'presets');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const failures = [];
 
 // ── IPC mock：与真实主进程契约一致（list-presets 不带 .json） ──
 ipcMain.handle('list-presets', () => fs.readdirSync(PRESET_DIR)
@@ -50,11 +49,6 @@ ipcMain.handle('get-app-info', () => ({
     platform: 'win32', arch: 'x64', packaged: false, portable: false,
     userData: process.env.TEMP, appPath: ROOT
 }));
-
-function check(ok, label, extra) {
-    console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}${extra ? ' | ' + extra : ''}`);
-    if (!ok) failures.push(`${label}${extra ? ': ' + extra : ''}`);
-}
 
 const CHECK = `
 async () => {
@@ -122,8 +116,8 @@ async () => {
         'hidden=' + !!(btn && btn.hidden) + ' mode=' + !!A._wallPhotoMode + ' class=' + grid.classList.contains('pw-photo-mode'),
         'hidden=false mode=true class=true');
     add('按钮进入后变成「看封面」', btn && btn.textContent === '看封面', btn && btn.textContent, '看封面');
-    add('副标题说明正在用当前照片', /当前照片/.test((document.getElementById('pwSub') || {}).textContent || ''),
-        (document.getElementById('pwSub') || {}).textContent, '包含 当前照片');
+    add('按钮显示选中态（当前照片预览）', btn && btn.classList.contains('is-on'),
+        btn && btn.className, '带 is-on');
 
     // 等 88 张全部渲染完（软件渲染下每张 5~25ms，多留余量）
     const total = items.length;
@@ -199,8 +193,8 @@ async () => {
     add('切有限墙后保留本图预览', finiteTiles.length === total && finiteData === finiteTiles.length && A._wallPhotoMode,
         'tiles=' + finiteTiles.length + ' data=' + finiteData + ' mode=' + A._wallPhotoMode,
         'tiles=' + total + ' data=' + total);
-    add('切有限墙后副标题仍是当前照片', /当前照片/.test((document.getElementById('pwSub') || {}).textContent || ''),
-        (document.getElementById('pwSub') || {}).textContent, '包含 当前照片');
+    add('切有限墙后仍是当前照片模式', A._wallPhotoMode === true,
+        'mode=' + A._wallPhotoMode, 'mode=true');
 
     // 切回封面
     btn.click();

@@ -927,17 +927,7 @@ window.App = {
             this.template.paramColor = cbPC.value;
             this.onSettingChanged();
         });
-        // 头像上传(存全局)
-        const btnAv = document.getElementById('btnUploadAvatar'), fileAv = document.getElementById('fileAvatar');
-        if (btnAv && fileAv) {
-            btnAv.addEventListener('click', () => fileAv.click());
-            fileAv.addEventListener('change', (e) => {
-                const f = e.target.files[0]; if (!f) return;
-                const reader = new FileReader();
-                reader.onload = (ev) => this.saveUserAvatar(ev.target.result);
-                reader.readAsDataURL(f);
-            });
-        }
+        // 头像上传走 app-view.js 的 bindAvatarUpload()（昵称与头像弹窗里的「选择图片」）。
         this.bindAvatarUpload();
         this.bindInteractive();
     },
