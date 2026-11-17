@@ -799,13 +799,12 @@ window.App = Object.assign(window.App || {}, {
             最近使用: ['M8 3a5 5 0 1 0 0 10A5 5 0 1 0 8 3z', 'M8 5.2V8l2 1.4'],
             其他: ['M3.5 3.5h9v9h-9z']
         };
-        const GROUP_GLYPHS = { 光影: '✧', 水印: '◌', 票根: '▣', 邮票: '▤', 个性: '◉', 潮流: '◇', 高级感: '◆', 艺术: '✦', 极简: '○', 胶片: '▥', 质感: '▦', 手作: '✂', 复古: '◷', 杂志: '▥', 氛围: '☾', 比例: '▭', 其他: '▢', 收藏: '★', 最近使用: '◷' };
         const SVG_NS = 'http://www.w3.org/2000/svg';
         const makeGroupIcon = (key) => {
             const wrap = document.createElement('span');
             wrap.className = 'g-icon';
-            const paths = GROUP_ICONS[key];
-            if (!paths) { wrap.textContent = GROUP_GLYPHS[key] || '▢'; return wrap; }
+            // 未登记的分类也走同一套线性图标，不再回落成彩色几何字符。
+            const paths = GROUP_ICONS[key] || GROUP_ICONS.其他;
             const svg = document.createElementNS(SVG_NS, 'svg');
             svg.setAttribute('viewBox', '0 0 16 16');
             svg.setAttribute('fill', 'none');
@@ -833,24 +832,11 @@ window.App = Object.assign(window.App || {}, {
             if (custom && typeof this.coverUrl === 'function') return this.coverUrl(custom);
             return coverByName.get(name) || '';
         };
+        // 没有封面时用名字首字做铅字块：比几十个含义含糊的 emoji 更安静，
+        // 也不会随系统 emoji 字体忽大忽小、忽彩忽灰。
         const iconFor = name => {
-            const kw = [
-                ['拼贴', '🧩'], ['霓虹', '🪩'], ['光环', '✨'], ['双', '📎'], ['星', '🌌'], ['极光', '🌈'],
-                ['渐变', '🌈'], ['边框', '🖼️'], ['白框', '🖼️'], ['卡片', '💳'], ['卡', '🔲'], ['票根', '🎫'],
-                ['相机', '📷'], ['胶片', '🎞️'], ['胶卷', '🎞️'], ['电影', '🎬'], ['银幕', '🎬'], ['宽银幕', '🎬'],
-                ['撕裂', '💥'], ['双重曝光', '📸'], ['曝光', '📸'], ['杂志', '📰'], ['大刊头', '📰'], ['页眉', '📰'],
-                ['封面', '📕'], ['报纸', '📰'], ['海报', '🖼️'], ['波普', '🌀'],
-                ['极简', '⚪'], ['简约', '🗒️'], ['细线', '➖'], ['编号', '🔢'], ['日期', '📅'],
-                ['复古', '📻'], ['登机牌', '🎫'], ['深色', '🌑'], ['身份卡', '🪪'], ['苹果', '🍎'],
-                ['小红', '❤️'], ['cream', '🍰'], ['奶油', '🍰'], ['醒图', '🍰'], ['琉璃', '🍯'],
-                ['牛仔', '👖'], ['布纹', '🧵'], ['磨砂', '🌫️'], ['毛玻璃', '🌫️'], ['玻璃', '🪟'],
-                ['晨雾', '🌫️'], ['金箔', '🥇'], ['奢华', '👑'], ['丝绒', '🧶'], ['参数', '🔤'],
-                ['logo', '🔤'], ['留白', '🌬️'], ['画廊', '🏛️'], ['画框', '🖼️'], ['分层', '🗂️'],
-                ['胶片条', '🎞️'], ['比例', '📐'], ['信息条', 'ℹ️'], ['背景模糊', '🌫️'], ['模糊', '🌸']
-            ];
-            const n = String(name || '');
-            for (const [k, ic] of kw) if (n.includes(k)) return ic;
-            return '💠';
+            const n = String(name || '').trim();
+            return n ? n.charAt(0) : '·';
         };
         const groups = new Map();
         for (const p of this.presets) {
@@ -892,10 +878,13 @@ window.App = Object.assign(window.App || {}, {
             label.className = 'preset-name';
             label.textContent = p.templateName;
             item.appendChild(label);
-            const star = document.createElement('span');
-            star.textContent = favs.includes(p.templateName) ? '★' : '☆';
-            star.style.cssText = 'margin-left:auto;cursor:pointer;font-size:14px;color:#f59e0b;padding:0 4px;';
-            star.title = '收藏/取消收藏';
+            const star = document.createElement('button');
+            star.type = 'button';
+            const isFav = favs.includes(p.templateName);
+            star.className = 'preset-fav' + (isFav ? ' is-fav' : '');
+            star.textContent = isFav ? '★' : '☆';
+            star.title = isFav ? '取消收藏' : '收藏';
+            star.setAttribute('aria-label', star.title);
             star.addEventListener('click', (e) => { e.stopPropagation(); this.toggleFav(p.templateName); });
             item.appendChild(star);
             item.title = '单击应用「' + p.templateName + '」；鼠标停留可在照片上预览';

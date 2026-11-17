@@ -551,7 +551,7 @@ window.App = Object.assign(window.App || {}, {
             return n + ' 种预设 · 当前照片实时预览 · 点击卡片套用';
         }
         return this.wallMode() === 'finite'
-            ? n + ' 种预设 · 有限边界 · 点击卡片进入编辑'
+            ? n + ' 种预设 · 单屏不循环 · 拖到头即止 · 点击卡片进入编辑'
             : n + ' 种预设 · 按住拖动浏览 · 点击卡片进入编辑';
     },
 

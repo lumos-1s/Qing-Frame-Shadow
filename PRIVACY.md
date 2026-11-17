@@ -1,6 +1,6 @@
 # Privacy policy
 
-清框影 / QingFramShadow is a local-first Windows desktop application.
+清框影 / QINGFRAME is a local-first Windows desktop application.
 
 ## Photos and project data
 

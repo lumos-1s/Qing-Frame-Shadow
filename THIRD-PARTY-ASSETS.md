@@ -1,8 +1,8 @@
 # 第三方素材声明 · Third-Party Assets Notice
 
-本文件说明「清框影 / Frame Studio」仓库中**哪些内容适用 MIT 许可、哪些不适用**。
+本文件说明「清框影 / QINGFRAME」仓库中**哪些内容适用 MIT 许可、哪些不适用**。
 
-This file explains which parts of the Qingframe / Frame Studio repository are covered by
+This file explains which parts of the Qingframe / QINGFRAME repository are covered by
 the MIT License and which are not.
 
 ---

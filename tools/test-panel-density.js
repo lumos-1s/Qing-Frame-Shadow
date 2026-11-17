@@ -255,7 +255,7 @@ async function main() {
             `compact=${res.forcedCompact} comfortable=${res.forcedComfortable}`);
         check(res.backAuto.pref === 'auto' && res.backAuto.compact === true,
             '切回自动档恢复「调色紧凑」', JSON.stringify(res.backAuto));
-        check(res.modeHidden && /样式 · /.test(res.styleInStatus),
+        check(res.modeHidden && /(样式|预设) · /.test(res.styleInStatus),
             '当前样式条从参数栏顶部移到状态栏', res.styleInStatus);
         check(res.rawProxy.hidden === false && res.rawProxy.text === 'RAW 代理'
             && res.rawFull === 'RAW 全尺寸' && res.rawOff === true,

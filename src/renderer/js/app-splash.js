@@ -32,6 +32,6 @@ window.App = Object.assign(window.App || {}, {
         if (!el || !el.parentNode) return;
         this.splashStatus('');
         el.classList.add('splash-hide');
-        setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 400);
+        setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 180);
     }
 });

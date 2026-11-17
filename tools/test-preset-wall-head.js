@@ -51,15 +51,15 @@ const MEASURE = `(() => {
                  right: Math.round(r.right), bottom: Math.round(r.bottom), sw: el.scrollWidth, cw: el.clientWidth };
     };
     const m = {};
-    for (const k of ['brand', 'meta', 'title', 'sub', 'tools', 'acts', 'winbtns', 'right', 'head']) {
+    for (const k of ['brand', 'meta', 'title', 'sub', 'tools', 'acts', 'winbtns', 'right', 'head', 'rail', 'grid']) {
         const sel = { brand: '.pw-brand', meta: '.pw-head-meta', title: '.pw-title', sub: '.pw-sub',
             tools: '.pw-head-tools', acts: '.pw-head-acts', winbtns: '.pw-winbtns',
-            right: '.pw-head-right', head: '.pw-head' }[k];
+            right: '.pw-head-right', head: '.pw-head', rail: '.pw-rail', grid: '.pw-grid' }[k];
         m[k] = pick(sel);
     }
     m.vw = innerWidth;
     m.offset = m.title ? Math.round((m.title.x + m.title.right) / 2 - m.vw / 2) : null;
-    m.headStyle = getComputedStyle(document.querySelector('.pw-head')).gridTemplateAreas;
+    m.headStyle = getComputedStyle(document.querySelector('.pw-head')).display;
     return m;
 })()`;
 
@@ -93,6 +93,7 @@ async function main() {
     await exec(`(() => {
         if (window.App && App.initPresetWall) App.initPresetWall();
         if (window.App && App.openPresetWall) App.openPresetWall(false);
+        if (window.App && App.setWallMode) App.setWallMode('finite');
         return true;
     })()`);
     await sleep(700);
@@ -100,7 +101,7 @@ async function main() {
     const verify = async (label, isNarrow) => {
         const m = await exec(MEASURE);
         const pairs = [
-            ['brand', 'meta'], ['brand', 'tools'], ['brand', 'acts'], ['brand', 'winbtns'],
+            ['brand', 'tools'], ['brand', 'acts'], ['brand', 'winbtns'],
             ['title', 'tools'], ['title', 'acts'], ['title', 'winbtns'],
             ['sub', 'tools'], ['sub', 'acts'], ['sub', 'winbtns']
         ];
@@ -109,21 +110,29 @@ async function main() {
         check(m.title && m.sub && m.title.sw <= m.title.cw + 1 && m.sub.sw <= m.sub.cw + 1,
             `${label}：标题与副标题文字没有溢出自己的盒子`,
             JSON.stringify({ title: m.title, sub: m.sub }));
-        check(m.offset !== null && Math.abs(m.offset) <= 4, `${label}：标题水平居中`, `offset=${m.offset}`);
+        check(m.brand && m.title && m.sub
+            && Math.abs(m.brand.x - m.title.x) <= 2 && Math.abs(m.sub.x - m.title.x) <= 2,
+            `${label}：品牌/标题/副标题左对齐成一列`,
+            JSON.stringify({ brandX: m.brand && m.brand.x, titleX: m.title && m.title.x, subX: m.sub && m.sub.x }));
         check(m.tools && m.acts && m.winbtns && m.head
             && m.tools.bottom <= m.head.bottom + 1
             && m.acts.bottom <= m.head.bottom + 1
             && m.winbtns.bottom <= m.head.bottom + 1,
             `${label}：三组控件都留在顶部栏内`, JSON.stringify({ head: m.head, tools: m.tools, acts: m.acts }));
+        check(m.rail && m.head && m.grid && m.rail.h > 0
+            && m.rail.y >= m.head.bottom - 1 && m.rail.bottom <= m.grid.bottom + 2,
+            `${label}：有限墙进度条贴在网格内，不穿进头部`,
+            JSON.stringify({ rail: m.rail, headBottom: m.head && m.head.bottom, gridBottom: m.grid && m.grid.bottom }));
         if (isNarrow) {
             // 窄窗：控件整组落到第二行，不能和第一行的标题/副标题抢高度
-            check(m.tools && m.sub && m.tools.y >= m.sub.bottom - 2,
-                `${label}：窄窗控件落在第二行，不压标题`,
-                JSON.stringify({ subBottom: m.sub && m.sub.bottom, toolsY: m.tools && m.tools.y }));
+            check(m.right && m.meta && m.right.y >= m.meta.bottom - 2,
+                `${label}：窄窗控件整组落到第二行`,
+                JSON.stringify({ metaBottom: m.meta && m.meta.bottom, rightY: m.right && m.right.y }));
         } else {
-            // 宽屏/全屏：仍是一行布局，控件与标题同一行
-            check(m.tools && m.title && Math.abs(m.tools.y - m.title.y) < 40,
-                `${label}：宽屏仍是一行布局`, JSON.stringify({ titleY: m.title && m.title.y, toolsY: m.tools && m.tools.y }));
+            // 宽屏/全屏：仍是一行布局，控件与标题块底边对齐
+            check(m.right && m.meta && Math.abs(m.right.bottom - m.meta.bottom) <= 5,
+                `${label}：宽屏仍是一行布局`,
+                JSON.stringify({ metaBottom: m.meta && m.meta.bottom, rightBottom: m.right && m.right.bottom }));
         }
     };
 

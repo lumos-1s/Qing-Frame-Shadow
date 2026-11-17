@@ -1,6 +1,6 @@
 <a id="readme-top"></a>
 <p align="center">
-  <img src="assets/readme/hero.svg" width="100%" alt="清框影 QingFramShadow — 本地照片加框工具">
+  <img src="assets/readme/hero.svg" width="100%" alt="清框影 QINGFRAME — 本地照片加框工具">
 </p>
 
 <p align="center">

@@ -578,7 +578,6 @@ window.App = {
             tabs: $('inspTabs'), panels: Array.from(document.querySelectorAll('.tab-panel')),
             stRes: $('stRes'), stInfo: $('stInfo'), stCanvas: $('stCanvas'),
             btnCompare: $('btnCompare'),
-            loginStatus: $('loginStatus'),
             loginModal: $('loginModal'),
             loginModalClose: $('loginModalClose'),
             loginUsername: $('loginUsername'),
@@ -745,7 +744,10 @@ window.App = {
         const btnExportRetry = document.getElementById('btnExportRetry');
         if (btnExportRetry) btnExportRetry.addEventListener('click', () => this._retryFailedExport());
         this.updateTopBar();
-            d.loginStatus.addEventListener('click', () => this.openLoginModal());
+        // 顶栏不再放账号入口：昵称/头像只服务「签名 / 头像」参数，
+        // 入口跟着那组参数走，工作台里不再出现一个像账号系统的头像环。
+        const btnUserProfile = document.getElementById('btnEditUserProfile');
+        if (btnUserProfile) btnUserProfile.addEventListener('click', () => this.openLoginModal());
         d.loginModalClose.addEventListener('click', () => this.closeLoginModal());
         d.loginModal.addEventListener('mousedown', e => { if (e.target === d.loginModal) this.closeLoginModal(); });
         d.loginSubmit.addEventListener('click', () => this.doLogin());
@@ -941,27 +943,9 @@ window.App = {
     },
 
     updateTopBar() {
-        // 名字以本地用户资料为准;旧版 qfs_username/qfs_nickname 只作兜底。
-        // 以前只读 localStorage:设置头像后 updateTopBar 会把顶栏名字刷回「未登录」。
-        const u = this.user;
-        const name = (u && (u.nickname || u.username)) || localStorage.getItem('qfs_username') || localStorage.getItem('qfs_nickname') || '';
-        const topName = document.getElementById('topUserName');
-        const topAv = document.getElementById('topAvatar');
-        if (topName) topName.textContent = name || '设置用户';
-        if (topAv) {
-            const av = localStorage.getItem('qfs_user_avatar');
-            if (av) { topAv.style.background = 'url(' + av + ') center/cover'; topAv.textContent = ''; }
-            else {
-                topAv.style.background = 'var(--avatar-bg)';
-                // 没头像:有名字用首字,没有就「＋」,和旁边的「设置用户」呼应
-                topAv.style.display = 'flex';
-                topAv.style.alignItems = 'center';
-                topAv.style.justifyContent = 'center';
-                topAv.style.fontSize = '12px';
-                topAv.style.color = 'var(--avatar-fg)';
-                topAv.textContent = name ? name.charAt(0) : '＋';
-            }
-        }
+        // 兼容旧调用点：账号入口已从顶栏移走，用户资料的显示位置是
+        // 「签名 / 头像」参数组里的按钮，统一由 refreshLoginStatus 回写。
+        this.refreshLoginStatus();
     },
     // 「签名/头像行」默认关的风格(票根/电影票):预设里的空签名就是「本预设不带签名」,
     // 不能被默认签名重新带出来。这张名单只从 style-caps 取,避免引擎/预设两处各维护一份。
@@ -2437,7 +2421,9 @@ window.App = {
             }
             // 顶部横幅不再常驻：同样的信息收进底部状态栏的一格，
             // 每个页签都省下一行。ms 仍留在 DOM 里，兼容老代码与旧草稿检查。
-            if (window.QfsPanelDensity) window.QfsPanelDensity.setStyleLabel(kind + (name ? ' · ' + name : ''));
+            // 状态栏只写预设名：'相框样式 / 卡片 / 图层边框' 是内部管线词，
+            // 用户看不出区别，写进去只会让状态栏像调试输出。
+            if (window.QfsPanelDensity) window.QfsPanelDensity.setStyleLabel(name || kind);
             ms.style.display = 'none';
             ms.textContent = '当前样式：' + kind + (name ? ' · ' + name : '');
         }

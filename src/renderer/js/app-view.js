@@ -300,7 +300,7 @@ window.App = Object.assign(window.App || {}, {
             if (!guide && /失败|错误|不支持|不可用|无法|未找到|未加载|请先|请输入|至少保留|没有可|不存在|异常|缺失|未知原因/.test(m)) level = ' st-err';
             else if (!guide && /已|完成|成功/.test(m)) level = ' st-ok';
             this.dom.stCanvas.className = 'st-item grow' + level;
-            this.dom.stCanvas.textContent = `画布 ${this.canvasW()}×${this.canvasH()}` + (m ? ` · ${m}` : '');
+            this.dom.stCanvas.textContent = `输出 ${this.canvasW()}×${this.canvasH()}` + (m ? ` · ${m}` : '');
         }
     },
     canvasW() { return this.dom.canvas ? (this.dom.canvas._logW || this.dom.canvas.width) : 0; },
@@ -379,9 +379,9 @@ window.App = Object.assign(window.App || {}, {
         const rawTag = im.raw
             ? (im.raw.fullPending ? ' · RAW 显影中' : (im.raw.full ? ' · RAW' : ' · RAW 代理'))
             : '';
-        this.dom.stRes.textContent = `${im.w}×${im.h}${rawTag}`;
-        this.dom.stInfo.textContent = `${this.currentIdx + 1}/${this.images.length} · ${im.name}`;
-        this.setStatus(this.statusMsg && !this.statusMsg.startsWith('画布') ? this.statusMsg : '');
+        this.dom.stRes.textContent = `原片 ${im.w}×${im.h}${rawTag}`;
+        this.dom.stInfo.textContent = `${im.name} · ${this.currentIdx + 1}/${this.images.length}`;
+        this.setStatus(this.statusMsg && !this.statusMsg.startsWith('输出') ? this.statusMsg : '');
     },
 
     toggleTheme() {
@@ -450,18 +450,18 @@ window.App = Object.assign(window.App || {}, {
         if (av) { d.loginAvatar.style.background = 'url(' + av + ') center/cover'; d.loginAvatar.textContent = ''; }
         else { d.loginAvatar.style.background = 'var(--avatar-bg)'; d.loginAvatar.textContent = ''; }
         d.loginDisplayName.textContent = name;
-        d.loginUsernameDisplay.textContent = '@' + this.user.username;
+        d.loginUsernameDisplay.textContent = '仅保存在本机 · 用于签名 / 头像';
     },
 
     async doLogin() {
         const username = this.dom.loginUsername.value.trim();
-        if (!username) { this.setStatus('请输入用户名'); return; }
+        if (!username) { this.setStatus('请输入名称'); return; }
         const nickname = this.dom.loginNickname.value.trim() || username;
         this.user = { username, nickname, createdAt: Date.now() };
         try {
             await window.qingframe.saveUser(this.user);
             this.closeLoginModal();
-            this.setStatus(`已保存用户「${nickname}」`);
+            this.setStatus(`已保存「${nickname}」`);
             this.updateTopBar();
         } catch (e) {
             this.setStatus('保存失败：' + e.message);
@@ -474,10 +474,10 @@ window.App = Object.assign(window.App || {}, {
             await window.qingframe.logoutUser();
             this.user = null;
             this.closeLoginModal();
-            // 旧版遗留键一并清掉,否则顶栏会从 localStorage 里读出一个已经不存在的名字
+            // 旧版遗留键一并清掉，避免下次启动又读出一个已经不存在的名字
             localStorage.removeItem('qfs_username');
             localStorage.removeItem('qfs_nickname');
-            this.setStatus('已清除用户资料');
+            this.setStatus('已清除名称');
             this.updateTopBar();
         } catch (e) {
             this.setStatus('清除失败：' + e.message);
@@ -486,15 +486,14 @@ window.App = Object.assign(window.App || {}, {
     },
 
     refreshLoginStatus() {
-        const pill = this.dom.loginStatus;
-        // 名字写在 span 上,不能写 pill.textContent —— 那会把头像和名字节点整个抹掉,
-        // 之后 updateTopBar 的 getElementById('topUserName'/'topAvatar') 全是 null(头像永远不显示)
-        const nameEl = document.getElementById('topUserName');
+        // 顶栏不再有账号入口。用户资料只服务「签名 / 头像」参数，
+        // 入口就是那个参数组里的按钮，这里只把已有昵称写在按钮上。
+        const btn = document.getElementById('btnEditUserProfile');
+        if (!btn) return;
         const name = this.user ? (this.user.nickname || this.user.username).trim() : '';
-        if (nameEl) nameEl.textContent = name || '设置用户';
-        if (pill) {
-            pill.classList.toggle('logged-in', !!this.user);
-            pill.title = this.user ? ('@' + this.user.username + ' · 点击管理') : '点击设置用户信息（用于签名/头像）';
-        }
+        btn.textContent = name ? '昵称与头像 · ' + name : '昵称与头像…';
+        btn.title = this.user
+            ? ('@' + this.user.username + ' · 点击修改；仅保存在本机')
+            : '设置昵称与头像；仅保存在本机，用于签名 / 头像参数';
     },
 });

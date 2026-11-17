@@ -168,7 +168,7 @@
     function setStyleLabel(text) {
         const el = $('stStyle');
         if (!el) return;
-        el.textContent = text ? '样式 · ' + text : '';
+        el.textContent = text ? '预设 · ' + text : '';
         el.hidden = !text;
     }
 
