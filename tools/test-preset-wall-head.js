@@ -1,5 +1,6 @@
-// 预设墙顶部栏：非全屏（窗口变窄 / 界面缩放放大）时，标题与副标题不得被右侧控件压住。
+// 预设墙顶部栏：窗口变窄 / 界面缩放放大时，左侧报头（品牌行）不得被右侧控件压住。
 // 这个 bug 最初是人工截图发现的，这里把量测固化成断言，覆盖窄窗两行布局与宽屏一行布局。
+// 墙头现只保留品牌行（标题/副标题已去掉），断言围绕 .pw-head-meta 与右侧控件展开。
 // 用法: node tools/run-electron.js tools/test-preset-wall-head.js
 'use strict';
 
@@ -51,14 +52,13 @@ const MEASURE = `(() => {
                  right: Math.round(r.right), bottom: Math.round(r.bottom), sw: el.scrollWidth, cw: el.clientWidth };
     };
     const m = {};
-    for (const k of ['brand', 'meta', 'title', 'sub', 'tools', 'acts', 'winbtns', 'right', 'head', 'rail', 'grid']) {
-        const sel = { brand: '.pw-brand', meta: '.pw-head-meta', title: '.pw-title', sub: '.pw-sub',
+    for (const k of ['brand', 'meta', 'tools', 'acts', 'winbtns', 'right', 'head', 'rail', 'grid']) {
+        const sel = { brand: '.pw-brand', meta: '.pw-head-meta',
             tools: '.pw-head-tools', acts: '.pw-head-acts', winbtns: '.pw-winbtns',
             right: '.pw-head-right', head: '.pw-head', rail: '.pw-rail', grid: '.pw-grid' }[k];
         m[k] = pick(sel);
     }
     m.vw = innerWidth;
-    m.offset = m.title ? Math.round((m.title.x + m.title.right) / 2 - m.vw / 2) : null;
     m.headStyle = getComputedStyle(document.querySelector('.pw-head')).display;
     return m;
 })()`;
@@ -102,18 +102,12 @@ async function main() {
         const m = await exec(MEASURE);
         const pairs = [
             ['brand', 'tools'], ['brand', 'acts'], ['brand', 'winbtns'],
-            ['title', 'tools'], ['title', 'acts'], ['title', 'winbtns'],
-            ['sub', 'tools'], ['sub', 'acts'], ['sub', 'winbtns']
+            ['meta', 'tools'], ['meta', 'acts'], ['meta', 'winbtns']
         ];
         const bad = pairs.filter(([a, b]) => overlap(m[a], m[b])).map((p) => p.join('/'));
-        check(bad.length === 0, `${label}：标题/副标题/品牌与右侧控件无重叠`, JSON.stringify(bad));
-        check(m.title && m.sub && m.title.sw <= m.title.cw + 1 && m.sub.sw <= m.sub.cw + 1,
-            `${label}：标题与副标题文字没有溢出自己的盒子`,
-            JSON.stringify({ title: m.title, sub: m.sub }));
-        check(m.brand && m.title && m.sub
-            && Math.abs(m.brand.x - m.title.x) <= 2 && Math.abs(m.sub.x - m.title.x) <= 2,
-            `${label}：品牌/标题/副标题左对齐成一列`,
-            JSON.stringify({ brandX: m.brand && m.brand.x, titleX: m.title && m.title.x, subX: m.sub && m.sub.x }));
+        check(bad.length === 0, `${label}：品牌报头与右侧控件无重叠`, JSON.stringify(bad));
+        check(m.brand && m.brand.w > 0 && m.brand.sw <= m.brand.cw + 1,
+            `${label}：品牌行文字没有溢出自己的盒子`, JSON.stringify(m.brand));
         check(m.tools && m.acts && m.winbtns && m.head
             && m.tools.bottom <= m.head.bottom + 1
             && m.acts.bottom <= m.head.bottom + 1
@@ -124,12 +118,12 @@ async function main() {
             `${label}：有限墙进度条贴在网格内，不穿进头部`,
             JSON.stringify({ rail: m.rail, headBottom: m.head && m.head.bottom, gridBottom: m.grid && m.grid.bottom }));
         if (isNarrow) {
-            // 窄窗：控件整组落到第二行，不能和第一行的标题/副标题抢高度
+            // 窄窗：控件整组落到第二行，不能和第一行的报头抢高度
             check(m.right && m.meta && m.right.y >= m.meta.bottom - 2,
                 `${label}：窄窗控件整组落到第二行`,
                 JSON.stringify({ metaBottom: m.meta && m.meta.bottom, rightY: m.right && m.right.y }));
         } else {
-            // 宽屏/全屏：仍是一行布局，控件与标题块底边对齐
+            // 宽屏/全屏：仍是一行布局，控件与报头块底边对齐
             check(m.right && m.meta && Math.abs(m.right.bottom - m.meta.bottom) <= 5,
                 `${label}：宽屏仍是一行布局`,
                 JSON.stringify({ metaBottom: m.meta && m.meta.bottom, rightBottom: m.right && m.right.bottom }));
