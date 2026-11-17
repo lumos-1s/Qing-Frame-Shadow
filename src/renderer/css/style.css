@@ -1202,6 +1202,16 @@ input[type=range].fine-tuning::-webkit-slider-thumb {
 .histo-raw.is-busy { color: var(--primary-text); border-color: var(--primary); }
 .histo-raw.is-err { color: var(--rose-text); border-color: var(--rose); }
 .histo-raw[hidden], .fold-notice[hidden] { display: none; }
+/* 自动调色入口跟直方图同排：它是「看一眼直方图 → 试一档」的动作，不是一颗大按钮。 */
+.histo-auto {
+    flex: 0 0 auto; margin-left: calc(2px * var(--font-scale));
+    border: 1px solid var(--border-strong); background: var(--surface-alt);
+    color: var(--text-2); font: inherit; font-size: var(--fs-10);
+    padding: 2px calc(8px * var(--font-scale)); border-radius: var(--r-xs);
+    cursor: pointer; white-space: nowrap;
+}
+.histo-auto:hover { border-color: var(--primary); color: var(--primary-text); background: var(--primary-soft); }
+.histo-auto:disabled { opacity: .45; cursor: default; }
 /* 折叠提示只做一行轻量状态，不再用虚线卡片单独占一块：
    收了几组 + 一个文字入口，组标题上的箭头已经说明怎么展开。 */
 .fold-notice {

@@ -1397,7 +1397,8 @@
             const act = this.paramMask ? this.paramMask(im) : (this.activeMask ? this.activeMask(im) : null);
             const keys = Object.keys(patch || {});
             const onlySlider = keys.length > 0 && keys.every((k) => MASK_ROUTE_KEYS.indexOf(k) >= 0);
-            if (act && onlySlider) {
+            // 自动调色是一次性的「整张照片」建议：即使当前选中了蒙版，也不能滑进蒙版参数。
+            if (!(opts && opts.global) && act && onlySlider) {
                 for (const k of keys) act.p[k] = clampGradeValue(k, patch[k]);
                 this.invalidateGrade(im);
                 this.rebuildGrade(opts && opts.full ? 'full' : 'low');
@@ -1541,6 +1542,32 @@
             if (this.scheduleRender) this.scheduleRender(true);
             if (this.scheduleDraft) this.scheduleDraft();
             this.setStatus('已重置调色');
+            return true;
+        },
+
+        // 自动调色：本地直方图估算一次基础档位，走与拖滑块相同的 setGrade 管线。
+        // 不碰蒙版（opts.global），一次点击只压一条撤销；连续点结果不变（读原图）。
+        autoGrade() {
+            const im = this.image;
+            if (!im || !im.el) {
+                if (this.setStatus) this.setStatus('先导入照片，再点自动调色');
+                return false;
+            }
+            const suggest = window.QfsAutoGrade && window.QfsAutoGrade.suggest;
+            const patch = typeof suggest === 'function' ? suggest(im) : null;
+            if (!patch) {
+                if (this.setStatus) this.setStatus('这张照片读不到像素，自动调色未执行');
+                return false;
+            }
+            if (this.pushUndo) this.pushUndo();
+            this.setGrade(patch, { global: true });
+            clearTimeout(this._autoGradeSettle);
+            this._autoGradeSettle = setTimeout(() => {
+                this.rebuildGrade('full');
+                if (window.QfsHistogram) window.QfsHistogram.redraw();
+            }, 180);
+            if (window.QfsHistogram) window.QfsHistogram.redraw();
+            if (this.setStatus) this.setStatus('已按直方图自动调色（本地计算，可撤销）');
             return true;
         },
 
@@ -1825,6 +1852,8 @@
             });
             const all = $('btnGradeApplyAll');
             if (all) all.addEventListener('click', () => this.applyGradeToAll());
+            const auto = $('btnGradeAuto');
+            if (auto) auto.addEventListener('click', () => this.autoGrade());
             const some = $('btnGradeApplySelected');
             if (some) some.addEventListener('click', () => this.applyGradeToSelected());
             const cp = $('btnGradeCopySet');
