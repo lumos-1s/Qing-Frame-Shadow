@@ -13,7 +13,13 @@
  */
 (function () {
     const MAX_EDGE = 256;
+    // 18% 灰略亮一点：目标中位线性亮度 0.20（≈ sRGB 0.48），只走一半、上限 ±0.8EV。
+    const TARGET_LIN = 0.20;
+    const EXP_FACTOR = 0.5;
+    const EXP_CAP = 0.8;
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const srgbToLin = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    const linToSrgb = (v) => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
     let cv = null;
     let ctx = null;
 
@@ -36,29 +42,19 @@
         try { return ctx.getImageData(0, 0, cv.width, cv.height).data; } catch (_) { return null; }
     }
 
-    // 直方图分位点：返回 0..255，用累计计数找第一个越过 q 的 bin。
-    function percentile(hist, total, q) {
-        const target = total * q;
-        let acc = 0;
-        for (let i = 0; i < 256; i++) {
-            acc += hist[i];
-            if (acc >= target) return i;
-        }
-        return 255;
-    }
-
     function suggest(im, opts) {
         const data = sample(im);
         if (!data) return null;
-        const hist = new Uint32Array(256);
-        let total = 0;
+        const total = data.length / 4;
+        // 亮度分位一律在线性光上取：gamma 编码的 128 其实是 0.21 线性光，
+        // 拿编码值做曝光换算会把暗图判成"已经够亮"、把亮图判成"该压暗"。
+        const lums = new Float32Array(total);
         // 白平衡只信"亮但没爆"的像素：纯白/镜面高光没有颜色信息，暗部噪声太多。
         let brightN = 0, sr = 0, sg = 0, sb = 0, satSum = 0;
-        for (let i = 0; i < data.length; i += 4) {
+        for (let p = 0, i = 0; p < total; p++, i += 4) {
             const R = data[i], G = data[i + 1], B = data[i + 2];
+            lums[p] = 0.2126 * srgbToLin(R / 255) + 0.7152 * srgbToLin(G / 255) + 0.0722 * srgbToLin(B / 255);
             const y = (R * 77 + G * 150 + B * 29) >> 8;
-            hist[y]++;
-            total++;
             if (y >= 190 && y < 250) {
                 brightN++;
                 sr += R; sg += G; sb += B;
@@ -67,15 +63,17 @@
             }
         }
         if (!total) return null;
-
-        const lo = percentile(hist, total, 0.01) / 255;
-        const mid = percentile(hist, total, 0.50) / 255;
-        const hi = percentile(hist, total, 0.99) / 255;
+        lums.sort();
+        const pick = (q) => lums[Math.min(total - 1, Math.floor(total * q))];
+        const loLin = pick(0.01), midLin = pick(0.50), hiLin = pick(0.99);
+        // 黑白场/对比度按 sRGB 端点算（那几档的 LUT 就是在编码域上做的）。
+        const lo = linToSrgb(loLin), hi = linToSrgb(hiLin);
         const span = Math.max(0.06, hi - lo);
-        const midN = clamp((mid - lo) / span, 0.05, 0.95);
 
-        // 曝光：把 1%–99% 区间的中位亮度拉向 0.5，系数 0.55 留一半给手动微调。
-        const exp = Math.round(clamp(Math.log2(0.5 / midN) * 0.55, -0.8, 0.8) * 100) / 100;
+        // 曝光：把中位线性亮度拉向固定目标（不是"拉到自身区间的中点"）。
+        // 只走一半、上限 ±0.8EV：真正夜景/雪景仍保留明暗基调，交给用户定。
+        const exp = Math.round(clamp(Math.log2(TARGET_LIN / Math.max(midLin, 0.006)) * EXP_FACTOR,
+            -EXP_CAP, EXP_CAP) * 100) / 100;
         // 对比度：目标跨度 0.72；极平（low contrast）的照片给正档，本来很硬的给小幅负档。
         const con = Math.round(clamp((0.72 / span - 1) * 26, -12, 26));
         // 白点/黑点：只在端点确实没顶到边时动；画面本身有纯黑纯白就不去"抬雾"。

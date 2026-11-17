@@ -48,6 +48,8 @@ app.whenReady().then(async () => {
             else if (kind === 'bright') { R = G = B = 170 + v; }
             else if (kind === 'cast') { R = 225 + (v >> 2); G = 200; B = 150; }
             else if (kind === 'rawcast') { R = 215 + (v >> 2); G = 200; B = 185; }
+            else if (kind === 'midgray') { R = G = B = 128; }
+            else if (kind === 'darknarrow') { R = G = B = 60 + (v % 30); }
             else { R = G = B = 50 + v * 2; }
             d.data[i] = R; d.data[i+1] = G; d.data[i+2] = B; d.data[i+3] = 255;
         }
@@ -57,7 +59,7 @@ app.whenReady().then(async () => {
 
     const sugg = await exec(`(() => {
         const out = {};
-        for (const k of ['dark', 'bright', 'cast', 'neutral']) {
+        for (const k of ['dark', 'bright', 'cast', 'neutral', 'midgray', 'darknarrow']) {
             const im = { el: window.__agMake(k) };
             out[k] = window.QfsAutoGrade.suggest(im);
             out[k + 'Again'] = window.QfsAutoGrade.suggest(im);
@@ -85,6 +87,14 @@ app.whenReady().then(async () => {
     const stable = ['dark', 'bright', 'cast', 'neutral'].every((k) =>
         JSON.stringify(sugg[k]) === JSON.stringify(sugg[k + 'Again']));
     check(stable, '同一张原图重复估算结果不变（无累积/无随机）');
+
+    // 曝光必须对准绝对中位亮度，不能"拉到自己区间的中点"：
+    // 老算法对整片偏暗但宽容窄的图会算出 ~0EV，把夜景当成已经正常。
+    check(sugg.midgray && Math.abs(sugg.midgray.exp) <= 0.12,
+        '中灰（128）几乎不动曝光', JSON.stringify(sugg.midgray && sugg.midgray.exp));
+    check(sugg.darknarrow && sugg.darknarrow.exp > 0.4,
+        '整片偏暗且跨度窄：依然给足正曝光（不再按区间归一化）',
+        JSON.stringify(sugg.darknarrow && sugg.darknarrow.exp));
 
     const rawSugg = await exec(`(() => {
         const warm = window.__agMake('rawcast');
