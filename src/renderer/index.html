@@ -2264,7 +2264,59 @@
                         <input type="text" id="framePrompt" class="frame-prompt" placeholder="描述你想要的风格，如：暖色胶片、底部加日期、留白多一点" aria-label="描述风格" />
                         <button type="button" class="mini-btn primary" id="btnGenerate">生成 4 款</button>
                     </div>
-                    <div class="frame-progress" id="frameProgress" hidden><span class="frame-progress-dot"></span><span id="frameProgressText">正在洗样片…</span></div>
+                    <div class="frame-progress" id="frameProgress" hidden>
+                        <span class="frame-progress-dot"></span><span id="frameProgressText">正在洗样片…</span>
+                        <button type="button" class="mini-btn frame-cancel-btn" id="btnFrameCancel">停止</button>
+                    </div>
+                </div>
+                <div class="frame-toolbar">
+                    <div class="frame-tabs" role="tablist" aria-label="边框来源">
+                        <button type="button" class="frame-tab active" data-view="current" role="tab" aria-selected="true">本轮</button>
+                        <button type="button" class="frame-tab" data-view="history" role="tab" aria-selected="false">历史</button>
+                        <button type="button" class="frame-tab" data-view="favs" role="tab" aria-selected="false">收藏 <span class="frame-tab-count" id="frameFavCount"></span></button>
+                    </div>
+                    <div class="frame-tools">
+                        <label class="frame-batch" id="frameBatchWrap" hidden title="勾选后，点套用会同时套到胶片条里选中的其它照片"><input type="checkbox" id="frameBatchApply" /> <span id="frameBatchLabel">套用到选中</span></label>
+                        <button type="button" class="mini-btn" id="btnFrameTweakToggle" hidden>微调</button>
+                        <button type="button" class="mini-btn" id="btnFrameAgain" hidden>换一批</button>
+                        <span class="frame-status" id="frameStatus" role="status"></span>
+                    </div>
+                </div>
+                <div class="frame-tweak" id="frameTweak" hidden>
+                    <div class="frame-tweak-head">
+                        <span class="frame-tweak-title">当前边框微调 <b id="frameTweakName"></b></span>
+                        <span class="frame-tweak-acts">
+                            <button type="button" class="mini-btn" id="btnTweakReset">还原</button>
+                            <button type="button" class="mini-btn" id="btnTweakHide">收起</button>
+                        </span>
+                    </div>
+                    <div class="frame-tweak-grid">
+                        <label class="frame-tweak-item"><span>留白</span><input type="range" id="frameTweakPad" min="-30" max="50" step="2" value="0" /><output id="frameTweakPadVal">0%</output></label>
+                        <label class="frame-tweak-item"><span>底色</span><input type="color" id="frameTweakBg" value="#ffffff" /></label>
+                    </div>
+                    <div class="frame-tweak-texts" id="frameTweakTexts" hidden></div>
+                </div>
+                <div class="frame-iterate" id="frameIterate" hidden>
+                    <div class="frame-iterate-head"><span>基于「<b id="frameIterateName"></b>」再改 4 款</span><button type="button" class="mini-btn" id="btnIterateCancel">收起</button></div>
+                    <div class="frame-iterate-chips" id="frameIterateChips">
+                        <button type="button" data-iter="color">换个配色</button>
+                        <button type="button" data-iter="space">留白多一点</button>
+                        <button type="button" data-iter="simple">更简洁</button>
+                        <button type="button" data-iter="date">加日期/参数</button>
+                        <button type="button" data-iter="film">更像胶片</button>
+                    </div>
+                    <div class="frame-iterate-row">
+                        <input type="text" id="frameIterateText" class="frame-prompt" placeholder="也可以自己说，比如：边框细一点、底部换成手写体" aria-label="继续修改的要求" />
+                        <button type="button" class="mini-btn primary" id="btnIterateGo">生成变体</button>
+                    </div>
+                </div>
+                <div class="frame-error" id="frameError" hidden>
+                    <div class="frame-error-msg" id="frameErrorMsg"></div>
+                    <div class="frame-error-row">
+                        <button type="button" class="mini-btn primary" id="btnFrameRetry">重试</button>
+                        <button type="button" class="mini-btn" id="btnFrameErrLog">查看日志</button>
+                    </div>
+                    <pre class="frame-error-log" id="frameErrorLog" hidden></pre>
                 </div>
                 <div class="frame-gallery" id="frameGallery" role="list" aria-label="生成的边框方案">
                     <div class="frame-gallery-empty" id="frameGalleryEmpty">
@@ -2292,13 +2344,28 @@
                         <div class="frame-adv-row">
                             <button type="button" class="mini-btn" id="btnFrameOpenDir">打开目录</button>
                             <button type="button" class="mini-btn" id="btnFrameCopyDir">复制路径</button>
-                            <span class="frame-status" id="frameStatus" role="status"></span>
                         </div>
                         <div class="frame-adv-files"><div class="frame-side-head"><span>边框文件</span><button type="button" class="mini-btn" id="btnFrameRefresh">刷新</button></div><div class="frame-list" id="frameList"></div></div>
                         <div class="frame-adv-editor"><textarea id="frameText" class="frame-text" spellcheck="false" aria-label="边框 JSON"></textarea><div class="frame-editor-acts"><button type="button" class="mini-btn" id="btnFrameSave">保存</button><button type="button" class="mini-btn" id="btnFrameCheck">体检</button><button type="button" class="mini-btn" id="btnFrameApply">应用到当前</button></div></div>
                         <div class="frame-dir" id="frameDir"></div>
                     </div>
                 </details>
+            </div>
+            <div class="frame-lightbox" id="frameLightbox" hidden>
+                <div class="frame-lightbox-backdrop" id="frameLightboxBackdrop"></div>
+                <div class="frame-lightbox-card" role="dialog" aria-modal="true" aria-label="方案大图预览">
+                    <div class="frame-lightbox-head">
+                        <span class="frame-lightbox-name" id="frameLightboxName"></span>
+                        <button type="button" class="modal-close" id="btnFrameLightboxClose" title="关闭" aria-label="关闭">&times;</button>
+                    </div>
+                    <div class="frame-lightbox-stage"><img id="frameLightboxImg" alt="方案大图" /></div>
+                    <div class="frame-lightbox-foot">
+                        <button type="button" class="mini-btn" id="btnFrameLightboxCompare" title="按住查看原图">按住看原图</button>
+                        <button type="button" class="mini-btn" id="btnFrameLightboxFav">收藏</button>
+                        <button type="button" class="mini-btn" id="btnFrameLightboxSave">保存为模板</button>
+                        <button type="button" class="mini-btn primary" id="btnFrameLightboxApply">套用这款</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

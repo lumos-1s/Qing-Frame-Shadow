@@ -46,7 +46,7 @@ contextBridge.exposeInMainWorld('qingframe', {
     listLogos: () => ipcRenderer.invoke('list-logos'),
     importLogoPack: (filePath) => ipcRenderer.invoke('import-logo-pack', filePath),
     listTextures: () => ipcRenderer.invoke('list-textures'),
-    saveTemplate: () => ipcRenderer.invoke('save-template'),
+    saveTemplate: (n, d) => ipcRenderer.invoke('save-template', { name: n, data: d }),
     listTemplates: () => ipcRenderer.invoke('list-templates'),
     loadTemplate: () => ipcRenderer.invoke('load-template'),
     deleteTemplate: () => ipcRenderer.invoke('delete-template'),
