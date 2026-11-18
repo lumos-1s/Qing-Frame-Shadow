@@ -64,6 +64,7 @@ ipcMain.handle('agent:prompt', () => {
         ]},
         { name: '圆章留白', layers: [
             { type: 'rect', x: 0.1, y: 0.1, w: 0.8, h: 0.8, radius: 0.02, fill: '#ffffff', fillOpacity: 0.9 },
+            { type: 'photo', x: 0.12, y: 0.12, w: 0.76, h: 0.6, fit: 'cover' },
             { type: 'circle', cx: 0.5, cy: 0.25, r: 0.1, fill: '#129e78' }
         ]},
         { name: '双线极简', layers: [
@@ -99,6 +100,8 @@ app.whenReady().then(async () => {
         return true;
     })()`);
     await sleep(200);
+    // 目录里预置一份上一轮的旧方案（普通预设）：本轮生成不能把它混进 4 宫格
+    fs.writeFileSync(frameFile('z-old.json'), JSON.stringify({ templateName: '旧方案', photoFrameStyle: 'CARD_3D' }), 'utf8');
 
     // 1) 打开面板，空态引导出现
     await exec(`document.getElementById('btnFramePanel').click(); true`);
@@ -131,15 +134,63 @@ app.whenReady().then(async () => {
     check(before !== after, '切换示例照片后画廊重新渲染（用新照片）',
         JSON.stringify({ changed: before !== after, beforeLen: before.length, afterLen: after.length }));
 
-    // 3) 点第 2 张 → 真正套用：合成图成为当前照片位图
+    // 3) 点第 2 张 → 套用「模板」：照片本身不能被替换/降分辨率
+    await exec(`(() => { App.image.el.__qfsOrig = true; window.__srcBefore = App.image.el.src; return true; })()`);
     await exec(`document.querySelectorAll('#frameGallery .frame-swatch')[1].click(); true`);
     await sleep(600);
-    const applied = await exec(`({ status: document.getElementById('frameStatus').textContent, src: App.image.el && App.image.el.src ? App.image.el.src.slice(0,40) : 'canvas' })`);
-    check(/已套用/.test(applied.status), '点 AI 图层样片真正套用', JSON.stringify(applied));
+    const applied = await exec(`({
+        status: document.getElementById('frameStatus').textContent,
+        sameEl: !!(App.image.el && App.image.el.__qfsOrig),
+        sameSrc: App.image.el && App.image.el.src === window.__srcBefore,
+        w: App.image.el && App.image.el.width, h: App.image.el && App.image.el.height,
+        aiLayers: (App.template && Array.isArray(App.template.aiLayers)) ? App.template.aiLayers.length : 0,
+        name: App.template && App.template.templateName,
+        photoRect: App._photoRect
+    })`);
+    check(/已套用/.test(applied.status), '点 AI 图层样片真正套用', JSON.stringify({ status: applied.status, name: applied.name }));
+    check(applied.sameEl && applied.sameSrc, '套用不替换照片位图（原图/调色/裁切保留）', JSON.stringify({ sameEl: applied.sameEl, sameSrc: applied.sameSrc }));
+    check(applied.w === 400 && applied.h === 500, '照片分辨率不变（不再压成 480×620）', applied.w + 'x' + applied.h);
+    check(applied.aiLayers > 0, '边框以 template.aiLayers 形式落地（不是贴成品图）', 'layers=' + applied.aiLayers);
+    check(!!applied.photoRect && applied.photoRect.w > 0 && applied.photoRect.w < 400 * 2,
+        '照片按槽位渲染并记录 _photoRect', JSON.stringify(applied.photoRect));
+    const center = await exec(`(() => { const cv = App.dom.canvas; const g = cv.getContext('2d');
+        const d = g.getImageData(Math.round(cv.width / 2), Math.round(cv.height / 2), 1, 1).data;
+        return [d[0], d[1], d[2], d[3]]; })()`);
+    check(center[0] > center[1] + 30 && center[0] > center[2] + 30,
+        '画布中心仍是红色照片（没有被背景层盖住）', JSON.stringify(center));
 
-    // 4) 高级区仍可用：助手/模型已就绪
-    const adv = await exec(`({ hasAdvanced: !!document.querySelector('.frame-advanced'), modelLabel: document.getElementById('frameModelLabel').textContent, agentSel: (document.getElementById('frameAgentSelect')||{}).value })`);
+    // 4) 高级区仍可用：助手/模型已就绪；助手与模型选择有记忆
+    const adv = await exec(`({ hasAdvanced: !!document.querySelector('.frame-advanced'), modelLabel: document.getElementById('frameModelLabel').textContent, agentSel: (document.getElementById('frameAgentSelect')||{}).value,
+        memAgent: localStorage.getItem('qfs_ai_agent'), memModel: localStorage.getItem('qfs_ai_model:opencode') })`);
     check(adv.hasAdvanced && adv.agentSel === 'opencode', '高级区保留且助手已就绪', JSON.stringify(adv));
+    check(adv.memAgent === 'opencode' && adv.memModel === 'm1', '记住助手与按助手分键的模型', JSON.stringify({ agent: adv.memAgent, model: adv.memModel }));
+    check(adv.modelLabel === '模型一', '模型标签与会话实际模型一致', adv.modelLabel);
+
+    // 5) 高级区粘贴 layers JSON → 也按模板应用（不再套成默认预设）
+    const layersDoc = JSON.stringify({
+        templateName: '高级图层测试',
+        layers: [
+            { type: 'rect', x: 0.02, y: 0.02, w: 0.96, h: 0.96, fill: '#10171a' },
+            { type: 'photo', x: 0.1, y: 0.1, w: 0.8, h: 0.65 },
+            { type: 'text', x: 0.5, y: 0.88, text: 'ADV', size: 0.03, color: '#f2e4c4', align: 'center', maxW: 0.8, maxLines: 1 }
+        ]
+    });
+    await exec(`document.getElementById('frameText').value = ${JSON.stringify(layersDoc)}; document.getElementById('btnFrameApply').click(); true`);
+    await sleep(400);
+    const advApplied = await exec(`({ status: document.getElementById('frameStatus').textContent, name: App.template && App.template.templateName,
+        n: (App.template && Array.isArray(App.template.aiLayers)) ? App.template.aiLayers.length : 0, sameEl: !!(App.image.el && App.image.el.__qfsOrig) })`);
+    check(advApplied.n === 3 && advApplied.name === '高级图层测试', '高级区 layers JSON 按模板应用', JSON.stringify(advApplied));
+    check(advApplied.sameEl === true, '高级区应用同样不动照片', String(advApplied.sameEl));
+
+    // 6) 再套一个普通预设：必须清掉 aiLayers，不能继续画 AI 图层（否则就是框中框）
+    const plainDoc = JSON.stringify({ templateName: '普通预设', photoFrameStyle: 'CARD_3D' });
+    await exec(`document.getElementById('frameText').value = ${JSON.stringify(plainDoc)}; document.getElementById('btnFrameApply').click(); true`);
+    await sleep(500);
+    const plain = await exec(`({ name: App.template && App.template.templateName,
+        layers: (App.template && Array.isArray(App.template.aiLayers)) ? App.template.aiLayers.length : 0,
+        sameEl: !!(App.image.el && App.image.el.__qfsOrig) })`);
+    check(plain.name === '普通预设' && plain.layers === 0, '切回普通预设会清掉 AI 图层（不会框中框）', JSON.stringify(plain));
+    check(plain.sameEl === true, '切回普通预设仍不动照片', String(plain.sameEl));
 
     console.log(failures.length ? `\n未通过 ${failures.length} 项：${failures.join(', ')}` : '\nALL PASS');
     win.destroy();

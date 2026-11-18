@@ -9,7 +9,14 @@
     let app = null, modal = null;
     let agentKey = null, agentModelId = 'model', agentModels = [], modelPopUnwatch = null;
     const MODEL_KEY = 'qfs_ai_model';
-    let currentModel = ''; try { currentModel = localStorage.getItem(MODEL_KEY) || ''; } catch (_) {}
+    const AGENT_KEY = 'qfs_ai_agent';
+    const modelKeyOf = (id) => MODEL_KEY + ':' + String(id || '');
+    function readStore(k) { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } }
+    function writeStore(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (_) {} }
+    function modelForAgent(id) { return readStore(modelKeyOf(id)) || readStore(MODEL_KEY); }
+    let currentAgent = readStore(AGENT_KEY);
+    let currentModel = modelForAgent(currentAgent);
+    let preloadPromise = null, preloadFor = '';
     let agentStream = '', unwatchAgent = null;
     let current = null;          // 高级区选中的文件 { name }
     let gallery = [];            // 本轮方案 [{ name, preset, dataUrl }]
@@ -28,46 +35,69 @@
         try { const t = JSON.parse(text); if (!t || typeof t !== 'object' || Array.isArray(t)) return { ok: false, issues: ['根节点不是对象'] }; return { ok: true, t }; }
         catch (e) { return { ok: false, issues: ['JSON 解析失败：' + e.message] }; }
     }
-    // 自动修复 agent 的生成结果：未知风格回退到已知、参数夹到范围、补必要字段。
-    // 宁可展示一个"被修正过的方案"，也不要因为一个小错整款丢弃。
-    const FALLBACK_STYLE = 'CARD_3D';
-    function sanitize(t) {
-        const SC = window.StyleCaps, SP = window.StyleParams;
-        const out = JSON.parse(JSON.stringify(t));
-        if (typeof out.templateName !== 'string' || !out.templateName) out.templateName = 'AI 方案';
-        let style = String(out.photoFrameStyle || '').toUpperCase();
-        if (!style || (SC && SC.MEASURED && !Object.prototype.hasOwnProperty.call(SC.MEASURED, style))) {
-            style = FALLBACK_STYLE;
-        }
-        out.photoFrameStyle = style;
-        out.baseMargin = (out.baseMargin && typeof out.baseMargin === 'object') ? out.baseMargin : {};
-        out.cornerConfig = (out.cornerConfig && typeof out.cornerConfig === 'object') ? out.cornerConfig : {};
-        if (SP && SP.forStyle(style)) {
-            for (const p of SP.forStyle(style)) {
-                if (p.path !== 'style') continue;
-                if (!out.styleParams || typeof out.styleParams !== 'object') out.styleParams = {};
-                if (!out.styleParams[style] || typeof out.styleParams[style] !== 'object') out.styleParams[style] = {};
-                const raw = out.styleParams[style][p.key];
-                if (raw != null) {
-                    const n = Number(raw);
-                    out.styleParams[style][p.key] = Number.isFinite(n) ? Math.max(p.min, Math.min(p.max, n)) : p.def;
-                }
-            }
-        }
-        return out;
-    }
-    // 图层边框文档：校验 layers，过滤非法层，保证至少有一层
+    // 图层边框文档：校验 layers / aiLayers，过滤非法层，保证至少有一层
     function sanitizeLayerDoc(t) {
-        if (!t || !Array.isArray(t.layers)) return null;
-        const layers = t.layers.map((l) => window.AiLayers ? window.AiLayers.normalize(l) : l).filter(Boolean);
+        const src = layersOfDoc(t);
+        if (!src) return null;
+        const layers = src.map((l) => window.AiLayers ? window.AiLayers.normalize(l) : l).filter(Boolean);
         if (!layers.length) return null;
+        ensurePhotoSlot(layers);
         const out = Object.assign({}, t, { layers });
         if (typeof out.templateName !== 'string' || !out.templateName) out.templateName = 'AI 边框';
         return out;
     }
+    // 老方案/模型漏写 photo 槽位时，按最大的实心卡纸推导一个，别让照片永远落在固定 8% 的位置
+    function ensurePhotoSlot(layers) {
+        if (!Array.isArray(layers) || layers.some((l) => l && l.type === 'photo')) return layers;
+        let bg = null, area = 0;
+        for (const l of layers) {
+            if (!l || l.type !== 'rect' || !l.fill) continue;
+            const op = l.fillOpacity == null ? 1 : Number(l.fillOpacity);
+            const a = (Number(l.w) || 0) * (Number(l.h) || 0);
+            if (op > 0.5 && a > area) { bg = l; area = a; }
+        }
+        let slot;
+        if (bg && area > 0.25) {
+            const pad = Math.max(0.015, Math.min(Number(bg.w) || 0, Number(bg.h) || 0) * 0.04);
+            const x = Math.max(0, Math.min(1, (Number(bg.x) || 0) + pad));
+            const y = Math.max(0, Math.min(1, (Number(bg.y) || 0) + pad));
+            slot = {
+                type: 'photo', x, y,
+                w: Math.max(0.05, Math.min((Number(bg.w) || 0) - pad * 2, 1 - x)),
+                h: Math.max(0.05, Math.min((Number(bg.h) || 0) - pad * 2, 1 - y)),
+                fit: 'cover'
+            };
+        } else {
+            slot = { type: 'photo', x: 0.08, y: 0.08, w: 0.84, h: 0.78, fit: 'cover' };
+        }
+        const at = bg && layers.indexOf(bg) >= 0 ? layers.indexOf(bg) + 1 : 0;
+        layers.splice(at, 0, slot);
+        return layers;
+    }
+    function layersOfDoc(t) {
+        if (!t) return null;
+        if (Array.isArray(t.layers) && t.layers.length) return t.layers;
+        if (Array.isArray(t.aiLayers) && t.aiLayers.length) return t.aiLayers;
+        return null;
+    }
     function inspect(t) {
         const issues = [];
         if (!t.templateName || typeof t.templateName !== 'string') issues.push('缺 templateName');
+        const docLayers = layersOfDoc(t);
+        if (docLayers) {
+            const valid = docLayers.map((l) => window.AiLayers ? window.AiLayers.normalize(l) : l).filter(Boolean);
+            if (!valid.length) issues.push('没有有效图层');
+            if (valid.length < docLayers.length) issues.push('有 ' + (docLayers.length - valid.length) + ' 个图层类型无法识别');
+            const photos = valid.filter((l) => l.type === 'photo');
+            if (!photos.length) issues.push('缺 photo 照片槽位（照片会落到默认中央区）');
+            if (photos.length > 1) issues.push('只能有一个 photo 槽位');
+            for (const p of photos) {
+                const x = Number(p.x) || 0, y = Number(p.y) || 0, w = Number(p.w) || 0, h = Number(p.h) || 0;
+                if (w < 0.2 || h < 0.2) issues.push('photo 槽位太小');
+                if (x + w > 1.001 || y + h > 1.001) issues.push('photo 槽位超出画布');
+            }
+            return issues;
+        }
         const style = String(t.photoFrameStyle || '').toUpperCase();
         const SP = window.StyleParams, SC = window.StyleCaps;
         if (style && SC && SC.MEASURED && !Object.prototype.hasOwnProperty.call(SC.MEASURED, style)) issues.push(`未知风格 ${t.photoFrameStyle}`);
@@ -81,30 +111,21 @@
     }
 
     // ── 渲染：把一份方案套到底图，返回 dataURL ──
-    // 方案有两种：{ layers:[...] } = AI 自由图层（新），否则 = 传统预设走引擎。
+    // 图层方案走 AiLayers：photo 槽位决定照片位置，画布按照片比例算，不拉伸、不伪造 480×620。
+    // 传统预设仍走引擎离屏渲染。
     function renderFrameToUrl(preset, img) {
-        if (!img || !img.naturalWidth) return null;
-        const cv = document.createElement('canvas');
-        cv.width = 480; cv.height = 620;
-        const ctx = cv.getContext('2d');
+        if (!img) return null;
         try {
-            if (preset && Array.isArray(preset.layers) && preset.layers.length && window.AiLayers) {
-                // 分三层合成：背景层（behind / 大面积实心 rect）→ 照片 → 前景层（文字/线/圆/小rect）
-                const L = preset.layers;
-                const isBg = (l) => l && (l.behind === true || (l.type === 'rect'
-                    && ((Number(l.w) || 0) * (Number(l.h) || 0) > 0.45)
-                    && (l.fillOpacity == null || Number(l.fillOpacity) > 0.5)));
-                const renderPart = (filter) => window.AiLayers.render(ctx, L, cv.width, cv.height, () => {}, filter);
-                ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height);
-                renderPart(isBg);
-                // 照片画在中央内容区（背景框内），保持不变形
-                const inset = 0.08;
-                const iw = cv.width * (1 - inset * 2), ih = cv.height * (1 - inset * 2);
-                ctx.drawImage(img, cv.width * inset, cv.height * inset, iw, ih);
-                renderPart((l) => !isBg(l));
-                return cv.toDataURL('image/png');
+            const layers = preset && (Array.isArray(preset.layers) ? preset.layers
+                : (Array.isArray(preset.aiLayers) ? preset.aiLayers : null));
+            if (layers && layers.length && window.AiLayers && window.AiLayers.renderToCanvas) {
+                const cv = window.AiLayers.renderToCanvas(preset, img, { maxEdge: 620 });
+                return cv ? cv.toDataURL('image/png') : null;
             }
             if (!window.__render) return null;
+            if (!img.naturalWidth && !img.width) return null;
+            const cv = document.createElement('canvas');
+            cv.width = 480; cv.height = 620;
             const tmp = {
                 template: JSON.parse(JSON.stringify(preset)),
                 displayMax: 4000, selectedEls: [], uiDprOverride: 1,
@@ -115,7 +136,10 @@
             window.EngineStyles && window.EngineStyles.clearCaches && window.EngineStyles.clearCaches();
             window.__render(tmp);
             return cv.toDataURL('image/png');
-        } catch (e) { return null; }
+        } catch (e) {
+            console.warn('[AI 边框] 预览渲染失败', e);
+            return null;
+        }
     }
     // 用户已导入的照片列表（画廊示例图）：默认当前照片，可自己选
     function refreshSamplePhotos() {
@@ -134,11 +158,18 @@
             sel.appendChild(o);
         });
     }
-    function photoEl() {
+    // 选中的示例照片对象（默认当前主图）
+    function photoImage() {
         const sel = $('frameSamplePhoto');
         const i = sel ? parseInt(sel.value, 10) : NaN;
-        if (app && Array.isArray(app.images) && Number.isInteger(i) && app.images[i] && app.images[i].el) return app.images[i].el;
-        return (app && app.image && app.image.el) || window.__qfsPhotoStub;
+        if (app && Array.isArray(app.images) && Number.isInteger(i) && app.images[i]) return app.images[i];
+        return (app && app.image) || null;
+    }
+    // 预览必须走引擎同一取源：调色后的照片在 im._grade.canvas 里，直接用 im.el 会预览成未调色。
+    function photoSource() {
+        const im = photoImage();
+        if (!im) return window.__qfsPhotoStub;
+        return (window.photoSrc && window.photoSrc(im)) || im.el;
     }
 
     // ── 画廊 ──
@@ -172,24 +203,23 @@
         const g = gallery[i];
         if (!g) return;
         const inst = window.App || app;
+        if (!inst || typeof inst.applyPresetToCurrent !== 'function') { setStatus('应用未就绪', 'bad'); return; }
         if (g.isLayer) {
-            // AI 图层边框：把「当前示例照片 + 图层」合成图作为新位图套到当前照片
-            if (!inst || !inst.image || !inst.applyPresetToCurrent) { setStatus('应用未就绪', 'bad'); return; }
-            const url = g.dataUrl || renderFrameToUrl(g.preset, photoEl());
-            if (!url) { setStatus('合成失败', 'bad'); return; }
-            const im = new Image();
-            im.onload = () => {
-                inst.image.el = im;
-                inst.image.thumb = url;
-                if (typeof inst.buildThumbnails === 'function') inst.buildThumbnails();
-                if (typeof inst.refreshUI === 'function') inst.refreshUI();
-                if (typeof inst.scheduleRender === 'function') inst.scheduleRender(true);
-                setStatus('已套用「' + (g.preset.templateName || 'AI 边框') + '」', 'ok');
+            // AI 图层边框是「模板」，不是贴回照片的成品图：
+            // 只把 layers 写进 template.aiLayers，照片/调色/裁切/撤销全部保持原样。
+            const layers = Array.isArray(g.preset.layers) ? g.preset.layers
+                : (Array.isArray(g.preset.aiLayers) ? g.preset.aiLayers : null);
+            if (!layers || !layers.length) { setStatus('方案无有效图层', 'bad'); return; }
+            const tpl = {
+                templateName: g.preset.templateName || 'AI 边框',
+                aiLayers: JSON.parse(JSON.stringify(layers)),
+                aiBackground: typeof g.preset.aiBackground === 'string' ? g.preset.aiBackground : '#ffffff'
             };
-            im.src = url;
+            const ok = inst.applyPresetToCurrent(tpl);
+            if (ok === false) { setStatus('套用失败', 'bad'); return; }
+            setStatus('已套用「' + tpl.templateName + '」', 'ok');
             return;
         }
-        if (!inst || typeof inst.applyPresetToCurrent !== 'function') return;
         inst.applyPresetToCurrent(g.preset);
         setStatus('已套用「' + (g.preset.templateName || '方案') + '」', 'ok');
     }
@@ -203,6 +233,9 @@
         if (!id) { setStatus('未检测到本机助手（在「高级」里查看）', 'bad'); return; }
         generating = true;
         const btn = $('btnGenerate'); if (btn) btn.disabled = true;
+        if (id !== currentAgent) await switchAgent(id);
+        // 面板打开时的预启动可能还在进行：等同一次会话，别又起一个
+        if (!agentKey && preloadPromise) { try { await preloadPromise; } catch (_) {} }
         progress(true, '正在洗 4 款样片…');
         agentStream = '';
         if ($('frameAgentOut')) $('frameAgentOut').textContent = '';
@@ -214,10 +247,13 @@
                 '每个文件是一个「图层边框」对象，格式：',
                 '{"templateName":"方案名","layers":[ ...图层... ]}',
                 'layers 从底到顶绘制，每层是以下之一（坐标为 0..1 比例，相对画布宽高）：',
+                ' {"type":"photo","x":0.08,"y":0.08,"w":0.84,"h":0.7,"radius":0.01,"fit":"cover"}',
                 ' {"type":"rect","x":0.05,"y":0.05,"w":0.9,"h":0.9,"radius":0.02,"fill":"#ffffff","fillOpacity":0.9,"stroke":"#dcba79","strokeWidth":2}',
                 ' {"type":"circle","cx":0.5,"cy":0.2,"r":0.08,"fill":"#129e78"}',
                 ' {"type":"line","x1":0.1,"y1":0.5,"x2":0.9,"y2":0.5,"color":"#dcba79","width":2,"dash":[4,4]}',
                 ' {"type":"text","x":0.5,"y":0.92,"text":"文字","size":0.035,"color":"#f2e4c4","align":"center","weight":600,"letterSpacing":0.1,"maxW":0.8,"maxLines":1}',
+                '必须包含且只包含一个 photo 槽位：它就是照片的位置和大小，画布比例由它决定。',
+                'photo 之前的图层画在照片下面（底色/卡纸/背景），photo 之后的图层画在照片上面（文字/线条/装饰）；不要把照片整张盖住。',
                 '文字务必带 maxW（0..1，建议 0.6~0.9）和 maxLines，size 不要超过 0.06，避免溢出画面。',
                 '可加 shadow:{color,blur,offsetX,offsetY,opacity}。颜色用十六进制。',
                 '要求：4 款在风格/配色/留白/排版上明显不同，且都用图层组合出真实的新设计（不要只写一行文字）。',
@@ -228,21 +264,35 @@
             const fullPrompt = rules + '\n\n====\n用户这次的要求：' + text;
             // 清掉上一轮的约定文件，避免读到旧方案
             if (api().framesRemove) for (const n of ['a1.json','a2.json','a3.json','a4.json']) await api().framesRemove(n);
+            // 记录生成前的文件内容：目录里可能还留着更早的方案，不能把它们当成本轮结果
+            const before = new Map();
+            if (api().framesList && api().framesRead) {
+                for (const n of ((await api().framesList()) || [])) {
+                    const f = await api().framesRead(n);
+                    if (f && typeof f.text === 'string') before.set(n, f.text);
+                }
+            }
             const r = await (api().agentPrompt ? api().agentPrompt(agentKey, fullPrompt) : null);
             if (!r || !r.ok) throw new Error((r && r.error) || '生成失败');
-            // 读回本轮生成的方案：先按约定名 a1-a4，不足再读目录里所有 json 补齐。
+            // 读回本轮生成的方案：先按约定名 a1-a4，再补本轮新建/改过的文件。
             // 每个都 sanitize（自动修正未知风格/越界参数），不再因小错整款丢弃。
             const candidates = ['a1.json', 'a2.json', 'a3.json', 'a4.json'];
             const all = api().framesList ? (await api().framesList()) : [];
-            for (const n of (all || [])) if (!candidates.includes(n)) candidates.push(n);
+            for (const n of (all || [])) {
+                if (candidates.includes(n)) continue;
+                const f = await api().framesRead(n);
+                if (f && before.get(n) !== f.text) candidates.push(n);
+            }
             const found = [];
             for (const n of candidates) {
                 const f = await api().framesRead(n);
                 if (!f) continue;
                 const p = parse(f.text);
                 if (!p.ok) continue;
-                const layerDoc = Array.isArray(p.t.layers) ? sanitizeLayerDoc(p.t) : null;
-                found.push({ name: f.name, preset: layerDoc || sanitize(p.t), dataUrl: null, isLayer: !!layerDoc });
+                // 只收图层边框：退回旧预设等于「拿现成风格改文字」，这正是要修的问题
+                const layerDoc = sanitizeLayerDoc(p.t);
+                if (!layerDoc) continue;
+                found.push({ name: f.name, preset: layerDoc, dataUrl: null, isLayer: true });
                 if (found.length >= 4) break;
             }
             if (!found.length) {
@@ -251,13 +301,16 @@
             }
             gallery = found;
             renderGallery();
-            // 逐张渲染到用户照片
-            const img = photoEl();
+            // 逐张渲染到用户照片（走 photoSrc：调过色的照片预览也用同一条取源）
+            const img = photoSource();
             progress(true, '正在套用你的照片…');
+            let rendered = 0;
             for (let i = 0; i < gallery.length; i++) {
                 gallery[i].dataUrl = renderFrameToUrl(gallery[i].preset, img);
+                if (gallery[i].dataUrl) rendered++;
                 renderGallery();
             }
+            if (!rendered) throw new Error('样片渲染失败：照片未就绪或图层没有可用图元（展开「高级」看日志）');
             setStatus('已生成 ' + gallery.length + ' 款，点卡片即可套用', 'ok');
         } catch (e) {
             setStatus(e.message || '生成失败', 'bad');
@@ -279,11 +332,21 @@
         if (agentKey) return true;
         const r = await (api().agentStart ? api().agentStart(id, skillText, rules) : null);
         if (!r || !r.ok) throw new Error((r && r.error) || '无法启动助手会话');
+        // 启动期间用户切了助手：这个会话已经过时，关掉，别把 prompt 发到旧助手
+        if (currentAgent && id !== currentAgent) {
+            if (api().agentClose) { try { await api().agentClose(r.key); } catch (_) {} }
+            return false;
+        }
         agentKey = r.key; agentModelId = r.modelId || 'model';
         populateModels(r.models || []);
-        // 把记忆的模型应用到新会话（若有）
+        // 把记忆的模型应用到新会话（若有）；失败要告知，不能标签写着「已记住」但会话跑默认模型
         if (currentModel && api().agentSetModel) {
-            api().agentSetModel(agentKey, agentModelId, currentModel).catch(() => {});
+            try {
+                const mr = await api().agentSetModel(agentKey, agentModelId, currentModel);
+                if (mr && mr.ok === false) setStatus('模型记忆未生效：' + (mr.error || mr.message || '助手拒绝'), 'bad');
+            } catch (e) {
+                setStatus('模型记忆未生效：' + (e && e.message ? e.message : e), 'bad');
+            }
         }
         if (!unwatchAgent && api().onAgentEvent) {
             unwatchAgent = api().onAgentEvent((payload) => {
@@ -306,6 +369,8 @@
         const cur = (currentModel && agentModels.find((m) => m.value === currentModel))
             || agentModels.find((m) => m.current) || agentModels[0];
         currentModel = cur ? cur.value : ''; if (label) label.textContent = cur ? cur.name : '默认模型';
+        // 记忆的模型可能已下线：把实际生效的模型写回，下次打开标签和会话一致
+        if (currentModel && currentAgent) writeStore(modelKeyOf(currentAgent), currentModel);
         renderModelList('');
     }
     function renderModelList(query) {
@@ -328,7 +393,8 @@
     }
     async function chooseModel(m) {
         currentModel = m.value;
-        try { localStorage.setItem(MODEL_KEY, m.value); } catch (_) {}
+        if (currentAgent) writeStore(modelKeyOf(currentAgent), m.value);
+        writeStore(MODEL_KEY, m.value);
         const label = $('frameModelLabel'); if (label) label.textContent = m.name;
         renderModelList($('frameModelSearch') && $('frameModelSearch').value); closeModelPop();
         if (agentKey && api().agentSetModel) {
@@ -350,11 +416,26 @@
         const btn = $('btnFrameModel'); if (btn) btn.setAttribute('aria-expanded', 'false');
     }
     async function preloadSession(id) {
-        if (agentKey) return;
-        try {
+        if (agentKey) return true;
+        // 打开面板立刻点生成会同时触发预启动：同一个助手的 in-flight 会话直接复用，避免起两个
+        if (preloadPromise) {
+            if (preloadFor === id) return preloadPromise;
+            try { await preloadPromise; } catch (_) {}
+            if (agentKey) return true;
+        }
+        preloadFor = id;
+        preloadPromise = (async () => {
             const skill = await (api().framesSkill ? api().framesSkill() : Promise.resolve({ text: '' }));
-            await ensureAgentSession(id, skill.text || '', '你是清框影边框设计师，只在本目录创建或修改 *.json 边框文件。');
-        } catch (e) { /* 预启动失败不阻塞 */ }
+            return ensureAgentSession(id, skill.text || '', '你是清框影边框设计师。只在本目录创建或修改 *.json 图层边框文件：{templateName, layers}，必须有且只有一个 photo 槽位。');
+        })().catch(() => { /* 预启动失败不阻塞，生成时会再报错 */ }).finally(() => {
+            if (preloadFor === id) { preloadPromise = null; preloadFor = ''; }
+        });
+        return preloadPromise;
+    }
+    async function switchAgent(id) {
+        currentAgent = id || '';
+        writeStore(AGENT_KEY, currentAgent);
+        currentModel = currentAgent ? modelForAgent(currentAgent) : '';
     }
     async function detectAgents() {
         const sel = $('frameAgentSelect'); if (!sel || !api().agentDetect) return;
@@ -367,9 +448,12 @@
         }
         for (const a of installed) { const o = document.createElement('option'); o.value = a.id; o.textContent = a.name; sel.appendChild(o); }
         const hint = $('frameAgentHint'); if (hint) hint.textContent = '已就绪 ' + installed.length + ' 个助手';
-        sel.value = installed[0].id;
+        // 沿用上次的选择；没装/没记忆才回落到第一个
+        const pick = installed.find((a) => a.id === currentAgent) || installed[0];
+        await switchAgent(pick.id);
+        sel.value = pick.id;
         const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
-        preloadSession(installed[0].id);
+        preloadSession(pick.id);
     }
 
     // ── 高级区：文件 / JSON / 体检 ──
@@ -403,8 +487,21 @@
     function applyCurrent() {
         const p = parse($('frameText').value); if (!p.ok) { setStatus(p.issues[0], 'bad'); return; }
         const issues = inspect(p.t); if (issues.length) { setStatus('先修：' + issues[0], 'bad'); return; }
-        if (!app || typeof app.applyPresetToCurrent !== 'function') return;
-        app.applyPresetToCurrent(p.t); setStatus('已应用', 'ok');
+        const inst = window.App || app;
+        if (!inst || typeof inst.applyPresetToCurrent !== 'function') return;
+        const docLayers = layersOfDoc(p.t);
+        if (docLayers) {
+            // 高级区粘贴的图层 JSON 也按「模板」应用，不再走预设路径套成默认模板
+            const layers = docLayers.map((l) => window.AiLayers ? window.AiLayers.normalize(l) : l).filter(Boolean);
+            const ok = inst.applyPresetToCurrent({
+                templateName: p.t.templateName || 'AI 边框',
+                aiLayers: layers,
+                aiBackground: typeof p.t.aiBackground === 'string' ? p.t.aiBackground : '#ffffff'
+            });
+            setStatus(ok === false ? '应用失败' : '已应用', ok === false ? 'bad' : 'ok');
+            return;
+        }
+        inst.applyPresetToCurrent(p.t); setStatus('已应用', 'ok');
     }
 
     // ── 生命周期 ──
@@ -426,7 +523,7 @@
         $('frameSamplePhoto').addEventListener('change', () => {
             // 换示例照片：用同一批方案即时重渲染，用户能比较不同照片的效果
             if (!gallery.length) return;
-            const img = photoEl();
+            const img = photoSource();
             gallery.forEach((g) => { g.dataUrl = renderFrameToUrl(g.preset, img); });
             renderGallery();
             setStatus('已换成所选照片预览', 'ok');
@@ -443,15 +540,18 @@
         $('btnFrameApply').addEventListener('click', applyCurrent);
         $('btnFrameModel').addEventListener('click', (e) => { e.stopPropagation(); const p = $('frameModelPop'); if (p && !p.hidden) closeModelPop(); else openModelPop(); });
         const fs = $('frameModelSearch'); if (fs) fs.addEventListener('input', () => renderModelList(fs.value));
-        $('frameAgentSelect').addEventListener('change', (e) => {
+        $('frameAgentSelect').addEventListener('change', async (e) => {
             if (agentKey && api().agentClose) api().agentClose(agentKey);
             agentKey = null; agentModels = []; const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
+            await switchAgent(e.target.value);
             preloadSession(e.target.value);
         });
-        $('btnAgentNew').addEventListener('click', () => {
+        $('btnAgentNew').addEventListener('click', async () => {
             if (agentKey && api().agentClose) api().agentClose(agentKey);
-            agentKey = null; agentModels = []; const label = $('frameModelLabel'); if (label) label.textContent = '默认模型';
-            preloadSession($('frameAgentSelect') && $('frameAgentSelect').value);
+            agentKey = null; agentModels = []; const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
+            const id = $('frameAgentSelect') && $('frameAgentSelect').value;
+            await switchAgent(id);
+            preloadSession(id);
         });
         // 离屏示例底图（无照片时预览用）
         try {

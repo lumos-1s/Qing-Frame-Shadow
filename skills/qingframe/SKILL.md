@@ -5,11 +5,12 @@ description: 为「清框影」设计、生成、修改照片边框。当用户�
 
 # 清框影 · 边框设计
 
-清框影是一个本地照片加框工具。一个「边框」就是一份**完整的预设 JSON**，App 能直接加载、你能直接编辑，没有第二套格式。
+清框影是一个本地照片加框工具。一个「边框」是一份 **图层 JSON**：
+`{ "templateName": "名字", "layers": [ ... ] }`。App 直接把它当模板套到用户照片上，照片、调色、裁切、撤销都不会被破坏。
 
 ## 先读手册
 
-在清框影仓库根目录运行下面的命令，它会打印**完整手册**（字段格式、96 种风格、设计原则、工作流、硬规则）。动手前完整读一遍：
+在清框影仓库根目录运行下面的命令，它会打印完整手册（图元格式、图层顺序、照片槽位、文字约束、硬规则）：
 
 ```sh
 node tools/qfs-frame.js
@@ -17,26 +18,20 @@ node tools/qfs-frame.js
 
 > 手册的唯一来源是 `frames/SKILL.md`，上面的命令直接打印它，不会过时。
 
-## 工作流（摘要，细节见手册）
+## 工作流
 
-```sh
-# 1) 从内置风格拷一份底稿到 frames/
-node tools/run-electron.js tools/qfs-frame.js init 圆角卡片 -o frames/my-frame.json
+1. 在 `frames/` 下写图层 JSON，如 `frames/a1.json`。
+2. 必须有且只有一个 `photo` 图层：它决定照片的位置和大小，也决定画布比例。
+3. `photo` 之前的图层画在照片下面，之后的画在照片上面。
+4. 文字图层必须带 `maxW` 和 `maxLines`，`size` 不超过 `0.06`。
+5. 想同时给多款时，写 `a1.json` ~ `a4.json`，保证四款在配色/留白/装饰语言上明显不同。
 
-# 2) 编辑 frames/my-frame.json
-
-# 3) 体检：结构 / 风格名 / 参数范围 / 默认值
-node tools/qfs-frame.js check frames/my-frame.json
-
-# 4) 预览：真实引擎渲染，可用 --image 指定本地照片
-node tools/run-electron.js tools/qfs-frame.js preview frames/my-frame.json -o frames/my-frame.png
-```
-
-改完必须 `check` 通过、`preview` 看过效果，再告诉用户文件路径与预览图。
+不要跑 `qfs-frame.js check/preview`：它只认旧版预设，不认图层 JSON。写完自己核对字段即可。
 
 ## 硬规则
 
-- **本地优先**：原图永不上传；`--image` 只读本地文件、不联网。默认用内置合成图。
+- **本地优先**：原图永不上传，不联网。
 - **只改 `frames/*.json`**：不要改引擎源码（`engine.js` / `engine-styles.js`）或内置预设（`shared/presets/`）。
 - **暗房质感**：发丝线、小圆角、暖灰/墨绿/金、克制留白；不用渐变发光、玻璃拟态、emoji 图标。
-- **自检后交付**：两关（check + preview）都过再说完成。
+- **不遮照片**：照片是主体，装饰只做画框和签名，不要把大面积色块盖在照片上。
+- **交付**：告诉用户文件路径；不要输出 JSON 正文。

@@ -1,111 +1,73 @@
 ---
 name: qfs-frame
-description: 为「清框影」设计照片边框。当你需要生成、修改、调整一个边框样式时读它——它讲清边框描述文件的格式、可用风格、设计原则，以及如何自检和预览。
+description: 为「清框影」设计照片边框。当你需要生成、修改、调整一个边框样式时读它——它讲清「图层边框」JSON 的格式、图层顺序、照片槽位与文字约束。
 ---
 
-# 清框影 · 边框设计
+# 清框影 · 图层边框设计
 
-一个「边框」是一份**完整的预设 JSON**，清框影能直接加载它，你也能直接编辑它。
-文件放在 `frames/` 下，如 `frames/my-frame.json`。你改的就是真预设，没有第二套格式。
+一个「边框」是一份 **图层 JSON**：`{ "templateName": "名字", "layers": [ ... ] }`。
+清框影直接把它当模板套到用户照片上——照片、调色、裁切、撤销都不会被破坏。
+文件放在 `frames/` 下，如 `frames/a1.json`。
+
+**不要改引擎源码，也不要改内置预设。你的产物只有 `frames/*.json`。**
 
 ## 硬规则（先读）
 
-1. **本地优先**：原图永远不上传。预览需要看图时用 `--image <本地路径>`，只读本机文件，不联网。默认用内置合成图，完全不碰用户照片。
-2. **只改 frame 文件**：不要改引擎源码（`engine.js` / `engine-styles.js`）或内置预设（`shared/presets/`）。你的产物就是 `frames/*.json`。
-3. **改完必须自检**：`check` 体检 + `preview` 看效果，两关都过再交付。
-4. **不写不认识的参数**：字段与取值范围以本文件和 `style-params.js` 声明表为准。
+1. **必须有且只有一个 `photo` 图层**：它就是照片的位置和大小，画布比例由它决定。
+2. **顺序就是层级**：`photo` 之前的图层在照片下面（底色 / 卡纸 / 背景），`photo` 之后的图层在照片上面（文字 / 线条 / 装饰）。
+3. **坐标是 0..1 的比例**，相对画布宽高；不要写像素。
+4. **文字必须带 `maxW` 和 `maxLines`**，`size` 不超过 `0.06`（相对画布高），否则会被引擎强制缩字/截断。
+5. **不要跑 `qfs-frame` CLI 自检**（它只认旧版预设）。写完 JSON 后自己核对字段即可。
 
-## 工作流
+## 图元格式
 
-```sh
-# 1) 从一个内置风格拷一份底稿出来（按风格名或预设名）
-node tools/run-electron.js tools/qfs-frame.js init 圆角卡片 -o frames/my-frame.json
-
-# 2) 编辑 frames/my-frame.json（见下方字段说明）
-
-# 3) 体检：结构 / 风格名 / 参数范围 / 默认值，毫秒级
-node tools/qfs-frame.js check frames/my-frame.json
-
-# 4) 预览：用真实引擎套到合成图或用户图，输出 PNG
-node tools/run-electron.js tools/qfs-frame.js preview frames/my-frame.json -o frames/my-frame.png
-node tools/run-electron.js tools/qfs-frame.js preview frames/my-frame.json --image /本地/照片.jpg -o frames/my-frame.png
+```json
+{ "type": "photo", "x": 0.08, "y": 0.08, "w": 0.84, "h": 0.70, "radius": 0.01, "fit": "cover" }
+{ "type": "rect", "x": 0.05, "y": 0.05, "w": 0.90, "h": 0.90, "radius": 0.02,
+  "fill": "#ffffff", "fillOpacity": 0.9, "stroke": "#dcba79", "strokeWidth": 2 }
+{ "type": "circle", "cx": 0.5, "cy": 0.2, "r": 0.08, "fill": "#129e78" }
+{ "type": "line", "x1": 0.1, "y1": 0.5, "x2": 0.9, "y2": 0.5, "color": "#dcba79", "width": 2, "dash": [4, 4] }
+{ "type": "text", "x": 0.5, "y": 0.92, "text": "QINGFRAME", "size": 0.03, "color": "#f2e4c4",
+  "align": "center", "weight": 600, "letterSpacing": 0.1, "maxW": 0.8, "maxLines": 1 }
 ```
 
-`init` / `preview` 需要 Electron（`run-electron.js` 包装），`check` 是纯 Node 直接跑。
+- `radius`：小于 1 按短边比例，大于等于 1 按像素；不写就是直角。
+- `fillOpacity` / `opacity`：0..1；`shadow: {color, blur, offsetX, offsetY, opacity}` 可选。
+- 颜色支持 `#rgb` / `#rrggbb` / `#rrggbbaa` / `rgb()` / `rgba()`。
+- `fit`：`cover`（默认，裁切铺满）或 `contain`（完整放进槽位）。
+- `line` 的 `dash` 是像素单位。
 
-## 边框文件里你能改的字段
+## 文字约束
 
-一份预设 JSON 的骨架（值仅示例）：
+- `size`：相对画布高，建议 0.02–0.05；引擎硬夹到 6px–20% 画布高。
+- `maxW`：这一行最宽能占画布的比例，建议 0.6–0.9。
+- `maxLines`：最多几行；超出会缩字号、再截断成 `…`。
+- `align`：`left` / `center` / `right`；`x` 是对齐锚点。
+- `letterSpacing`：相对字号的比例（>1 视为像素）。
+
+## 构图原则（暗房质感，别做成网页仪表盘）
+
+- **留白**：photo 槽位不要贴着画布边，四周至少留 4%–10%；底部信息带可以多留。
+- **克制**：发丝线、小圆角、暖灰/墨绿/金色；不要渐变发光、玻璃拟态、emoji 图标。
+- **主次**：照片是主体，装饰只做画框和签名；不要把大面积色块盖在照片上。
+- **文字**：一行能说完就别两行；日期 / 相机参数用 `·` 或空格分隔。
+- **四款要明显不同**：配色、留白比例、装饰语言至少两项不同，不要只改一行文字。
+
+## 交付
+
+在 `frames/` 下写 `a1.json` / `a2.json` / `a3.json` / `a4.json`，每份一个完整对象：
 
 ```json
 {
-  "templateName": "我的边框",
-  "photoFrameStyle": "CARD_3D",
-  "baseMargin": {
-    "marginTop": 80, "marginBottom": 120, "marginLeft": 80, "marginRight": 80,
-    "imgScale": 0.92, "imgOffsetX": 0, "imgOffsetY": 0,
-    "bgBlurEnable": 0, "bgBlurRadius": 30
-  },
-  "cornerConfig": { "cornerRadiusAll": 18 },
-  "layerList": [ { "fillConfig": {...}, "strokeConfig": {...}, "shadowGlowConfig": {...} } ],
-  "styleParams": { "CARD_3D": { "padX": 18, "thick": 2.5 } },
-  "userSignature": "留白 · 2026",
-  "manualExif": { "brand": "CANON", "model": "EOS R5", "focal": "50mm", "aperture": "f/2.8", "iso": "ISO 400", "shutter": "1/125" }
+  "templateName": "暖色胶片",
+  "layers": [
+    { "type": "rect", "x": 0.04, "y": 0.04, "w": 0.92, "h": 0.92, "fill": "#f6efe0" },
+    { "type": "photo", "x": 0.08, "y": 0.08, "w": 0.84, "h": 0.70 },
+    { "type": "line", "x1": 0.12, "y1": 0.84, "x2": 0.88, "y2": 0.84, "color": "#b9945f", "width": 1 },
+    { "type": "text", "x": 0.5, "y": 0.90, "text": "2026 · 杭州", "size": 0.028,
+      "color": "#6b5636", "align": "center", "maxW": 0.78, "maxLines": 1 }
+  ]
 }
 ```
 
-- **`templateName`**：你的边框叫什么。
-- **`photoFrameStyle`**：走哪套绘制引擎，取值必须是下面的风格名之一，留空则走传统「图层边框」管线（`baseMargin`/`layerList` 决定样子）。
-- **`baseMargin`**：四周留白（px）、图片缩放（`imgScale`，1=原尺寸）、偏移、背景模糊开关与半径。
-- **`cornerConfig`**：圆角，`cornerRadiusAll` 或四角 `cornerRadiusTL/TR/BL/BR`。
-- **`layerList`**：图层边框的底/描边/阴影。每项含 `fillConfig`、`strokeConfig`、`shadowGlowConfig`。
-- **`styleParams`**：风格私有参数，按风格名分命名空间；字段是百分数整数，引擎自动除以 100。范围见 `style-params.js` 的 `TABLE`（`check` 会校验，越界会报错）。
-- **`userSignature` / `manualExif`**：签名文字与相机参数；很多风格会把它画到画面上。
-
-## 可用风格（96 种，`photoFrameStyle` 取值）
-
-基础与卡片：
-SIMPLE, SIMPLE_FILM, WHITE_PLAIN, ROUNDED, GALLERY_MAT, DROP_SHADOW, FOLD_CORNER, TEARED_PAPER, TORN_JOURNAL,
-CARD_3D, CARD_SIMPLE, CARD_APPLE, CARD_LEICA, CARD_IMMERSION, CARD_LOGO_PARAM, CARD_PURE_LOGO,
-
-胶片与相机：
-FILM_STRIP, FILM_TEAR, VHS_TAPE, DOUBLE_EXPOSURE, BURNED_EDGE, CYANOTYPE, PRISMATIC, LIQUID_GLASS,
-CAMERA_PLATE, PARAM_CREDIT, PHOTO_CREDIT, PARAM_STRIP, PARAM_BOTTOM_LEFT, PARAM_BOTTOM_SINGLE, PARAM_TOP_LEFT,
-OVERLAY_PARAM_LEFT, OVERLAY_PARAM_RIGHT, OVERLAY_PARAM_BOTTOM, OVERLAY_LOGO_BOTTOM, WM_CLASSIC, WM_SINGLE,
-WM_BRAND_LOGO, WM_AI, FUJI_WHITE, FUJI_WM, FUJI_WM_BRAND, HASSELBLAD, XIAOMI_IMP, XIAOMI_LEICA, DARK_BRAND_ONLY,
-
-签名/背景模糊：
-SIGNATURE, SIGN_PARAM, SIGN_BLUR, SIG_BLUR, AVATAR_MEMO, AV_BLUR, BLUR_CLASSIC, BLUR_DATE,
-AV_OVERLAY, AV_OVERLAY_BC, AV_OVERLAY_BC2, AV_OVERLAY_BR, AV_OVERLAY_TR,
-
-邮票/票根：
-STAMP_POSTAGE, STAMP_KRAFT, STAMP_BLUEPRINT, STAMP_REDSEAL, STAMP_GOLD, TICKET_STAMP, TICKET_VINTAGE,
-TICKET_SCRAP, TICKET_CONCERT, MOVIE_TICKET, BOARDING_PASS, WAX_SEAL,
-
-艺术/氛围：
-ALBUM_CORNER, ART_CARD, COLOR_CLASSIC, COLOR_PALETTE, COLOR_REFINED, COMIC_PANEL, POP_COMIC, CYBER_GLITCH,
-INK_WASH, MAGAZINE_COVER, MAGAZINE_HEADER, MAGAZINE_MASTHEAD, NEON_GLOW, NEWSPAPER, OIL_BRUSH, PINBOARD_TAPE,
-POLAROID, POLAROID_HAND, PRESSED_FLOWER, VINTAGE, WATERCOLOR_BLEED, IMP_CLASSIC, IMP_FROSTED, DOUBLE_LINE, GRADIENT
-
-> 完整且最新的列表永远以 `src/renderer/js/style-caps.js` 的 `MEASURED` 为准；`check` 会校验。
-
-## 设计原则（暗房质感，别做成网页仪表盘）
-
-- **克制**：发丝线分隔、小圆角（控件 3–4px、卡片 8px）、等宽数字、暖灰/墨绿/金色配色。不要渐变发光、大圆角、玻璃拟态、emoji 图标。
-- **主次分明**：一种绿色强调主操作；金色只用于品牌/选中/装饰线，不滥用。
-- **留白**：边距宁大勿小，让照片呼吸；信息带贴底、不压主体。
-- **文字**：签名能短则短；相机参数一行排开，用 `·` 或空格分隔，别堆成段落。
-
-## 自检与交付
-
-每次交付前跑：
-```sh
-node tools/qfs-frame.js check frames/my-frame.json          # 必须「✓ 通过」
-node tools/run-electron.js tools/qfs-frame.js preview frames/my-frame.json -o frames/my-frame.png
-```
-- `check` 若报「风格不在已知表」→ 换一个上面的风格名。
-- `check` 若报「参数越界」→ 按提示的 `[min,max]` 调整。
-- `preview` 若打印「渲染警告/错误」→ 多半是风格画不出来，换底子或简化图层。
-- 看一眼 PNG：文字有没有出框、留白是否匀、颜色是否协调；不满意就回到第 2 步改。
-
-改完告诉我文件路径和预览图，说清楚你调了什么、为什么。
+写完只回复「完成」，不要输出 JSON 正文。

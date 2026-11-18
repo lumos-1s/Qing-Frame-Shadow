@@ -81,6 +81,8 @@ window.App = Object.assign(window.App || {}, {
     // 模板是否已含有效边框设置(区别于默认原图模板)
     hasBorderSettings(t) {
         if (!t) return false;
+        if (Array.isArray(t.aiLayers) && t.aiLayers.length) return true;
+        if (Array.isArray(t.layers) && t.layers.length) return true;
         if (t.templateName || t.templateTag || t.photoFrameStyle) return true;
         const m = t.baseMargin;
         if (m) {

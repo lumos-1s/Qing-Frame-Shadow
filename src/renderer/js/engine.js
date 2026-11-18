@@ -13,6 +13,14 @@ function photoSrc(im) {
     return im.el || null;
 }
 
+// AI 自由图层模板：新格式存 aiLayers，旧文档/面板读回用 layers；两者都认。
+function aiLayersOf(template) {
+    if (!template) return null;
+    if (Array.isArray(template.aiLayers) && template.aiLayers.length) return template.aiLayers;
+    if (Array.isArray(template.layers) && template.layers.length) return template.layers;
+    return null;
+}
+
 // parseColor：hex + opacity(0-100) → {r,g,b,a}，与原版 parseColor 一致(空透明度按 100 处理)
 // 记忆化:一帧里它会被调上百次(每个图层/描边/阴影/文字各一次),而输入组合很有限。
 // 返回对象只被读取(调用方一律是 rgba(c) 或读字段,没有任何地方写它),复用安全。
@@ -162,6 +170,12 @@ function _renderToCanvasInner(app, compare) {
         // 松手回到边框态后，画布按这个 zoom 显示小得多的逻辑宽度（1800×0.13≈240px），
         // 用户看到的就是「对比一下，加过边框的图变小了」。只重新套用当前 zoom 即可。
         if (typeof app.applyZoomStyle === 'function') app.applyZoomStyle();
+        return;
+    }
+
+    // 0) AI 自由图层模板：layers 里的 photo 槽位决定照片位置，背景/前景由顺序决定
+    if (aiLayersOf(template) && window.AiLayers) {
+        renderAiLayerStyle(app);
         return;
     }
 
@@ -329,6 +343,68 @@ function renderTemplateStyle(app) {
 }
 
 // 图层圆角:cornerConfig 供边框(图层/描边)独立于照片圆角自由调整
+// ── AI 自由图层样式 ──
+// layers 的顺序就是 z 序：photo 之前是背景，photo 之后是前景。
+// 画布尺寸按 photo 槽位比例与照片比例计算，照片 cover/contain 进槽位，不拉伸。
+function renderAiLayerStyle(app) {
+    const { image, template } = app;
+    const img = photoSrc(image);
+    const layers = aiLayersOf(template) || [];
+    if (!img || !layers.length || !window.AiLayers) {
+        renderPlaceholder(app, '#ffffff');
+        return;
+    }
+    const nw = img.naturalWidth || img.width || 0;
+    const nh = img.naturalHeight || img.height || 0;
+    if (!nw || !nh) { renderPlaceholder(app, '#ffffff'); return; }
+
+    const size = window.AiLayers.computeFrameSize(nw, nh, layers, { maxBase: 6000 });
+    const canvasW = size.W, canvasH = size.H;
+    const slot = size.slot;
+    const ctx = setupCanvas(app, canvasW, canvasH);
+
+    // 白底/自定义底：AI 的背景层可以完整覆盖它
+    ctx.fillStyle = typeof template.aiBackground === 'string' ? template.aiBackground : '#ffffff';
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    const pi = size.photoIndex >= 0 ? size.photoIndex : window.AiLayers.fallbackPhotoIndex(layers);
+    window.AiLayers.render(ctx, layers.slice(0, pi), canvasW, canvasH, () => {});
+
+    // 照片槽位（这是唯一绘制照片的地方）
+    window.AiLayers.drawPhoto(ctx, img, canvasW, canvasH, slot);
+    app._photoRect = {
+        x: slot.x * canvasW, y: slot.y * canvasH,
+        w: slot.w * canvasW, h: slot.h * canvasH
+    };
+
+    window.AiLayers.render(ctx, layers.slice(pi + 1), canvasW, canvasH, () => {});
+
+    // 全局光影（模板可选；AI 模板默认没有）
+    applyGlobalLight(ctx, template.lightEffect, canvasW, canvasH);
+
+    // 整体圆角卡片（模板可选）
+    const card = computeCardRadii(template, canvasW, canvasH);
+    if (card.outerRound) {
+        punchRoundedCorners(ctx, 0, 0, canvasW, canvasH, card.tl, card.tr, card.bl, card.br);
+    }
+
+    // 基准坐标 → 后备像素
+    ctx.restore();
+
+    // 元素叠层：用户自己的文字/贴纸/Logo 仍然画在 AI 边框之上，保持可编辑
+    const cw = app.dom.canvas.width, ch = app.dom.canvas.height;
+    const scl = canvasW > 0 ? cw / canvasW : 1;
+    const textScl = (app.dom.canvas._logW > 1) ? cw / app.dom.canvas._logW : 1;
+    const stripTop = (slot.y + slot.h) * canvasH * scl;
+    const cardClip = beginCardClip(ctx, template, cw, ch);
+    drawDecoration(ctx, template.decorConfig || {}, cw, ch, image, template, stripTop, textScl);
+    drawDraftText(ctx, template, cw, ch, textScl);
+    drawLogoElements(ctx, template.logoElements || [], cw, ch);
+    if (cardClip) ctx.restore();
+
+    app.applyZoomStyle();
+}
+
 function layerCornerRadii(layer, w, h) {
     const lcc = (layer && layer.cornerConfig) || {};
     const maxR = Math.min(w, h) / 2;

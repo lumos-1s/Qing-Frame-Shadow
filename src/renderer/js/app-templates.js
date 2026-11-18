@@ -538,7 +538,10 @@ window.App = Object.assign(window.App || {}, {
         if (!data || typeof data !== 'object') { this.setStatus('导入失败：文件内容无法识别'); return; }
         // 配置包:取内部 template;裸模板:直接用
         if (data.kind === 'qfs-config' && data.template && typeof data.template === 'object') data = data.template;
-        if (!data || typeof data !== 'object' || typeof data.photoFrameStyle !== 'string') {
+        if (!data || typeof data !== 'object'
+            || (!(Array.isArray(data.aiLayers) && data.aiLayers.length)
+                && !(Array.isArray(data.layers) && data.layers.length)
+                && typeof data.photoFrameStyle !== 'string')) {
             this.setStatus('导入失败：不是有效的清框影配置/样式文件');
             return;
         }
@@ -609,7 +612,10 @@ window.App = Object.assign(window.App || {}, {
         }
         if (!data || typeof data !== 'object') { this.setStatus('导入失败：分享码内容无法识别'); return; }
         if (data.kind === 'qfs-config' && data.template && typeof data.template === 'object') { shareName = String(data.name || ''); data = data.template; }
-        if (!data || typeof data !== 'object' || typeof data.photoFrameStyle !== 'string') {
+        if (!data || typeof data !== 'object'
+            || (!(Array.isArray(data.aiLayers) && data.aiLayers.length)
+                && !(Array.isArray(data.layers) && data.layers.length)
+                && typeof data.photoFrameStyle !== 'string')) {
             this.setStatus('导入失败：不是有效的清框影配置分享码');
             return;
         }
