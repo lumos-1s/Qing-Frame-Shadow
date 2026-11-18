@@ -19,6 +19,8 @@ window.App = Object.assign(window.App || {}, {
        文字 → 「文字」页签的「自定义文字」组；Logo / 贴纸 → 「Logo」页签的「元素管理」组。
        以前只有「双击文字」会翻页签，点选 Logo 时右侧还停在别的页签，用户得自己找。 */
     revealElementPanel(kind) {
+        // AI 图层的可编辑属性不在右侧面板里，别把用户从 AI 造型的工作流里翻走。
+        if (kind === 'aiLayer') return;
         const tab = (kind === 'text') ? 'text' : 'logo';
         const panel = document.getElementById('panel-' + tab);
         if (!panel) return;
@@ -34,15 +36,42 @@ window.App = Object.assign(window.App || {}, {
         }
     },
 
-    // 命中检测:logo/贴纸/自由文字
+    // 命中检测:logo/贴纸/自由文字/AI 边框图层
     pickElement(pt) {
         const hitLogo = this.hitTestLogos(pt);
         const hitStk = this.hitTestStickers(pt);
         const hitTxt = this.hitTestTexts(pt);
-        const cands = [hitLogo, hitStk, hitTxt].filter(Boolean);
+        const hitAi = this.hitTestAiLayers(pt);
+        const cands = [hitLogo, hitStk, hitTxt, hitAi].filter(Boolean);
         if (!cands.length) return null;
         cands.sort((a, b) => (b.z || 0) - (a.z || 0));
         return cands[0];
+    },
+
+    // 测量文字用的离屏 ctx：AI 图层的 textLayout 需要 measureText，
+    // 借用主画布 ctx 会改它的 font/textAlign，可能污染正在进行的绘制。
+    aiMeasureCtx() {
+        if (!this._aiMeasureCtx) {
+            const c = document.createElement('canvas');
+            c.width = c.height = 1;
+            this._aiMeasureCtx = c.getContext('2d');
+        }
+        return this._aiMeasureCtx;
+    },
+
+    // AI 自由图层：比例坐标 × 画布像素 = 命中框；数组顺序就是 z 序。
+    // 用户自己的文字/Logo 画在 AI 边框之上，所以它们的 z 更高、优先命中。
+    hitTestAiLayers(pt) {
+        const layers = this.template && this.template.aiLayers;
+        const cv = this.dom && this.dom.canvas;
+        if (!cv || !(cv.width > 1) || !Array.isArray(layers) || !layers.length) return null;
+        if (!window.AiLayers || typeof window.AiLayers.hitTest !== 'function') return null;
+        const k = this.textSpaceScale();
+        const tol = Math.max(6, 8 * k);
+        const hit = window.AiLayers.hitTest(this.aiMeasureCtx(), layers, pt.x, pt.y, cv.width, cv.height, tol);
+        if (!hit) return null;
+        const c = window.AiLayers.layerCenter(hit.layer, cv.width, cv.height) || { x: pt.x, y: pt.y };
+        return { kind: 'aiLayer', obj: hit.layer, index: hit.index, x0: c.x, y0: c.y, z: 1 + hit.index };
     },
 
     hitTestLogos(pt) {
@@ -229,7 +258,10 @@ window.App = Object.assign(window.App || {}, {
     // 字体/字号/字距/旋转，输入时实时回写，Ctrl+Enter 或失焦提交，Esc 取消。
     editTextContent(el) {
         if (!el) return;
-        this.openTextEditor(el);
+        // 画布双击传来的是选中对象；AI 图层要连 kind/index 一起带给编辑器，
+        // 否则编辑器会按普通 decor 文字处理（字段格式完全不同）。
+        if (el.kind === 'aiLayer' && el.obj) this.openTextEditor(el.obj, { aiLayerSel: el });
+        else this.openTextEditor(el);
     },
 
     _textEditorCssScale(cv) {
@@ -238,12 +270,20 @@ window.App = Object.assign(window.App || {}, {
         return lw > 0 ? rect.width / lw : 1;
     },
 
-    _textEditorMetrics(el) {
+    _textEditorMetrics(el, isAi) {
         const cv = this.dom && this.dom.canvas;
         if (!cv) return null;
         const lw = (cv._logW > 1) ? cv._logW : cv.width;
         const lh = (cv._logH > 1) ? cv._logH : cv.height;
-        if (!(lw > 1) || !(lh > 1) || typeof window.textLineMetrics !== 'function') return null;
+        if (!(lw > 1) || !(lh > 1)) return null;
+        if (isAi) {
+            if (!window.AiLayers || typeof window.AiLayers.textLayout !== 'function') return null;
+            // AI 的布局结果本来就是像素口径，直接拿来定位 textarea 即可（rot 恒为 0）。
+            const m = window.AiLayers.textLayout(this.aiMeasureCtx(), el, lw, lh);
+            if (!m) return null;
+            return { cx: m.cx, cy: m.cy, lw: m.lw, lh: m.lh, fs: m.size, ls: m.tracking, rot: 0 };
+        }
+        if (typeof window.textLineMetrics !== 'function') return null;
         return window.textLineMetrics(el, lw, lh, false, 0, 0);
     },
 
@@ -251,7 +291,7 @@ window.App = Object.assign(window.App || {}, {
         const st = this._textEditor;
         if (!st) return;
         const cv = this.dom.canvas;
-        const m = this._textEditorMetrics(st.el);
+        const m = this._textEditorMetrics(st.el, !!st.ai);
         if (!cv || !m) return;
         const rect = cv.getBoundingClientRect();
         const css = this._textEditorCssScale(cv);
@@ -265,10 +305,10 @@ window.App = Object.assign(window.App || {}, {
         ta.style.height = boxH + 'px';
         ta.style.transform = `translate(-50%,-50%) rotate(${m.rot}deg)`;
         ta.style.fontSize = fsCss + 'px';
-        ta.style.fontFamily = `"${st.el.fontFamily || 'Microsoft YaHei'}"`;
-        ta.style.fontWeight = String(st.el.fontWeight || 400);
+        ta.style.fontFamily = `"${st.ai ? (st.el.font || 'sans-serif') : (st.el.fontFamily || 'Microsoft YaHei')}"`;
+        ta.style.fontWeight = String(st.ai ? (st.el.weight || 400) : (st.el.fontWeight || 400));
         ta.style.letterSpacing = (m.ls * css) + 'px';
-        ta.style.color = this._hex6(st.el.colorHex);
+        ta.style.color = this._hex6(st.ai ? (st.el.color || '#ffffff') : st.el.colorHex);
     },
 
     openTextEditor(el, opts) {
@@ -276,12 +316,15 @@ window.App = Object.assign(window.App || {}, {
         if (!el) return;
         const cv = this.dom && this.dom.canvas;
         if (!cv) return;
-        const m = this._textEditorMetrics(el);
+        const aiSel = (opts && opts.aiLayerSel) || null;
+        const ai = !!aiSel || (opts && opts.aiLayer === true);
+        const m = this._textEditorMetrics(el, ai);
         if (!m) return;
-        this.selectedEls = [{ kind: 'text', obj: el }];
+        this.selectedEls = [aiSel || { kind: 'text', obj: el }];
         this.refreshElList();
         // 双击画布上的文字/新建文字时，把「文字」页签翻出来：字体/字号/描边就在眼前。
-        if (typeof this.switchTab === 'function') this.switchTab('text');
+        // AI 图层没有对应面板（属性在 AI 造型里），不要乱翻页签。
+        if (!ai && typeof this.switchTab === 'function') this.switchTab('text');
         const pushedUndo = !(opts && opts.pushedUndo);
         if (pushedUndo) this.pushUndo();
         const ta = document.createElement('textarea');
@@ -305,7 +348,7 @@ window.App = Object.assign(window.App || {}, {
         ta.style.caretColor = '#00e5a0';
         ta.style.whiteSpace = 'pre';
         const state = {
-            el, ta,
+            el, ta, ai,
             initial: ta.value,
             isNew: !!(opts && opts.isNew),
             pushedUndo: true,
@@ -381,6 +424,17 @@ window.App = Object.assign(window.App || {}, {
         const el = st.el;
         const text = st.ta.value;
         if (!String(text).trim()) {
+            if (st.ai) {
+                // AI 图层不能像 decor 文字那样「空了就删层」：删掉会破坏边框构图，
+                // 而且引擎还会留着 photo 槽位，视觉上是整款边框突然废了。
+                el.text = st.initial;
+                if (st.pushedUndo) this._dropUndo();
+                this.saveCurrentTemplate();
+                this.scheduleRender(true);
+                this.setStatus('文字不能为空，已保留原字');
+                if (this._syncAiLayerEdit) this._syncAiLayerEdit();
+                return;
+            }
             this._removeTextEl(el);
             if (st.pushedUndo) this._dropUndo();
             this.refreshElList();
@@ -404,7 +458,8 @@ window.App = Object.assign(window.App || {}, {
         this.refreshElList();
         this.saveCurrentTemplate();
         this.scheduleRender(true);
-        this.setStatus('文字已更新');
+        this.setStatus(st.ai ? 'AI 边框文字已更新' : '文字已更新');
+        if (st.ai && this._syncAiLayerEdit) this._syncAiLayerEdit();
     },
 
     cancelTextEditor() {
@@ -420,6 +475,7 @@ window.App = Object.assign(window.App || {}, {
         this.saveCurrentTemplate();
         this.scheduleRender(true);
         this.setStatus(st.isNew ? '已取消添加文字' : '已取消编辑');
+        if (st.ai && this._syncAiLayerEdit) this._syncAiLayerEdit();
     },
 
     // ── 鼠标旋转 ──
@@ -497,7 +553,8 @@ window.App = Object.assign(window.App || {}, {
         const hs = this._resizeHandles;
         const sel = this.selectedEls;
         // 取消选中后可能还没来得及重绘，旧手柄坐标仍在内存里；没有「单选文字」就不算命中
-        if (!hs || !hs.length || !pt || !sel || sel.length !== 1 || sel[0].kind !== 'text') return null;
+        if (!hs || !hs.length || !pt || !sel || sel.length !== 1
+            || (sel[0].kind !== 'text' && sel[0].kind !== 'aiLayer')) return null;
         const k = this.textSpaceScale();
         const r = Math.max(8, 9 * k);
         for (const hd of hs) {
@@ -510,7 +567,22 @@ window.App = Object.assign(window.App || {}, {
     // 锚定文字第一次真正拖动时先解锁成自由文字，中心不变，画面不跳。
     beginResize(pt) {
         const sel = this.selectedEls && this.selectedEls[0];
-        if (!sel || sel.kind !== 'text' || !sel.obj) return null;
+        if (!sel || !sel.obj) return null;
+        if (sel.kind === 'aiLayer') {
+            // AI 图层的几何是比例坐标，包围盒直接按画布像素算；不进引擎的
+            // 「排除被拖元素 + 静态背景」快通道（那套只认用户元素）。
+            if (!window.AiLayers || typeof window.AiLayers.layerBounds !== 'function') return null;
+            const cv = this.dom.canvas;
+            const b = window.AiLayers.layerBounds(this.aiMeasureCtx(), sel.obj, cv.width, cv.height);
+            if (!b) return null;
+            const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+            this._dropDragBase();
+            this._hideRotateHint();
+            this._resizeEl = { ref: sel.obj, isAi: true, cx, cy,
+                d0: Math.max(4, Math.hypot(pt.x - cx, pt.y - cy)), moved: false };
+            return this._resizeEl;
+        }
+        if (sel.kind !== 'text') return null;
         const m = this.textMetricsOf(sel.obj);
         if (!m) return null;
         const k = this.textSpaceScale();
@@ -539,6 +611,17 @@ window.App = Object.assign(window.App || {}, {
     applyResize(pt) {
         const r = this._resizeEl;
         if (!r) return false;
+        if (r.isAi) {
+            const d = Math.hypot(pt.x - r.cx, pt.y - r.cy);
+            if (!r.moved && Math.abs(d - r.d0) < 2) return false;
+            if (!r.moved) { r.moved = true; this.pushUndo(); }
+            const cv = this.dom.canvas;
+            const ratio = Math.max(0.05, Math.min(20, d / r.d0));
+            window.AiLayers.scaleLayer(r.ref, ratio, cv.width, cv.height);
+            this._positionTextEditor();
+            this.scheduleRender();
+            return true;
+        }
         const k = this.textSpaceScale();
         const px = pt.x / k, py = pt.y / k;
         const d = Math.hypot(px - r.cx, py - r.cy);
@@ -768,6 +851,16 @@ window.App = Object.assign(window.App || {}, {
 
     nudgeElement(el, mode, dir) {
         const e = el.obj;
+        if (el.kind === 'aiLayer') {
+            if (mode !== 'rot' && window.AiLayers && window.AiLayers.scaleLayer) {
+                const cv = this.dom.canvas;
+                window.AiLayers.scaleLayer(e, dir > 0 ? 1.1 : 0.9, cv.width, cv.height);
+                if (this._syncAiLayerEdit) this._syncAiLayerEdit();
+            }
+            this.saveCurrentTemplate();
+            this.scheduleRender();
+            return;
+        }
         if (el.kind === 'logo') {
             if (typeof e.x !== 'number') { const p = this.logoPos(e, this.dom.canvas.width, this.dom.canvas.height, e.size || 60); this.setLogoPixelPos(e, p.cx, p.cy); }
             // 取 1 位小数再存：3.2 + 5 这类累加会变成 8.199999999999989，
@@ -800,9 +893,13 @@ window.App = Object.assign(window.App || {}, {
     nudgeSelectedPosition(dx, dy) {
         if (!this.selectedEls || !this.selectedEls.length) return;
         const cw = this.dom.canvas.width || 0, ch = this.dom.canvas.height || 0;
+        let ai = false;
         this.selectedEls.forEach(sel => {
             const e = sel.obj;
-            if (sel.kind === 'logo') {
+            if (sel.kind === 'aiLayer') {
+                if (window.AiLayers && window.AiLayers.moveLayer) window.AiLayers.moveLayer(e, dx, dy, cw, ch);
+                ai = true;
+            } else if (sel.kind === 'logo') {
                 if (typeof e.x !== 'number' || typeof e.y !== 'number') {
                     const p = this.logoPos(e, cw, ch, e.size || 60);
                     this.setLogoPixelPos(e, p.cx, p.cy);
@@ -822,10 +919,17 @@ window.App = Object.assign(window.App || {}, {
         this.syncElInputs();
         this.saveCurrentTemplate();
         this.scheduleRender();
+        if (ai && this._syncAiLayerEdit) this._syncAiLayerEdit();
     },
 
     _elCenterX(sel) {
         const e = sel.obj;
+        if (sel.kind === 'aiLayer') {
+            const cv = this.dom.canvas;
+            const c = window.AiLayers && window.AiLayers.layerCenter
+                ? window.AiLayers.layerCenter(e, cv.width, cv.height) : null;
+            return Math.round(c ? c.x : (e.x || 0));
+        }
         if (sel.kind === 'logo') {
             if (typeof e.x === 'number') return Math.round(e.x);
             const p = this.logoPos(e, this.dom.canvas.width || 0, this.dom.canvas.height || 0, e.size || 60);
@@ -841,6 +945,12 @@ window.App = Object.assign(window.App || {}, {
     },
     _elCenterY(sel) {
         const e = sel.obj;
+        if (sel.kind === 'aiLayer') {
+            const cv = this.dom.canvas;
+            const c = window.AiLayers && window.AiLayers.layerCenter
+                ? window.AiLayers.layerCenter(e, cv.width, cv.height) : null;
+            return Math.round(c ? c.y : (e.y || 0));
+        }
         if (sel.kind === 'logo') {
             if (typeof e.y === 'number') return Math.round(e.y);
             const p = this.logoPos(e, this.dom.canvas.width || 0, this.dom.canvas.height || 0, e.size || 60);
@@ -871,6 +981,11 @@ window.App = Object.assign(window.App || {}, {
     setElementCenter(sel, x, y) {
         const e = sel.obj;
         const cw = this.dom.canvas.width || 0, ch = this.dom.canvas.height || 0;
+        if (sel.kind === 'aiLayer') {
+            if (window.AiLayers && window.AiLayers.setLayerCenter) window.AiLayers.setLayerCenter(e, x, y, cw, ch);
+            if (this._syncAiLayerEdit) this._syncAiLayerEdit();
+            return;
+        }
         if (sel.kind === 'logo') this.setLogoPixelPos(e, x, y);
         else if (sel.kind === 'sticker') { e.x = Math.max(20, Math.min(cw - 20, x)); e.y = Math.max(20, Math.min(ch - 20, y)); }
         else if (sel.kind === 'text') {
@@ -889,6 +1004,16 @@ window.App = Object.assign(window.App || {}, {
         const e = drag.ref;
         const cv = this.dom.canvas;
         const cw = cv.width || 0, ch = cv.height || 0;
+        if (drag.kind === 'aiLayer') {
+            // 拖动坐标是画布像素；AI 图层内部存 0..1 比例，由 AiLayers 统一写回。
+            // 不走 snapToGuides（它写的是 logo/decor 的像素字段）。
+            if (window.AiLayers && typeof window.AiLayers.setLayerCenter === 'function') {
+                // setLayerCenter 自己会把像素换算成 0..1 比例，这里传的就是画布像素。
+                window.AiLayers.setLayerCenter(e, x, y, cw, ch);
+            }
+            this.onSettingChanged();
+            return;
+        }
         if (drag.kind === 'text') {
             // 文字坐标是逻辑口径，而拖拽位移是画布像素（含 DPR）——先换算再吸附/写回，
             // 否则 DPR>1 的屏幕上文字会以 1.x 倍速跟手。
@@ -1220,6 +1345,34 @@ window.App = Object.assign(window.App || {}, {
                 // 正在画布内编辑的文字已经有 textarea 边框和把手外的编辑框，
                 // 再画一遍选中框会出现两层虚线，视觉上很脏。
                 if (this._textEditor && this._textEditor.el === e) continue;
+                if (sel.kind === 'aiLayer') {
+                    if (!window.AiLayers || typeof window.AiLayers.layerBounds !== 'function') continue;
+                    const b = window.AiLayers.layerBounds(this.aiMeasureCtx(), e, canvas.width, canvas.height);
+                    if (!b) continue;
+                    ctx.save();
+                    ctx.strokeStyle = '#00e5a0';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([6, 4]);
+                    ctx.strokeRect(b.x - 5, b.y - 5, b.w + 10, b.h + 10);
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#00e5a0';
+                    const h = Math.max(6, 7 * this.textSpaceScale());
+                    const corners = [
+                        ['nw', b.x - 5, b.y - 5],
+                        ['ne', b.x + b.w + 5 - h, b.y - 5],
+                        ['sw', b.x - 5, b.y + b.h + 5 - h],
+                        ['se', b.x + b.w + 5 - h, b.y + b.h + 5 - h],
+                    ];
+                    corners.forEach(([, x, y]) => ctx.fillRect(x, y, h, h));
+                    if (this.selectedEls.length === 1) {
+                        this._resizeHandles = corners.map(([name, x, y]) => ({
+                            name, x: x + h / 2, y: y + h / 2,
+                            cursor: (name === 'nw' || name === 'se') ? 'nwse-resize' : 'nesw-resize'
+                        }));
+                    }
+                    ctx.restore();
+                    continue;
+                }
                 // 文字用真实度量框（含方向/旋转/多行）：原来按 logo 的 size 画 60px 方块，
                 // 对文字既不是它的位置也不是它的大小。
                 if (sel.kind === 'text' && typeof window.textLineMetrics === 'function') {
@@ -1672,7 +1825,7 @@ window.App = Object.assign(window.App || {}, {
             list.appendChild(e);
             return;
         }
-        const tagMap = { logo: 'Logo', sticker: '贴纸', text: '文字' };
+        const tagMap = { logo: 'Logo', sticker: '贴纸', text: '文字', aiLayer: 'AI 边框' };
         items.forEach(it => {
             const r = document.createElement('div');
             r.className = 'el-row';

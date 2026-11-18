@@ -2416,6 +2416,7 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .frame-tweak-title { font-size: var(--fs-11); color: var(--text-3); }
 .frame-tweak-title b { color: var(--text); font-weight: 600; }
 .frame-tweak-acts { display: flex; gap: var(--sp-1); }
+.frame-tweak-hint { font-size: var(--fs-10); line-height: 1.55; color: var(--text-3); }
 .frame-tweak-grid { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
 .frame-tweak-item { display: inline-flex; align-items: center; gap: calc(6px * var(--font-scale)); font-size: var(--fs-11); color: var(--text-2); }
 .frame-tweak-item input[type="range"] { width: calc(150px * var(--font-scale)); accent-color: var(--primary); }

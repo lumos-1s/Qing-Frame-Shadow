@@ -1096,8 +1096,16 @@
     }
     function close() { closeLightbox(); hideIterate(); if (modal) modal.style.display = 'none'; }
 
+    // 画布上直接拖动/双击改字之后，面板里那份「基准图层」已经过时。
+    // 不刷新的话，下一次改底色会把用户的拖动结果覆盖掉。
+    function syncFromCanvas() {
+        if (!modal || modal.style.display !== 'flex') { applied = null; return; }
+        refreshTweakPanel(true);
+    }
+
     function init(a) {
         app = a; modal = $('frameModal');
+        if (a) a._syncAiLayerEdit = syncFromCanvas;
         if (!modal || modal.dataset.bound === '1') return; modal.dataset.bound = '1';
         $('frameModalClose').addEventListener('click', close);
         modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
@@ -1123,6 +1131,23 @@
             else box.hidden = true;
         });
         $('btnTweakHide').addEventListener('click', () => { const box = $('frameTweak'); if (box) box.hidden = true; });
+        $('btnFrameEditOnCanvas').addEventListener('click', () => {
+            // 关掉面板才能点到画布；顺手把最上层的 AI 文字选中，
+            // 用户不用先猜“点哪里”，直接拖/双击就能改。
+            close();
+            const inst = window.App || app;
+            const layers = inst && inst.template && inst.template.aiLayers;
+            if (!inst || !Array.isArray(layers) || !layers.length) return;
+            let idx = -1;
+            for (let i = layers.length - 1; i >= 0; i--) {
+                if (layers[i] && layers[i].type === 'text') { idx = i; break; }
+            }
+            const sel = idx >= 0 ? layers[idx] : layers[layers.length - 1];
+            inst.selectedEls = [{ kind: 'aiLayer', obj: sel, index: idx }];
+            if (inst.refreshElList) inst.refreshElList();
+            if (inst.scheduleRender) inst.scheduleRender(true);
+            inst.setStatus && inst.setStatus('在画布上拖动这个元素移动，双击文字改字，拖四角缩放；Esc 取消选中');
+        });
         $('btnTweakReset').addEventListener('click', resetTweak);
         const pad = $('frameTweakPad');
         if (pad) {
@@ -1215,5 +1240,5 @@
         } catch (_) {}
     }
 
-    window.QfsFramePanel = { init, open, close };
+    window.QfsFramePanel = { init, open, close, syncFromCanvas };
 })();

@@ -201,9 +201,12 @@
         } finally { ctx.restore(); }
     }
 
-    // 文字：measureText + 逐字绘制（字距手动累加），测量与绘制一致；
-    // 字号/宽度/行数/位置全部做硬约束，最后再裁到画布内。
-    function drawText(ctx, l, W, H) {
+    // 文字布局：measureText + 折行 + 缩字号 + 定位全部在这里算完并返回。
+    // 「一处算、三处用」：drawText 用它画、layerBounds 用它框、画布内编辑器用它摆 textarea。
+    // 以前这段埋在 drawText 里没有返回值，导致画布上的文字无法点选/编辑。
+    function textLayout(ctx, raw, W, H) {
+        const l = normalize(raw);
+        if (!l || l.type !== 'text') return null;
         const x = clamp01(l.x || 0) * W;
         const y = clamp01(l.y || 0) * H;
         const align = ['left', 'center', 'right'].includes(l.align) ? l.align : 'left';
@@ -214,7 +217,7 @@
         const rawTracking = Number(l.letterSpacing) || 0;
         const tracking = clamp(rawTracking > 1 ? rawTracking : rawTracking * size, 0, size * 0.5);
         const text = String(l.text == null ? '' : l.text);
-        if (!text) return;
+        if (!text) return null;
 
         const measure = (s) => {
             ctx.font = font();
@@ -246,7 +249,7 @@
             return out ? out + ell : '';
         };
 
-        let maxW = maxWidthPx(l.maxW, W,
+        const maxW = maxWidthPx(l.maxW, W,
             align === 'center' ? Math.min(x, W - x) * 2 : align === 'right' ? x : W - x);
         const maxLines = Math.max(1, Math.floor(Number(l.maxLines) || 3));
         let lines = [];
@@ -264,41 +267,180 @@
         lines = wrap(maxW);
         if (lines.length > maxLines) lines.length = maxLines;
         lines = lines.map((ln) => truncate(ln, maxW)).filter((ln, i) => ln || i === 0);
-        if (!lines.length) return;
+        if (!lines.length) return null;
 
         const lineH = size * 1.25;
-        let firstY = y - (lines.length - 1) * lineH / 2;
         const minY = size * 0.95;          // 预留 ascender
         const maxY = H - size * 0.25;      // 预留 descender，避免基线贴底被裁
-        firstY = clamp(firstY, minY, Math.max(minY, maxY - (lines.length - 1) * lineH));
+        const firstY = clamp(y - (lines.length - 1) * lineH / 2, minY, Math.max(minY, maxY - (lines.length - 1) * lineH));
+        const perLine = lines.map((ln, i) => {
+            const w = measure(ln);
+            let sx = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+            sx = w <= W ? clamp(sx, 0, W - w) : 0;
+            return { text: ln, x: sx, w, y: clamp(firstY + i * lineH, minY, maxY) };
+        });
+        const left = Math.min(...perLine.map((p) => p.x));
+        const right = Math.max(...perLine.map((p) => p.x + p.w));
+        const top = firstY - size * 0.95;
+        const bottom = (perLine.length - 1) * lineH + firstY + size * 0.25;
+        return {
+            x, y, align, size, font: font(), weight, fontFamily, tracking,
+            opacity: l.opacity != null ? clamp01(l.opacity) : 1,
+            color: l.color || '#ffffff',
+            lines, perLine, lineH, firstY, minY, maxY, maxW,
+            left, top, lw: right - left, lh: bottom - top,
+            cx: (left + right) / 2, cy: (top + bottom) / 2
+        };
+    }
 
+    // 文字：布局结果直接绘制；measureText 的位置/折行/缩字号与 textLayout 完全一致。
+    function drawText(ctx, raw, W, H) {
+        const m = textLayout(ctx, raw, W, H);
+        if (!m) return;
         ctx.save();
         try {
             ctx.beginPath();
             ctx.rect(0, 0, W, H);
             ctx.clip();
-            ctx.font = font();
+            ctx.font = m.font;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'alphabetic';
-            ctx.fillStyle = withAlpha(l.color || '#ffffff', l.opacity != null ? clamp01(l.opacity) : 1);
-            for (let i = 0; i < lines.length; i++) {
-                const ln = lines[i];
-                const w = measure(ln);
-                let sx = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
-                sx = w <= W ? clamp(sx, 0, W - w) : 0;
-                const ly = clamp(firstY + i * lineH, minY, maxY);
-                if (!tracking) {
+            ctx.fillStyle = withAlpha(m.color, m.opacity);
+            for (const p of m.perLine) {
+                if (!m.tracking) {
                     // 没有额外字距时整行绘制，浏览器保留连字与组合字符
-                    ctx.fillText(ln, sx, ly);
+                    ctx.fillText(p.text, p.x, p.y);
                     continue;
                 }
-                let cx = sx;
-                for (const ch of Array.from(ln)) {
-                    ctx.fillText(ch, cx, ly);
-                    cx += ctx.measureText(ch).width + tracking;
+                let cx = p.x;
+                for (const ch of Array.from(p.text)) {
+                    ctx.fillText(ch, cx, p.y);
+                    cx += ctx.measureText(ch).width + m.tracking;
                 }
             }
         } finally { ctx.restore(); }
+    }
+
+    // ── 画布直接编辑用的纯几何工具（不碰渲染状态，Node 单测也能跑）──
+    // 统一返回画布像素矩形；所有输入坐标都是 0..1 比例。
+    function layerBounds(ctx, raw, W, H) {
+        const l = normalize(raw);
+        if (!l) return null;
+        const px = (v) => clamp01(v) * W;
+        const py = (v) => clamp01(v) * H;
+        if (l.type === 'rect' || l.type === 'image' || l.type === 'photo') {
+            const x = px(l.x || 0), y = py(l.y || 0), w = px(l.w || 0), h = py(l.h || 0);
+            return w > 0 && h > 0 ? { x, y, w, h } : null;
+        }
+        if (l.type === 'circle') {
+            const r0 = Number(l.r) || 0;
+            const r = clamp(r0 > 1 ? r0 : r0 * Math.min(W, H), 0, Math.min(W, H) / 2);
+            if (r <= 0) return null;
+            return { x: px(l.cx || 0) - r, y: py(l.cy || 0) - r, w: r * 2, h: r * 2 };
+        }
+        if (l.type === 'line') {
+            const x1 = px(l.x1 || 0), y1 = py(l.y1 || 0), x2 = px(l.x2 || 0), y2 = py(l.y2 || 0);
+            const lw = clamp(Number(l.width || l.strokeWidth) || 1, 0.5, 40) / 2;
+            return {
+                x: Math.min(x1, x2) - lw, y: Math.min(y1, y2) - lw,
+                w: Math.abs(x2 - x1) + lw * 2, h: Math.abs(y2 - y1) + lw * 2
+            };
+        }
+        if (l.type === 'text') {
+            const m = textLayout(ctx, l, W, H);
+            if (!m) return null;
+            return { x: m.left, y: m.top, w: m.lw, h: m.lh };
+        }
+        return null;
+    }
+
+    // 从最上层往下找；数组顺序就是 z 序（见文件头）。
+    function hitTest(ctx, layers, px, py, W, H, tol) {
+        const arr = Array.isArray(layers) ? layers : [];
+        const d = Math.max(0, Number(tol) || 0);
+        for (let i = arr.length - 1; i >= 0; i--) {
+            const b = layerBounds(ctx, arr[i], W, H);
+            if (!b) continue;
+            if (px >= b.x - d && px <= b.x + b.w + d && py >= b.y - d && py <= b.y + b.h + d) {
+                return { index: i, layer: arr[i], bounds: b };
+            }
+        }
+        return null;
+    }
+
+    // 图层的「可拖动锚点」（中心）：rect/image/photo/text 用自身中心，circle 用圆心，line 用中点。
+    function layerCenter(raw, W, H) {
+        const l = normalize(raw);
+        if (!l) return null;
+        const px = (v) => clamp01(v) * W;
+        const py = (v) => clamp01(v) * H;
+        if (l.type === 'circle') return { x: px(l.cx || 0), y: py(l.cy || 0) };
+        if (l.type === 'line') {
+            return { x: (px(l.x1 || 0) + px(l.x2 || 0)) / 2, y: (py(l.y1 || 0) + py(l.y2 || 0)) / 2 };
+        }
+        const w = px(l.w || 0), h = py(l.h || 0);
+        return { x: px(l.x || 0) + (l.type === 'text' ? 0 : w / 2), y: py(l.y || 0) + (l.type === 'text' ? 0 : h / 2) };
+    }
+
+    // 写回中心（比例坐标）。直接改原对象，保证画布引用和 template.aiLayers 是同一份。
+    function setLayerCenter(raw, cx, cy, W, H) {
+        const l = raw;
+        if (!l || typeof l !== 'object') return false;
+        const u = clamp(Number(cx) / Math.max(1, W) || 0, 0, 1);
+        const v = clamp(Number(cy) / Math.max(1, H) || 0, 0, 1);
+        if (l.type === 'circle') { l.cx = u; l.cy = v; return true; }
+        if (l.type === 'line') {
+            const mx = (clamp01(l.x1 || 0) + clamp01(l.x2 || 0)) / 2;
+            const my = (clamp01(l.y1 || 0) + clamp01(l.y2 || 0)) / 2;
+            const dx = u - mx, dy = v - my;
+            l.x1 = clamp01(clamp01(l.x1 || 0) + dx); l.x2 = clamp01(clamp01(l.x2 || 0) + dx);
+            l.y1 = clamp01(clamp01(l.y1 || 0) + dy); l.y2 = clamp01(clamp01(l.y2 || 0) + dy);
+            return true;
+        }
+        if (l.type === 'text') { l.x = u; l.y = v; return true; }
+        const w = clamp01(l.w || 0), h = clamp01(l.h || 0);
+        l.x = clamp(u - w / 2, 0, Math.max(0, 1 - w));
+        l.y = clamp(v - h / 2, 0, Math.max(0, 1 - h));
+        return true;
+    }
+
+    function moveLayer(raw, du, dv, W, H) {
+        const c = layerCenter(raw, W, H);
+        if (!c) return false;
+        return setLayerCenter(raw, c.x + (Number(du) || 0), c.y + (Number(dv) || 0), W, H);
+    }
+
+    // 拖角缩放：文字改字号，圆改半径，线改端点，框类改 w/h 并保持中心。
+    function scaleLayer(raw, ratio, W, H) {
+        const l = raw;
+        if (!l || typeof l !== 'object') return false;
+        const r = clamp(Number(ratio) || 1, 0.05, 20);
+        if (l.type === 'text') {
+            const px = (Number(l.size) || 0.04) * H;
+            const next = clamp(px * r, 6, H * 0.2);
+            l.size = Math.round((next / H) * 10000) / 10000;
+            return true;
+        }
+        if (l.type === 'circle') {
+            const r0 = Number(l.r) || 0;
+            l.r = r0 > 1 ? r0 * r : r0 * r;
+            return true;
+        }
+        if (l.type === 'line') {
+            const mx = (clamp01(l.x1 || 0) + clamp01(l.x2 || 0)) / 2;
+            const my = (clamp01(l.y1 || 0) + clamp01(l.y2 || 0)) / 2;
+            l.x1 = clamp(mx + (clamp01(l.x1 || 0) - mx) * r, 0, 1);
+            l.x2 = clamp(mx + (clamp01(l.x2 || 0) - mx) * r, 0, 1);
+            l.y1 = clamp(my + (clamp01(l.y1 || 0) - my) * r, 0, 1);
+            l.y2 = clamp(my + (clamp01(l.y2 || 0) - my) * r, 0, 1);
+            return true;
+        }
+        const w = clamp(clamp01(l.w || 0) * r, 0.02, 1);
+        const h = clamp(clamp01(l.h || 0) * r, 0.02, 1);
+        const c = layerCenter(l, W, H);
+        l.w = w; l.h = h;
+        setLayerCenter(l, c.x, c.y, W, H);
+        return true;
     }
 
     const _imgs = new Map();
@@ -438,7 +580,8 @@
     }
 
     return {
-        TYPES, normalize, withAlpha, drawLayer, drawText, render, loadImage,
-        findPhotoIndex, fallbackPhotoIndex, photoSlot, computeFrameSize, drawPhoto, renderToCanvas
+        TYPES, normalize, withAlpha, drawLayer, drawText, textLayout, render, loadImage,
+        findPhotoIndex, fallbackPhotoIndex, photoSlot, computeFrameSize, drawPhoto, renderToCanvas,
+        layerBounds, hitTest, layerCenter, moveLayer, setLayerCenter, scaleLayer
     };
 });

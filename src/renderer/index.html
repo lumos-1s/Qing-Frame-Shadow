@@ -2286,10 +2286,12 @@
                     <div class="frame-tweak-head">
                         <span class="frame-tweak-title">当前边框微调 <b id="frameTweakName"></b></span>
                         <span class="frame-tweak-acts">
+                            <button type="button" class="mini-btn primary" id="btnFrameEditOnCanvas" title="关掉面板，直接在照片上拖动/双击改字">在画布上改</button>
                             <button type="button" class="mini-btn" id="btnTweakReset">还原</button>
                             <button type="button" class="mini-btn" id="btnTweakHide">收起</button>
                         </span>
                     </div>
+                    <div class="frame-tweak-hint">更直接的做法：点「在画布上改」关掉面板，在主画布上拖动文字/照片边框移动、拖四角缩放、双击文字改字。这里的输入只是备用。</div>
                     <div class="frame-tweak-grid">
                         <label class="frame-tweak-item"><span>留白</span><input type="range" id="frameTweakPad" min="-30" max="50" step="2" value="0" /><output id="frameTweakPadVal">0%</output></label>
                         <label class="frame-tweak-item"><span>底色</span><input type="color" id="frameTweakBg" value="#ffffff" /></label>

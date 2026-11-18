@@ -1283,6 +1283,10 @@ window.App = {
                 if (el.kind === 'text') {
                     e.preventDefault();
                     this.editTextContent(el.obj);
+                } else if (el.kind === 'aiLayer' && el.obj && el.obj.type === 'text') {
+                    e.preventDefault();
+                    // 把整个选中对象传进去（含 kind/index），编辑器才知道这是 AI 图层文字
+                    this.editTextContent(el);
                 }
                 return;
             }
@@ -1397,7 +1401,12 @@ window.App = {
                 canvas.style.cursor = '';
                 if (r.moved) {
                     this.commitNoPush();
-                    this.setStatus('字号 ' + Math.round(r.ref.fontSize || 0) + 'px（拖角可继续等比缩放）');
+                    if (r.isAi) {
+                        this.setStatus('AI 图层已缩放（拖角可继续）');
+                        if (this._syncAiLayerEdit) this._syncAiLayerEdit();
+                    } else {
+                        this.setStatus('字号 ' + Math.round(r.ref.fontSize || 0) + 'px（拖角可继续等比缩放）');
+                    }
                 }
                 this.scheduleRender();
                 return;
@@ -1461,6 +1470,7 @@ window.App = {
             }
             if (this._dragEl) {
                 const moved = this._dragEl.moved;
+                const aiLayer = this._dragEl.kind === 'aiLayer';
                 this._dragEl = null;
                 this._skipUserEl = null;
                 this._dropDragBase();
@@ -1473,7 +1483,10 @@ window.App = {
                 // logo,选中框出来了,但 logo 变成空白,得再动一下鼠标才回来」。
                 // 真实拖动时最后一帧已把它画在 ghost 上所以不明显,纯点击(未拖动)必现。
                 this.scheduleRender();
-                if (moved) this.commitNoPush();
+                if (moved) {
+                    this.commitNoPush();
+                    if (aiLayer && this._syncAiLayerEdit) this._syncAiLayerEdit();
+                }
             }
             if (this._pan) { this._pan = null; canvas.style.cursor = ''; }
         });

@@ -91,5 +91,43 @@ const small = L.computeFrameSize(4000, 5000, [{ type: 'photo', x: 0.1, y: 0.1, w
 check(Math.max(small.W, small.H) <= 320, '预览 maxEdge 限制长边', small.W + 'x' + small.H);
 check(L.computeFrameSize(400, 500, [{ type: 'photo' }], {}).photoIndex === 0, 'computeFrameSize 返回槽位索引');
 
+// 9) 画布直接编辑的几何：包围盒 / 命中（从上到下）/ 移动 / 缩放
+const layers = [
+    { type: 'rect', x: 0.1, y: 0.1, w: 0.8, h: 0.8, fill: '#fff' },
+    { type: 'photo', x: 0.15, y: 0.15, w: 0.7, h: 0.6 },
+    { type: 'text', x: 0.5, y: 0.85, text: 'DATE', size: 0.05, align: 'center', maxW: 0.8 }
+];
+const rb = L.layerBounds(ctx, layers[0], 1000, 800);
+check(Math.abs(rb.x - 100) < 0.01 && Math.abs(rb.y - 80) < 0.01 && Math.abs(rb.w - 800) < 0.01,
+    'layerBounds 把框类比例换算成像素', JSON.stringify(rb));
+const tb = L.layerBounds(ctx, layers[2], 1000, 800);
+check(tb.w > 0 && tb.h > 0 && tb.x >= 0 && tb.x + tb.w <= 1000,
+    'layerBounds 用文字布局算出真实可见框', JSON.stringify(tb));
+const hitText = L.hitTest(ctx, layers, 500, 680, 1000, 800, 4);
+check(hitText && hitText.index === 2 && hitText.layer.type === 'text',
+    'hitTest 命中上层文字（不是它的下层）', JSON.stringify(hitText && hitText.index));
+const hitPhoto = L.hitTest(ctx, layers, 500, 400, 1000, 800, 4);
+check(hitPhoto && hitPhoto.index === 1 && hitPhoto.layer.type === 'photo',
+    'hitTest 命中照片槽位', JSON.stringify(hitPhoto && hitPhoto.index));
+check(!L.hitTest(ctx, layers, 5, 5, 1000, 800, 0), 'hitTest 画布空白处未命中');
+
+const mv = { type: 'photo', x: 0.15, y: 0.15, w: 0.7, h: 0.6 };
+L.setLayerCenter(mv, 600, 400, 1000, 800);
+check(Math.abs((mv.x + mv.w / 2) - 0.6) < 1e-6 && Math.abs((mv.y + mv.h / 2) - 0.5) < 1e-6,
+    'setLayerCenter 按中心写回比例坐标（可拖动照片槽位）', JSON.stringify(mv));
+const tx = { type: 'text', x: 0.5, y: 0.8, text: 'A', size: 0.05 };
+L.moveLayer(tx, 100, -80, 1000, 800);
+check(Math.abs(tx.x - 0.6) < 1e-6 && Math.abs(tx.y - 0.7) < 1e-6,
+    'moveLayer 按像素位移换算成比例位移', JSON.stringify(tx));
+const sc = { type: 'rect', x: 0.2, y: 0.2, w: 0.4, h: 0.4 };
+const scCenter = L.layerCenter(sc, 1000, 800);
+L.scaleLayer(sc, 2, 1000, 800);
+const scAfter = L.layerCenter(sc, 1000, 800);
+check(Math.abs(sc.w - 0.8) < 1e-6 && Math.abs(scCenter.x - scAfter.x) < 1e-6,
+    'scaleLayer 放大框类尺寸且中心不漂移', JSON.stringify(sc));
+const st = { type: 'text', x: 0.5, y: 0.5, text: 'A', size: 0.05 };
+L.scaleLayer(st, 1.5, 1000, 800);
+check(st.size > 0.05 && st.size <= 0.2, 'scaleLayer 缩放文字字号', String(st.size));
+
 console.log(failures.length ? `\n未通过 ${failures.length} 项：${failures.join(', ')}` : '\nALL PASS');
 process.exitCode = failures.length ? 1 : 0;

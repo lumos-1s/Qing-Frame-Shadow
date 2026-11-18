@@ -268,6 +268,75 @@ app.whenReady().then(async () => {
     check(Math.abs((tweakReset.w || 0) - (photoBefore.w || 0)) < 0.002 && tweakReset.bg === '#ffffff'
         && tweakReset.texts.indexOf('2026.11.18') < 0, '微调可一键还原', JSON.stringify(tweakReset));
 
+    // 3.5.1) 直接在主画布上编辑 AI 图层：点选 / 拖动 / 撤销 / 双击改字 / 拖角缩放
+    await exec(`document.getElementById('btnFrameEditOnCanvas').click(); true`);
+    const jump = await exec(`({ hidden: document.getElementById('frameModal').style.display === 'none',
+        kind: (App.selectedEls[0] || {}).kind })`);
+    check(jump.hidden && jump.kind === 'aiLayer', '「在画布上改」关面板并选中 AI 图层', JSON.stringify(jump));
+    await exec(`document.getElementById('btnFramePanel').click(); true`);
+    await sleep(300);
+
+    // 测试窗口里 stage 可能因无布局而为 0×0；真实界面有照片时一定有尺寸，这里补上类名。
+    await exec(`(() => { App.dom.stage.classList.add('has-img');
+        App.dom.canvas.style.display='block'; App.dom.placeholder.style.display='none'; return true; })()`);
+    const canvasBefore = await exec(`(() => { const l=(App.template.aiLayers||[]).find(x=>x.type==='text')||{};
+        return { x:l.x, y:l.y, text:l.text, size:l.size, src:(App.image.el&&App.image.el.src)||'' }; })()`);
+    const picked = await exec(`(() => {
+        const cv=App.dom.canvas, r=cv.getBoundingClientRect();
+        const l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        const cx=r.left+l.x*r.width, cy=r.top+l.y*r.height;
+        document.getElementById('previewCanvas').dispatchEvent(new MouseEvent('mousedown',{
+            bubbles:true, button:0, clientX:cx, clientY:cy, screenX:cx, screenY:cy }));
+        const s=App.selectedEls[0]||{}; return { kind:s.kind, type:(s.obj||{}).type }; })()`);
+    check(picked.kind === 'aiLayer' && picked.type === 'text',
+        '画布上能直接点中 AI 图层的文字', JSON.stringify(picked));
+
+    const dragged = await exec(`(() => {
+        const cv=App.dom.canvas, r=cv.getBoundingClientRect();
+        const l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        const cx=r.left+l.x*r.width, cy=r.top+l.y*r.height;
+        window.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:cx+40,clientY:cy+20,screenX:cx+40,screenY:cy+20}));
+        window.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        return { x:l.x, y:l.y, src:(App.image.el&&App.image.el.src)||'' }; })()`);
+    check(dragged.x > canvasBefore.x + 0.01 && dragged.y > canvasBefore.y + 0.005,
+        '拖动 AI 文字直接改图层坐标', JSON.stringify({ before:canvasBefore.x, after:dragged.x }));
+    check(dragged.src === canvasBefore.src, '画布拖动 AI 图层不动照片位图', dragged.src === canvasBefore.src);
+
+    const undone = await exec(`(() => { App.undo(); const l=(App.template.aiLayers||[]).find(x=>x.type==='text')||{};
+        App.redo(); const r=(App.template.aiLayers||[]).find(x=>x.type==='text')||{};
+        return { undoX:l.x, redoX:r.x }; })()`);
+    check(Math.abs(undone.undoX - canvasBefore.x) < 0.002 && Math.abs(undone.redoX - dragged.x) < 0.002,
+        '一次画布拖动 = 一步撤销', JSON.stringify(undone));
+
+    const editOpened = await exec(`(() => {
+        const cv=App.dom.canvas, r=cv.getBoundingClientRect();
+        const l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        const cx=r.left+l.x*r.width, cy=r.top+l.y*r.height;
+        document.getElementById('previewCanvas').dispatchEvent(new MouseEvent('dblclick',{
+            bubbles:true, button:0, clientX:cx, clientY:cy, screenX:cx, screenY:cy }));
+        const ta=document.querySelector('.canvas-text-editor');
+        return { has:!!ta, value:ta?ta.value:'' }; })()`);
+    check(editOpened.has && editOpened.value === canvasBefore.text,
+        '双击 AI 文字打开画布内编辑器', JSON.stringify(editOpened));
+    await exec(`(() => { const ta=document.querySelector('.canvas-text-editor'); if(!ta) return false;
+        ta.value='2026 画布改字'; ta.dispatchEvent(new Event('input',{bubbles:true}));
+        App.commitTextEditor(); return true; })()`);
+    await sleep(300);
+    const edited = await exec(`(() => ({ text:((App.template.aiLayers||[]).find(x=>x.type==='text')||{}).text,
+        hasEditor:!!document.querySelector('.canvas-text-editor'),
+        src:(App.image.el&&App.image.el.src)||'' }))()`);
+    check(edited.text === '2026 画布改字' && !edited.hasEditor && edited.src === canvasBefore.src,
+        '画布内改字写回 AI 图层且不动照片', JSON.stringify(edited));
+
+    const resized = await exec(`(() => { const h=App._resizeHandles&&App._resizeHandles[0]; if(!h) return null;
+        const l=(App.template.aiLayers||[]).find(x=>x.type==='text'); const before=l.size;
+        const rs=App.beginResize({x:h.x,y:h.y}); if(!rs) return null;
+        App.applyResize({x:h.x-30,y:h.y-30});   // 角手柄向外拖 = 放大
+        window.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        return { before, after:l.size }; })()`);
+    check(resized && resized.after > resized.before,
+        '拖四角直接缩放 AI 图层字号', JSON.stringify(resized));
+
     // 3.6) 多选照片 → 批量套用
     await exec(`(() => { App.selectedIdx = [0, 1]; App.currentIdx = 0;
         document.getElementById('frameModalClose').click();
