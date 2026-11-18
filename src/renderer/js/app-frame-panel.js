@@ -1,415 +1,328 @@
 'use strict';
-/* AI 边框协作面板：管理 userData/frames/*.json（agent 与用户共享的作品目录）。
- * 数据层走 window.qingframe.frames* IPC；体检复用 StyleParams/StyleCaps（与 CLI 同一套规则）；
- * 预览用 window.__render 在离屏画布渲染，完全不碰用户当前照片与模板状态。
+/* AI 造型：一句话生成多方案画廊，点选即用。
+ * 主流程对用户只有「输入想法 → 4 宫格样片 → 点选应用」；
+ * 文件/JSON/体检/模型等开发者能力收进「高级」折叠区，默认不出现。
+ * 渲染复用 window.__render 离屏画布，套到用户照片，不碰当前模板状态。
  */
 (function () {
     const $ = (id) => document.getElementById(id);
-    let app = null;
-    let modal = null;
-    let current = null;          // { name }
-    let unwatch = null;
-    let agentKey = null;       // 当前 ACP 会话 key
-    let agentModelId = 'model';
-    let agentModels = [];      // 当前会话的模型列表
-    let currentModel = '';     // 当前选中的模型 value
-    let modelPopUnwatch = null;
-    let agentStream = '';      // 当前流式输出累积
-    let unwatchAgent = null;
+    let app = null, modal = null;
+    let agentKey = null, agentModelId = 'model', agentModels = [], currentModel = '', modelPopUnwatch = null;
+    let agentStream = '', unwatchAgent = null;
+    let current = null;          // 高级区选中的文件 { name }
+    let gallery = [];            // 本轮方案 [{ name, preset, dataUrl }]
+    let generating = false;
 
     function api() { return window.qingframe || {}; }
-
     function setStatus(text, kind) {
-        const el = $('frameStatus');
-        if (!el) return;
-        el.textContent = text || '';
-        el.className = 'frame-status' + (kind ? ' ' + kind : '');
+        const el = $('frameStatus'); if (!el) return;
+        el.textContent = text || ''; el.className = 'frame-status' + (kind ? ' ' + kind : '');
     }
-
+    function progress(on, text) {
+        const p = $('frameProgress'); if (!p) return;
+        p.hidden = !on; const t = $('frameProgressText'); if (t && text) t.textContent = text;
+    }
     function parse(text) {
-        try {
-            const t = JSON.parse(text);
-            if (!t || typeof t !== 'object' || Array.isArray(t)) return { ok: false, issues: ['根节点不是对象'] };
-            return { ok: true, t };
-        } catch (e) { return { ok: false, issues: ['JSON 解析失败：' + e.message] }; }
+        try { const t = JSON.parse(text); if (!t || typeof t !== 'object' || Array.isArray(t)) return { ok: false, issues: ['根节点不是对象'] }; return { ok: true, t }; }
+        catch (e) { return { ok: false, issues: ['JSON 解析失败：' + e.message] }; }
     }
-
-    // 与 tools/qfs-frame.js check 同一套规则（渲染层用全局模块，CLI 用 require）
     function inspect(t) {
         const issues = [];
-        if (!t.templateName || typeof t.templateName !== 'string') issues.push('缺 templateName（字符串）');
+        if (!t.templateName || typeof t.templateName !== 'string') issues.push('缺 templateName');
         const style = String(t.photoFrameStyle || '').toUpperCase();
         const SP = window.StyleParams, SC = window.StyleCaps;
-        if (style && SC && SC.MEASURED && !Object.prototype.hasOwnProperty.call(SC.MEASURED, style)) {
-            issues.push(`photoFrameStyle="${t.photoFrameStyle}" 不在已知风格表`);
+        if (style && SC && SC.MEASURED && !Object.prototype.hasOwnProperty.call(SC.MEASURED, style)) issues.push(`未知风格 ${t.photoFrameStyle}`);
+        if (SP && style) for (const p of SP.forStyle(style)) {
+            const raw = p.path === 'root' ? t[p.key] : (t.styleParams && t.styleParams[style] && t.styleParams[style][p.key]);
+            if (raw == null) continue;
+            const n = Number(raw);
+            if (!Number.isFinite(n) || n < p.min || n > p.max) issues.push(`${p.key} 超出 [${p.min},${p.max}]`);
         }
-        if (SP && style) {
-            for (const p of SP.forStyle(style)) {
-                const raw = p.path === 'root' ? t[p.key] : (t.styleParams && t.styleParams[style] && t.styleParams[style][p.key]);
-                if (raw == null) continue;
-                const n = Number(raw);
-                if (!Number.isFinite(n)) { issues.push(`参数 ${p.key} 不是数`); continue; }
-                if (n < p.min || n > p.max) issues.push(`参数 ${p.key}=${raw} 超出 [${p.min},${p.max}]`);
-            }
-            const bad = SP.defaultsOk && SP.defaultsOk();
-            if (bad && bad.length) issues.push('默认值与引擎字面量不符：' + bad.slice(0, 3).join('; '));
-        }
-        const bm = t.baseMargin || {};
-        for (const k of ['marginTop', 'marginBottom', 'marginLeft', 'marginRight', 'imgScale']) {
-            if (bm[k] != null && !Number.isFinite(Number(bm[k]))) issues.push(`baseMargin.${k} 不是数`);
-        }
-        if (t.layerList != null && !Array.isArray(t.layerList)) issues.push('layerList 不是数组');
         return issues;
     }
 
-    async function loadList() {
-        const list = api().framesList ? await api().framesList() : [];
-        const box = $('frameList');
-        if (!box) return;
-        box.innerHTML = '';
-        for (const name of (list || [])) {
-            const b = document.createElement('button');
-            b.type = 'button';
-            b.className = 'frame-file' + (current && current.name === name ? ' active' : '');
-            b.textContent = name;
-            b.title = name;
-            b.addEventListener('click', () => select(name));
-            box.appendChild(b);
-        }
-        if (!list || !list.length) {
-            const em = document.createElement('div');
-            em.className = 'frame-preview-empty';
-            em.textContent = '还没有边框文件。用 SKILL.md 让 agent 生成，或复制目录路径给它。';
-            box.appendChild(em);
-        }
-        const dir = await (api().framesDir ? api().framesDir() : Promise.resolve({}));
-        const d = $('frameDir');
-        if (d) d.textContent = dir.path || '';
-    }
-
-    async function select(name) {
-        const r = await (api().framesRead ? api().framesRead(name) : null);
-        if (!r) { setStatus('读取失败', 'bad'); return; }
-        current = { name: r.name };
-        $('frameText').value = r.text;
-        setStatus('', '');
-        loadList();
-    }
-
-    async function save() {
-        if (!current) { setStatus('先选一个文件', 'bad'); return; }
-        const text = $('frameText').value;
-        const p = parse(text);
-        if (!p.ok) { setStatus(p.issues[0], 'bad'); return; }
-        const r = await (api().framesSave ? api().framesSave(current.name, text) : null);
-        if (r && r.ok) setStatus('已保存', 'ok');
-        else setStatus((r && r.message) || '保存失败', 'bad');
-    }
-
-    function doCheck() {
-        const p = parse($('frameText').value);
-        if (!p.ok) { setStatus(p.issues.join('；'), 'bad'); return false; }
-        const issues = inspect(p.t);
-        if (issues.length) { setStatus('体检未过：' + issues.join('；'), 'bad'); return false; }
-        setStatus('体检通过', 'ok');
-        return true;
-    }
-
-    // 用真实引擎在离屏画布渲染当前 JSON，不碰 App 的 template / image / 画布
-    function renderPreview() {
-        const p = parse($('frameText').value);
-        if (!p.ok) { setStatus(p.issues[0], 'bad'); return; }
-        const usePhoto = $('frameUsePhoto') && $('frameUsePhoto').checked;
-        const src = usePhoto && app && app.image && app.image.el;
-        const stage = $('framePreviewStage');
-        if (!window.__render) { setStatus('引擎未就绪', 'bad'); return; }
+    // ── 渲染：把一份预设套到底图，返回 dataURL ──
+    function renderFrameToUrl(preset, img) {
+        if (!window.__render) return null;
+        if (!img || !img.naturalWidth) return null;
         const cv = document.createElement('canvas');
-        cv.width = 600; cv.height = 760;
-        const img = src || window.__qfsPhotoStub;
-        if (!img || !img.naturalWidth) { setStatus('底图未就绪，稍后再试', 'bad'); return; }
+        cv.width = 480; cv.height = 620;
         const tmp = {
-            template: JSON.parse(JSON.stringify(p.t)),
+            template: JSON.parse(JSON.stringify(preset)),
             displayMax: 4000, selectedEls: [], uiDprOverride: 1,
-            image: { el: img, exif: (p.t.manualExif) || {} },
+            image: { el: img, exif: (preset.manualExif) || {} },
             dom: { canvas: cv }, logos: [], logoImgCache: {},
             scheduleRender() {}, applyZoomStyle() {}
         };
         try {
             window.EngineStyles && window.EngineStyles.clearCaches && window.EngineStyles.clearCaches();
             window.__render(tmp);
-            stage.innerHTML = '';
-            const out = document.createElement('img');
-            out.src = cv.toDataURL('image/png');
-            stage.appendChild(out);
-            setStatus('预览已渲染 ' + cv.width + '×' + cv.height, 'ok');
-        } catch (e) { setStatus('渲染失败：' + (e.message || e), 'bad'); }
+            return cv.toDataURL('image/png');
+        } catch (e) { return null; }
     }
+    function photoEl() { return (app && app.image && app.image.el) || window.__qfsPhotoStub; }
 
-    function applyCurrent() {
-        const p = parse($('frameText').value);
-        if (!p.ok) { setStatus(p.issues[0], 'bad'); return; }
-        const issues = inspect(p.t);
-        if (issues.length) { setStatus('体检未过，先修：' + issues[0], 'bad'); return; }
-        if (!app || typeof app.applyPresetToCurrent !== 'function') { setStatus('应用未就绪', 'bad'); return; }
-        app.applyPresetToCurrent(p.t);
-        setStatus('已应用到当前照片（保留了你的签名/Logo/贴纸）', 'ok');
-    }
-
-    async function detectAgents() {
-        const sel = $('frameAgentSelect');
-        if (!sel || !api().agentDetect) return;
-        const list = await api().agentDetect();
-        sel.innerHTML = '';
-        const installed = (list || []).filter((a) => a.installed);
-        if (!installed.length) {
-            const o = document.createElement('option');
-            o.value = ''; o.textContent = '未检测到本机助手';
-            sel.appendChild(o);
-            const hint = $('frameAgentHint');
-            if (hint) hint.textContent = '需先安装 Claude Code / Codex / OpenCode 并加入 PATH';
+    // ── 画廊 ──
+    function renderGallery() {
+        const box = $('frameGallery'); if (!box) return;
+        if (!gallery.length) {
+            box.innerHTML = '<div class="frame-gallery-empty" id="frameGalleryEmpty"><div class="frame-gallery-empty-ico">◫</div><div>说一句你想要的风格，AI 用你的照片洗出 <b>4 款</b> 让你挑</div><div class="frame-gallery-empty-sub">先导入一张照片，效果会更直观</div></div>';
             return;
         }
-        for (const a of installed) {
-            const o = document.createElement('option');
-            o.value = a.id; o.textContent = a.name;
-            sel.appendChild(o);
-        }
-        const hint = $('frameAgentHint');
-        if (hint) hint.textContent = '已检测到 ' + installed.length + ' 个助手（不联网、无需 key）';
-        // 选中第一个助手后预启动会话，提前加载模型列表（打开面板即可切）
-        if (installed.length) {
-            sel.value = installed[0].id;
-            const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
-            preloadSession(installed[0].id);
+        box.innerHTML = '';
+        gallery.forEach((g, i) => {
+            const card = document.createElement('div');
+            card.className = 'frame-swatch'; card.setAttribute('role', 'listitem');
+            const imgBox = document.createElement('div'); imgBox.className = 'frame-swatch-img';
+            if (g.dataUrl) {
+                const im = document.createElement('img'); im.src = g.dataUrl; im.alt = g.preset.templateName || ('方案 ' + (i + 1)); imgBox.appendChild(im);
+            } else {
+                const ld = document.createElement('div'); ld.className = 'frame-swatch-loading'; ld.textContent = '渲染中…'; imgBox.appendChild(ld);
+            }
+            const foot = document.createElement('div'); foot.className = 'frame-swatch-foot';
+            const name = document.createElement('span'); name.className = 'frame-swatch-name'; name.textContent = g.preset.templateName || ('方案 ' + (i + 1));
+            const use = document.createElement('span'); use.className = 'frame-swatch-use'; use.textContent = '点击套用 ›';
+            foot.appendChild(name); foot.appendChild(use);
+            card.appendChild(imgBox); card.appendChild(foot);
+            card.addEventListener('click', () => applyGalleryItem(i));
+            box.appendChild(card);
+        });
+    }
+
+    function applyGalleryItem(i) {
+        const g = gallery[i];
+        if (!g || !app || typeof app.applyPresetToCurrent !== 'function') return;
+        app.applyPresetToCurrent(g.preset);
+        setStatus('已套用「' + (g.preset.templateName || '方案') + '」', 'ok');
+    }
+
+    // ── 生成：一句话 → N 个方案 ──
+    async function generate() {
+        const text = ($('framePrompt') && $('framePrompt').value || '').trim();
+        if (generating) return;
+        if (!text) { setStatus('先描述你想要的风格', 'bad'); return; }
+        const id = $('frameAgentSelect') && $('frameAgentSelect').value;
+        if (!id) { setStatus('未检测到本机助手（在「高级」里查看）', 'bad'); return; }
+        generating = true;
+        const btn = $('btnGenerate'); if (btn) btn.disabled = true;
+        progress(true, '正在洗 4 款样片…');
+        agentStream = '';
+        if ($('frameAgentOut')) $('frameAgentOut').textContent = '';
+        try {
+            const skill = await (api().framesSkill ? api().framesSkill() : Promise.resolve({ text: '' }));
+            const rules = [
+                '你是清框影边框设计师。当前目录是边框作品目录，AGENTS.md 里有完整设计规范。',
+                '用户想要：' + text,
+                '请生成 4 个不同方案：在本目录写 4 个 JSON 文件，分别命名 a1.json / a2.json / a3.json / a4.json。',
+                '每个文件是一份完整预设（templateName / photoFrameStyle / baseMargin / cornerConfig / styleParams / userSignature / manualExif），四款要有明显区别（风格/配色/留白/排版各不同）。',
+                'styleParams 按 AGENTS.md 的范围取值。写完只回复「完成」，不要输出 JSON 正文。'
+            ].join('\n');
+            await ensureAgentSession(id, skill.text || '', rules);
+            const r = await (api().agentPrompt ? api().agentPrompt(agentKey, text) : null);
+            if (!r || !r.ok) throw new Error((r && r.error) || '生成失败');
+            // 读回本轮生成的方案（按约定名 a1-a4）
+            const names = api().framesRead ? ['a1.json', 'a2.json', 'a3.json', 'a4.json'] : [];
+            const found = [];
+            for (const n of names) {
+                const f = await api().framesRead(n);
+                if (f) { const p = parse(f.text); if (p.ok && inspect(p.t).length === 0) found.push({ name: n, preset: p.t, dataUrl: null }); }
+            }
+            if (!found.length) throw new Error('助手没有产出可用的边框文件，展开「高级」看日志');
+            gallery = found;
+            renderGallery();
+            // 逐张渲染到用户照片
+            const img = photoEl();
+            progress(true, '正在套用你的照片…');
+            for (let i = 0; i < gallery.length; i++) {
+                gallery[i].dataUrl = renderFrameToUrl(gallery[i].preset, img);
+                renderGallery();
+            }
+            setStatus('已生成 ' + gallery.length + ' 款，点卡片即可套用', 'ok');
+        } catch (e) {
+            setStatus(e.message || '生成失败', 'bad');
+        } finally {
+            generating = false; if (btn) btn.disabled = false;
+            progress(false);
         }
     }
 
-    // 模型分组：从 value 的前缀取 provider（opencode/ xxx、openrouter/anthropic/...）
+    // ── 助手会话（ACP）──
+    function updateText(u) {
+        if (!u) return '';
+        const t = u.type || u.sessionUpdate || '';
+        if (t === 'agent_message_chunk' || t === 'message_chunk') { const c = u.content || {}; return typeof c === 'string' ? c : (c.text || ''); }
+        if (t === 'tool_call' || t === 'toolCall') return '\n[工具] ' + (u.title || u.name || '') + '\n';
+        return '';
+    }
+    async function ensureAgentSession(id, skillText, rules) {
+        if (agentKey) return true;
+        const r = await (api().agentStart ? api().agentStart(id, skillText, rules) : null);
+        if (!r || !r.ok) throw new Error((r && r.error) || '无法启动助手会话');
+        agentKey = r.key; agentModelId = r.modelId || 'model';
+        populateModels(r.models || []);
+        if (!unwatchAgent && api().onAgentEvent) {
+            unwatchAgent = api().onAgentEvent((payload) => {
+                if (!agentKey || payload.key !== agentKey) return;
+                agentStream += updateText(payload.update);
+                const out = $('frameAgentOut'); if (out) out.textContent = agentStream.slice(-4000);
+            });
+        }
+        return true;
+    }
     function modelGroup(m) {
-        const v = String(m.value || '');
-        let p = v.split('/')[0] || '模型';
+        const v = String(m.value || ''); let p = v.split('/')[0] || '模型';
         if (p === 'openrouter' && v.split('/')[1]) p = 'openrouter / ' + v.split('/')[1];
         return p;
     }
-
     function populateModels(models) {
         agentModels = Array.isArray(models) ? models.slice() : [];
         const label = $('frameModelLabel');
         if (!agentModels.length) { if (label) label.textContent = '默认模型'; return; }
         const cur = agentModels.find((m) => m.current) || agentModels[0];
-        currentModel = cur ? cur.value : '';
-        if (label) label.textContent = cur ? cur.name : '默认模型';
+        currentModel = cur ? cur.value : ''; if (label) label.textContent = cur ? cur.name : '默认模型';
         renderModelList('');
     }
-
     function renderModelList(query) {
-        const list = $('frameModelList');
-        if (!list) return;
+        const list = $('frameModelList'); if (!list) return;
         const q = String(query || '').trim().toLowerCase();
         const matches = agentModels.filter((m) => !q || String(m.name).toLowerCase().includes(q) || String(m.value).toLowerCase().includes(q));
         list.innerHTML = '';
-        if (!matches.length) {
-            const em = document.createElement('div');
-            em.className = 'frame-model-empty';
-            em.textContent = '没有匹配的模型';
-            list.appendChild(em);
-            return;
-        }
+        if (!matches.length) { const em = document.createElement('div'); em.className = 'frame-model-empty'; em.textContent = '没有匹配的模型'; list.appendChild(em); return; }
         const groups = new Map();
-        for (const m of matches) {
-            const g = modelGroup(m);
-            if (!groups.has(g)) groups.set(g, []);
-            groups.get(g).push(m);
-        }
+        for (const m of matches) { const g = modelGroup(m); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(m); }
         for (const [g, ms] of groups) {
-            const h = document.createElement('div');
-            h.className = 'frame-model-group';
-            h.textContent = g;
-            list.appendChild(h);
+            const h = document.createElement('div'); h.className = 'frame-model-group'; h.textContent = g; list.appendChild(h);
             for (const m of ms) {
-                const b = document.createElement('button');
-                b.type = 'button';
+                const b = document.createElement('button'); b.type = 'button';
                 b.className = 'frame-model-opt' + (m.value === currentModel ? ' active' : '');
-                b.textContent = m.name;
-                b.title = m.value;
-                b.addEventListener('click', () => chooseModel(m));
-                list.appendChild(b);
+                b.textContent = m.name; b.title = m.value;
+                b.addEventListener('click', () => chooseModel(m)); list.appendChild(b);
             }
         }
     }
-
     async function chooseModel(m) {
-        currentModel = m.value;
-        const label = $('frameModelLabel');
-        if (label) label.textContent = m.name;
-        renderModelList($('frameModelSearch') && $('frameModelSearch').value);
-        closeModelPop();
+        currentModel = m.value; const label = $('frameModelLabel'); if (label) label.textContent = m.name;
+        renderModelList($('frameModelSearch') && $('frameModelSearch').value); closeModelPop();
         if (agentKey && api().agentSetModel) {
             const r = await api().agentSetModel(agentKey, agentModelId, m.value);
-            setStatus(r && r.ok ? ('模型已切换：' + m.name) : ('(模型切换将在下次发送生效)'), r && r.ok ? 'ok' : '');
+            setStatus(r && r.ok ? ('模型：' + m.name) : '(下次发送生效)', r && r.ok ? 'ok' : '');
         }
     }
-
     function openModelPop() {
-        const pop = $('frameModelPop');
-        if (!pop) return;
-        pop.hidden = false;
-        const btn = $('btnFrameModel');
-        if (btn) btn.setAttribute('aria-expanded', 'true');
-        renderModelList($('frameModelSearch') && $('frameModelSearch').value);
-        const s = $('frameModelSearch');
-        if (s) { s.value = ''; renderModelList(''); s.focus(); }
+        const pop = $('frameModelPop'); if (!pop) return; pop.hidden = false;
+        const btn = $('btnFrameModel'); if (btn) btn.setAttribute('aria-expanded', 'true');
+        const s = $('frameModelSearch'); if (s) { s.value = ''; renderModelList(''); s.focus(); }
         if (!modelPopUnwatch) {
-            modelPopUnwatch = (e) => {
-                const wrap = document.querySelector('.frame-model-wrap');
-                if (wrap && !wrap.contains(e.target)) closeModelPop();
-            };
+            modelPopUnwatch = (e) => { const wrap = document.querySelector('.frame-model-wrap'); if (wrap && !wrap.contains(e.target)) closeModelPop(); };
             document.addEventListener('mousedown', modelPopUnwatch);
         }
     }
     function closeModelPop() {
-        const pop = $('frameModelPop');
-        if (pop) pop.hidden = true;
-        const btn = $('btnFrameModel');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
+        const pop = $('frameModelPop'); if (pop) pop.hidden = true;
+        const btn = $('btnFrameModel'); if (btn) btn.setAttribute('aria-expanded', 'false');
     }
-
-    // 预启动会话：只 init + session/new 拿模型，不发 prompt（无副作用）
     async function preloadSession(id) {
         if (agentKey) return;
         try {
             const skill = await (api().framesSkill ? api().framesSkill() : Promise.resolve({ text: '' }));
-            const rules = '你是清框影边框设计师。当前目录是边框作品目录，AGENTS.md 里有完整设计规范。只创建或修改本目录的 *.json 边框文件。';
-            await ensureAgentSession(id, skill.text || '', rules);
-        } catch (e) { /* 预启动失败不阻塞，发送时再重试 */ }
+            await ensureAgentSession(id, skill.text || '', '你是清框影边框设计师，只在本目录创建或修改 *.json 边框文件。');
+        } catch (e) { /* 预启动失败不阻塞 */ }
     }
-
-    // 把 ACP 的 session/update 转成可读文本
-    function updateText(u) {
-        if (!u) return '';
-        const t = u.type || u.sessionUpdate || '';
-        if (t === 'agent_message_chunk' || t === 'message_chunk') {
-            const c = u.content || {};
-            return typeof c === 'string' ? c : (c.text || '');
+    async function detectAgents() {
+        const sel = $('frameAgentSelect'); if (!sel || !api().agentDetect) return;
+        const list = await api().agentDetect(); sel.innerHTML = '';
+        const installed = (list || []).filter((a) => a.installed);
+        if (!installed.length) {
+            const o = document.createElement('option'); o.value = ''; o.textContent = '未检测到本机助手'; sel.appendChild(o);
+            const hint = $('frameAgentHint'); if (hint) hint.textContent = '在「高级」里：需先装 Claude Code / Codex / OpenCode';
+            return;
         }
-        if (t === 'agent_thought_chunk') return '';
-        if (t === 'tool_call' || t === 'toolCall') return '\n[工具] ' + (u.title || u.name || '') + '\n';
-        if (t === 'tool_call_update') return '';
-        return '';
+        for (const a of installed) { const o = document.createElement('option'); o.value = a.id; o.textContent = a.name; sel.appendChild(o); }
+        const hint = $('frameAgentHint'); if (hint) hint.textContent = '已就绪 ' + installed.length + ' 个助手';
+        sel.value = installed[0].id;
+        const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
+        preloadSession(installed[0].id);
     }
 
-    async function ensureAgentSession(id, skillText, rules) {
-        if (agentKey) return true;
-        const r = await (api().agentStart ? api().agentStart(id, skillText, rules) : null);
-        if (!r || !r.ok) { throw new Error((r && r.error) || '无法启动助手会话'); }
-        agentKey = r.key;
-        agentModelId = r.modelId || 'model';
-        populateModels(r.models || []);
-        // 订阅流式事件
-        if (!unwatchAgent && api().onAgentEvent) {
-            unwatchAgent = api().onAgentEvent((payload) => {
-                if (!agentKey || payload.key !== agentKey) return;
-                agentStream += updateText(payload.update);
-                const out = $('frameAgentOut');
-                if (out) out.textContent = agentStream.slice(-4000);
-            });
+    // ── 高级区：文件 / JSON / 体检 ──
+    async function loadList() {
+        const list = api().framesList ? await api().framesList() : [];
+        const box = $('frameList'); if (!box) return; box.innerHTML = '';
+        for (const name of (list || [])) {
+            const b = document.createElement('button'); b.type = 'button';
+            b.className = 'frame-file' + (current && current.name === name ? ' active' : '');
+            b.textContent = name; b.title = name; b.addEventListener('click', () => select(name)); box.appendChild(b);
         }
-        return true;
+        if (!list || !list.length) { const em = document.createElement('div'); em.className = 'frame-preview-empty'; em.textContent = '还没有边框文件'; box.appendChild(em); }
+        const dir = await (api().framesDir ? api().framesDir() : Promise.resolve({})); const d = $('frameDir'); if (d) d.textContent = dir.path || '';
+    }
+    async function select(name) {
+        const r = await (api().framesRead ? api().framesRead(name) : null); if (!r) return;
+        current = { name: r.name }; $('frameText').value = r.text; loadList();
+    }
+    async function save() {
+        if (!current) { setStatus('先选一个文件', 'bad'); return; }
+        const text = $('frameText').value; const p = parse(text);
+        if (!p.ok) { setStatus(p.issues[0], 'bad'); return; }
+        const r = await (api().framesSave ? api().framesSave(current.name, text) : null);
+        setStatus(r && r.ok ? '已保存' : ((r && r.message) || '保存失败'), r && r.ok ? 'ok' : 'bad');
+    }
+    function doCheck() {
+        const p = parse($('frameText').value); if (!p.ok) { setStatus(p.issues.join('；'), 'bad'); return; }
+        const issues = inspect(p.t);
+        setStatus(issues.length ? ('体检：' + issues.join('；')) : '体检通过', issues.length ? 'bad' : 'ok');
+    }
+    function applyCurrent() {
+        const p = parse($('frameText').value); if (!p.ok) { setStatus(p.issues[0], 'bad'); return; }
+        const issues = inspect(p.t); if (issues.length) { setStatus('先修：' + issues[0], 'bad'); return; }
+        if (!app || typeof app.applyPresetToCurrent !== 'function') return;
+        app.applyPresetToCurrent(p.t); setStatus('已应用', 'ok');
     }
 
-    async function sendAgent() {
-        const id = $('frameAgentSelect') && $('frameAgentSelect').value;
-        const text = $('framePrompt') && $('framePrompt').value.trim();
-        const out = $('frameAgentOut');
-        if (!id) { if (out) out.textContent = '没有可用的本机助手'; return; }
-        if (!text) { if (out) out.textContent = '先描述你想要的边框'; return; }
-        agentStream = '';
-        if (out) out.textContent = '正在本机运行（流式输出）…';
-        const skill = await (api().framesSkill ? api().framesSkill() : Promise.resolve({ text: '' }));
-        const rules = [
-            '你是清框影边框设计师。当前目录是边框作品目录，AGENTS.md 里有完整设计规范。',
-            '只在本目录创建或修改 *.json 边框文件；改完在回复里告诉我文件名和调了什么，不要输出 JSON 正文。'
-        ].join('\n');
-        try {
-            await ensureAgentSession(id, skill.text || '', rules);
-        } catch (e) { if (out) out.textContent = '启动失败：' + e.message; return; }
-        const r = await (api().agentPrompt ? api().agentPrompt(agentKey, text) : null);
-        if (!r || !r.ok) { if (out) out.textContent = (out.textContent || '') + '\n运行失败：' + ((r && r.error) || '未知错误'); return; }
-        if (!agentStream) if (out) out.textContent = '(助手没有文字回复，可能已直接写入文件)';
-        await loadList();
-        setStatus('助手已完成，文件列表已刷新（会话保留，可继续追问）', 'ok');
-    }
-
+    // ── 生命周期 ──
     async function open() {
-        if (!modal) return;
-        modal.style.display = 'flex';
-        await loadList();
-        await detectAgents();
+        if (!modal) return; modal.style.display = 'flex';
+        renderGallery(); detectAgents(); loadList();
         if (api().framesWatch) api().framesWatch();
-        if (!unwatch && api().onFramesChanged) {
-            unwatch = api().onFramesChanged((payload) => {
-                setStatus('文件已被外部修改：' + (payload.name || '?') + '，点「刷新」重载', 'bad');
-            });
-        }
     }
-
-    function close() {
-        if (modal) modal.style.display = 'none';
-    }
+    function close() { if (modal) modal.style.display = 'none'; }
 
     function init(a) {
-        app = a;
-        modal = $('frameModal');
-        if (!modal || modal.dataset.bound === '1') return;
-        modal.dataset.bound = '1';
+        app = a; modal = $('frameModal');
+        if (!modal || modal.dataset.bound === '1') return; modal.dataset.bound = '1';
         $('frameModalClose').addEventListener('click', close);
         modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+        $('btnGenerate').addEventListener('click', generate);
+        $('framePrompt').addEventListener('keydown', (e) => { if (e.key === 'Enter') generate(); });
         $('btnFrameRefresh').addEventListener('click', () => { loadList(); setStatus('已刷新', 'ok'); });
         $('btnFrameOpenDir').addEventListener('click', () => api().framesOpenDir && api().framesOpenDir());
         $('btnFrameCopyDir').addEventListener('click', async () => {
             const d = await (api().framesDir ? api().framesDir() : Promise.resolve({}));
-            if (d.path && navigator.clipboard) {
-                try { await navigator.clipboard.writeText(d.path); setStatus('目录路径已复制，发给 agent 即可', 'ok'); return; } catch (_) {}
-            }
-            setStatus(d.path || '无法获取目录', '');
+            if (d.path && navigator.clipboard) { try { await navigator.clipboard.writeText(d.path); setStatus('路径已复制', 'ok'); return; } catch (_) {} }
+            setStatus(d.path || '', '');
         });
         $('btnFrameSave').addEventListener('click', save);
         $('btnFrameCheck').addEventListener('click', doCheck);
-        $('btnFramePreview').addEventListener('click', renderPreview);
         $('btnFrameApply').addEventListener('click', applyCurrent);
-        $('btnAgentSend').addEventListener('click', sendAgent);
-        $('btnFrameModel').addEventListener('click', (e) => {
-            e.stopPropagation();
-            const pop = $('frameModelPop');
-            if (pop && !pop.hidden) closeModelPop(); else openModelPop();
-        });
-        const fs = $('frameModelSearch');
-        if (fs) fs.addEventListener('input', () => renderModelList(fs.value));
+        $('btnFrameModel').addEventListener('click', (e) => { e.stopPropagation(); const p = $('frameModelPop'); if (p && !p.hidden) closeModelPop(); else openModelPop(); });
+        const fs = $('frameModelSearch'); if (fs) fs.addEventListener('input', () => renderModelList(fs.value));
         $('frameAgentSelect').addEventListener('change', (e) => {
-            // 换助手：结束旧会话，预启动新助手以加载它的模型
             if (agentKey && api().agentClose) api().agentClose(agentKey);
-            agentKey = null; agentStream = ''; agentModels = [];
-            const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
+            agentKey = null; agentModels = []; const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
             preloadSession(e.target.value);
         });
         $('btnAgentNew').addEventListener('click', () => {
             if (agentKey && api().agentClose) api().agentClose(agentKey);
-            agentKey = null; agentStream = ''; agentModels = [];
-            const label = $('frameModelLabel'); if (label) label.textContent = '默认模型';
-            if ($('frameAgentOut')) $('frameAgentOut').textContent = '已开启新会话，之前的对话结束。';
+            agentKey = null; agentModels = []; const label = $('frameModelLabel'); if (label) label.textContent = '默认模型';
             preloadSession($('frameAgentSelect') && $('frameAgentSelect').value);
         });
-        // 造一张离屏示例底图（无 --image 时预览用）。引擎读 naturalWidth，
-        // 必须用 Image 而非 canvas（canvas 没有 naturalWidth，会算出 NaN seed）。
+        // 离屏示例底图（无照片时预览用）
         try {
-            const c = document.createElement('canvas'); c.width = 600; c.height = 760;
-            const g = c.getContext('2d');
-            const grad = g.createLinearGradient(0, 0, 0, 760);
+            const c = document.createElement('canvas'); c.width = 480; c.height = 620;
+            const g = c.getContext('2d'); const grad = g.createLinearGradient(0, 0, 0, 620);
             grad.addColorStop(0, '#7ec8e3'); grad.addColorStop(.55, '#e78ba0'); grad.addColorStop(1, '#5b4c7a');
-            g.fillStyle = grad; g.fillRect(0, 0, 600, 760);
-            const im = new Image();
-            im.onload = () => { window.__qfsPhotoStub = im; };
-            im.src = c.toDataURL('image/png');
+            g.fillStyle = grad; g.fillRect(0, 0, 480, 620);
+            const im = new Image(); im.onload = () => { window.__qfsPhotoStub = im; }; im.src = c.toDataURL('image/png');
         } catch (_) {}
     }
 

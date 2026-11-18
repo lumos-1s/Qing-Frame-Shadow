@@ -2250,50 +2250,32 @@
     </div>
 
 
-    <!-- ═══ AI 边框协作面板（agent 生成的 frame.json 在这里预览/应用） ═══ -->
+    <!-- ═══ AI 造型：一句话生成多方案画廊，点选即用 ═══ -->
     <div id="frameModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="frameModalTitle">
         <div class="modal-card frame-card">
             <div class="modal-header">
-                <span class="modal-title" id="frameModalTitle">AI 边框 · 协作</span>
+                <span class="modal-title" id="frameModalTitle">AI 造型</span>
                 <button id="frameModalClose" class="modal-close" title="关闭" aria-label="关闭">&times;</button>
             </div>
-            <div class="frame-body">
-                <div class="frame-side">
-                    <div class="frame-side-head">
-                        <span>边框文件</span>
-                        <button type="button" class="mini-btn" id="btnFrameRefresh" title="重新读取文件列表">刷新</button>
+            <div class="frame-body frame-studio">
+                <div class="frame-compose">
+                    <div class="frame-compose-row">
+                        <input type="text" id="framePrompt" class="frame-prompt" placeholder="描述你想要的风格，如：暖色胶片、底部加日期、留白多一点" aria-label="描述风格" />
+                        <button type="button" class="mini-btn primary" id="btnGenerate">生成 4 款</button>
                     </div>
-                    <div class="frame-list" id="frameList" role="listbox" aria-label="边框文件"></div>
-                    <div class="frame-side-acts">
-                        <button type="button" class="mini-btn" id="btnFrameOpenDir" title="在资源管理器打开边框目录">打开目录</button>
-                        <button type="button" class="mini-btn" id="btnFrameCopyDir" title="复制目录路径给 agent">复制路径</button>
-                    </div>
-                    <div class="frame-dir" id="frameDir"></div>
+                    <div class="frame-progress" id="frameProgress" hidden><span class="frame-progress-dot"></span><span id="frameProgressText">正在洗样片…</span></div>
                 </div>
-                <div class="frame-main">
-                    <div class="frame-editor">
-                        <label class="frame-label" for="frameText">边框 JSON（可直接编辑保存）</label>
-                        <textarea id="frameText" class="frame-text" spellcheck="false" aria-label="边框 JSON 编辑框"></textarea>
-                        <div class="frame-editor-acts">
-                            <button type="button" class="mini-btn primary" id="btnFrameSave" title="保存到边框文件">保存</button>
-                            <button type="button" class="mini-btn" id="btnFrameCheck" title="体检：结构/风格/参数/默认值">体检</button>
-                            <button type="button" class="mini-btn" id="btnFrameApply" title="应用到当前照片（保留你的签名/Logo/贴纸）">应用到当前</button>
-                            <span class="frame-status" id="frameStatus" role="status" aria-live="polite"></span>
-                        </div>
+                <div class="frame-gallery" id="frameGallery" role="list" aria-label="生成的边框方案">
+                    <div class="frame-gallery-empty" id="frameGalleryEmpty">
+                        <div class="frame-gallery-empty-ico">◫</div>
+                        <div>说一句你想要的风格，AI 用你的照片洗出 <b>4 款</b> 让你挑</div>
+                        <div class="frame-gallery-empty-sub">先导入一张照片，效果会更直观</div>
                     </div>
-                    <div class="frame-preview">
-                        <div class="frame-preview-head">
-                            <span>预览</span>
-                            <label class="frame-preview-chk"><input type="checkbox" id="frameUsePhoto" /> 用当前照片</label>
-                            <button type="button" class="mini-btn" id="btnFramePreview" title="用真实引擎渲染预览">渲染</button>
-                        </div>
-                        <div class="frame-preview-stage" id="framePreviewStage">
-                            <span class="frame-preview-empty">选择边框文件后点「渲染」</span>
-                        </div>
-                    </div>
-                    <div class="frame-agent">
-                        <div class="frame-preview-head">
-                            <span>AI 助手</span>
+                </div>
+                <details class="frame-advanced">
+                    <summary>高级：助手 / 模型 / 文件 / 调参</summary>
+                    <div class="frame-advanced-body">
+                        <div class="frame-adv-row">
                             <select id="frameAgentSelect" class="frame-agent-select" aria-label="选择本机编程助手"><option value="">检测中…</option></select>
                             <div class="frame-model-wrap">
                                 <button type="button" id="btnFrameModel" class="frame-model-btn" title="选择模型" aria-haspopup="listbox" aria-expanded="false"><span id="frameModelLabel">默认模型</span> <span class="frame-model-caret">▾</span></button>
@@ -2302,16 +2284,20 @@
                                     <div class="frame-model-list" id="frameModelList" role="listbox" aria-label="模型列表"></div>
                                 </div>
                             </div>
+                            <button type="button" class="mini-btn" id="btnAgentNew" title="结束当前会话">新会话</button>
                             <span class="frame-agent-hint" id="frameAgentHint"></span>
                         </div>
-                        <div class="frame-agent-row">
-                            <input type="text" id="framePrompt" class="frame-prompt" placeholder="描述你想要的边框，如：暖色胶片风、下方留白大、右下角显示日期" />
-                            <button type="button" class="mini-btn" id="btnAgentNew" title="结束当前会话，下次发送开新会话">新会话</button>
-                            <button type="button" class="mini-btn primary" id="btnAgentSend">发送</button>
-                        </div>
                         <pre class="frame-agent-out" id="frameAgentOut" aria-live="polite"></pre>
+                        <div class="frame-adv-row">
+                            <button type="button" class="mini-btn" id="btnFrameOpenDir">打开目录</button>
+                            <button type="button" class="mini-btn" id="btnFrameCopyDir">复制路径</button>
+                            <span class="frame-status" id="frameStatus" role="status"></span>
+                        </div>
+                        <div class="frame-adv-files"><div class="frame-side-head"><span>边框文件</span><button type="button" class="mini-btn" id="btnFrameRefresh">刷新</button></div><div class="frame-list" id="frameList"></div></div>
+                        <div class="frame-adv-editor"><textarea id="frameText" class="frame-text" spellcheck="false" aria-label="边框 JSON"></textarea><div class="frame-editor-acts"><button type="button" class="mini-btn" id="btnFrameSave">保存</button><button type="button" class="mini-btn" id="btnFrameCheck">体检</button><button type="button" class="mini-btn" id="btnFrameApply">应用到当前</button></div></div>
+                        <div class="frame-dir" id="frameDir"></div>
                     </div>
-                </div>
+                </details>
             </div>
         </div>
     </div>

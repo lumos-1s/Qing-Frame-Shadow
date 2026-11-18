@@ -2357,8 +2357,50 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-2-5); margin-top: 14px; }
 
 /* ── AI 边框协作面板 ── */
-.frame-card { width: calc(960px * var(--font-scale)); max-width: 94vw; max-height: 88vh; display: flex; flex-direction: column; }
+/* ── AI 造型：画廊工作台 ── */
+.frame-card { width: calc(1000px * var(--font-scale)); max-width: 94vw; max-height: 90vh; }
+.frame-studio { display: flex; flex-direction: column; gap: var(--sp-3); padding: calc(16px * var(--font-scale)); }
 .frame-body { display: flex; flex: 1 1 auto; min-height: 0; }
+.frame-studio { flex-direction: column; gap: var(--sp-3); padding: calc(16px * var(--font-scale)); }
+.frame-compose { display: flex; flex-direction: column; gap: var(--sp-2); }
+.frame-compose-row { display: flex; gap: var(--sp-2); align-items: stretch; }
+.frame-compose-row .frame-prompt { flex: 1 1 auto; font-size: var(--fs-13); padding: calc(9px * var(--font-scale)) calc(12px * var(--font-scale)); }
+.frame-compose-row .mini-btn { flex: 0 0 auto; padding-inline: calc(18px * var(--font-scale)); }
+.frame-progress { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-12); color: var(--primary-text); }
+.frame-progress[hidden] { display: none; }
+.frame-progress-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: frame-pulse 1s ease-in-out infinite; }
+@keyframes frame-pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+.frame-gallery {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); align-content: start;
+}
+.frame-gallery-empty {
+    grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: var(--sp-2); text-align: center; color: var(--text-2); font-size: var(--fs-13);
+    min-height: calc(260px * var(--font-scale)); border: 1px dashed var(--border-strong); border-radius: var(--r-m);
+}
+.frame-gallery-empty-ico { font-size: calc(34px * var(--font-scale)); color: var(--brand-gold); line-height: 1; }
+.frame-gallery-empty b { color: var(--brand-gold-text); }
+.frame-gallery-empty-sub { font-size: var(--fs-11); color: var(--text-3); }
+.frame-swatch {
+    display: flex; flex-direction: column; gap: var(--sp-2);
+    border: 1px solid var(--border); border-radius: var(--r-m); padding: var(--sp-2);
+    background: var(--surface-alt); cursor: pointer; text-align: left;
+    transition: border-color .15s, background .15s;
+}
+.frame-swatch:hover { border-color: var(--brand-gold); background: var(--surface); }
+.frame-swatch-img { width: 100%; height: 0; padding-bottom: 72%; position: relative; overflow: hidden; border-radius: var(--r-s); background: var(--bg-soft); }
+.frame-swatch-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.frame-swatch-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.frame-swatch-name { font-size: var(--fs-12); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frame-swatch-use { font-size: var(--fs-10); color: var(--brand-gold-text); white-space: nowrap; }
+.frame-swatch-loading { display: flex; align-items: center; justify-content: center; height: 100%; font-size: var(--fs-11); color: var(--text-3); }
+.frame-advanced { border-top: 1px solid var(--border); }
+.frame-advanced summary { cursor: pointer; padding: var(--sp-2) 0; font-size: var(--fs-11); color: var(--text-3); }
+.frame-advanced-body { display: flex; flex-direction: column; gap: var(--sp-2); padding-bottom: var(--sp-2); }
+.frame-adv-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.frame-adv-files, .frame-adv-editor { border-top: 1px solid var(--border); padding-top: var(--sp-2); }
+.frame-adv-editor .frame-text { min-height: 90px; }
 .frame-side {
     flex: 0 0 calc(220px * var(--font-scale)); display: flex; flex-direction: column; min-height: 0;
     border-right: 1px solid var(--border); padding: var(--sp-2);
