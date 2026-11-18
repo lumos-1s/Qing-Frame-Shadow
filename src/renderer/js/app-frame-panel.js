@@ -54,6 +54,15 @@
         }
         return out;
     }
+    // 图层边框文档：校验 layers，过滤非法层，保证至少有一层
+    function sanitizeLayerDoc(t) {
+        if (!t || !Array.isArray(t.layers)) return null;
+        const layers = t.layers.map((l) => window.AiLayers ? window.AiLayers.normalize(l) : l).filter(Boolean);
+        if (!layers.length) return null;
+        const out = Object.assign({}, t, { layers });
+        if (typeof out.templateName !== 'string' || !out.templateName) out.templateName = 'AI 边框';
+        return out;
+    }
     function inspect(t) {
         const issues = [];
         if (!t.templateName || typeof t.templateName !== 'string') issues.push('缺 templateName');
@@ -69,20 +78,31 @@
         return issues;
     }
 
-    // ── 渲染：把一份预设套到底图，返回 dataURL ──
+    // ── 渲染：把一份方案套到底图，返回 dataURL ──
+    // 方案有两种：{ layers:[...] } = AI 自由图层（新），否则 = 传统预设走引擎。
     function renderFrameToUrl(preset, img) {
-        if (!window.__render) return null;
         if (!img || !img.naturalWidth) return null;
         const cv = document.createElement('canvas');
         cv.width = 480; cv.height = 620;
-        const tmp = {
-            template: JSON.parse(JSON.stringify(preset)),
-            displayMax: 4000, selectedEls: [], uiDprOverride: 1,
-            image: { el: img, exif: (preset.manualExif) || {} },
-            dom: { canvas: cv }, logos: [], logoImgCache: {},
-            scheduleRender() {}, applyZoomStyle() {}
-        };
+        const ctx = cv.getContext('2d');
         try {
+            if (preset && Array.isArray(preset.layers) && preset.layers.length && window.AiLayers) {
+                // 白底 → 照片铺满（作为底层）→ AI 图层（边框/装饰叠加其上）
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height);
+                ctx.drawImage(img, 0, 0, cv.width, cv.height);
+                window.AiLayers.render(ctx, preset.layers, cv.width, cv.height, () => {
+                    // 图片异步加载后由调用方重绘（这里画廊可接受一次性）
+                });
+                return cv.toDataURL('image/png');
+            }
+            if (!window.__render) return null;
+            const tmp = {
+                template: JSON.parse(JSON.stringify(preset)),
+                displayMax: 4000, selectedEls: [], uiDprOverride: 1,
+                image: { el: img, exif: (preset.manualExif) || {} },
+                dom: { canvas: cv }, logos: [], logoImgCache: {},
+                scheduleRender() {}, applyZoomStyle() {}
+            };
             window.EngineStyles && window.EngineStyles.clearCaches && window.EngineStyles.clearCaches();
             window.__render(tmp);
             return cv.toDataURL('image/png');
@@ -141,7 +161,12 @@
 
     function applyGalleryItem(i) {
         const g = gallery[i];
-        if (!g || !app || typeof app.applyPresetToCurrent !== 'function') return;
+        if (!g) return;
+        if (g.isLayer) {
+            setStatus('这是 AI 新设计的预览样片；逐层编辑与完整应用即将支持', 'ok');
+            return;
+        }
+        if (!app || typeof app.applyPresetToCurrent !== 'function') return;
         app.applyPresetToCurrent(g.preset);
         setStatus('已套用「' + (g.preset.templateName || '方案') + '」', 'ok');
     }
@@ -161,11 +186,18 @@
         try {
             const skill = await (api().framesSkill ? api().framesSkill() : Promise.resolve({ text: '' }));
             const rules = [
-                '你是清框影边框设计师。当前目录是边框作品目录，AGENTS.md 里有完整设计规范。',
-                '用户想要：' + text,
-                '请生成 4 个不同方案：在本目录写 4 个 JSON 文件，分别命名 a1.json / a2.json / a3.json / a4.json。',
-                '每个文件是一份完整预设（templateName / photoFrameStyle / baseMargin / cornerConfig / styleParams / userSignature / manualExif），四款要有明显区别（风格/配色/留白/排版各不同）。',
-                'styleParams 按 AGENTS.md 的范围取值。写完只回复「完成」，不要输出 JSON 正文。'
+                '你是清框影边框设计师。用户想要：' + text,
+                '请生成 4 个各不相同的边框方案，在本目录写 4 个 JSON：a1.json / a2.json / a3.json / a4.json。',
+                '每个文件是一个「图层边框」对象，格式：',
+                '{"templateName":"方案名","layers":[ ...图层... ]}',
+                'layers 从底到顶绘制，每层是以下之一（坐标为 0..1 比例，相对画布宽高）：',
+                ' {"type":"rect","x":0.05,"y":0.05,"w":0.9,"h":0.9,"radius":0.02,"fill":"#ffffff","fillOpacity":0.9,"stroke":"#dcba79","strokeWidth":2}',
+                ' {"type":"circle","cx":0.5,"cy":0.2,"r":0.08,"fill":"#129e78"}',
+                ' {"type":"line","x1":0.1,"y1":0.5,"x2":0.9,"y2":0.5,"color":"#dcba79","width":2,"dash":[4,4]}',
+                ' {"type":"text","x":0.5,"y":0.92,"text":"文字","size":0.035,"color":"#f2e4c4","align":"center","weight":600,"letterSpacing":0.1}',
+                '可加 shadow:{color,blur,offsetX,offsetY,opacity}。颜色用十六进制。',
+                '要求：4 款在风格/配色/留白/排版上明显不同，且都用图层组合出真实的新设计（不要只写一行文字）。',
+                '写好 4 个文件后只回复「完成」，不要输出 JSON 正文。'
             ].join('\n');
             await ensureAgentSession(id, skill.text || '', rules);
             // 关键：把「生成规则 + 用户想法」一起发给 agent（rules 只在建会话时用，不会随 prompt 发送）
@@ -185,7 +217,8 @@
                 if (!f) continue;
                 const p = parse(f.text);
                 if (!p.ok) continue;
-                found.push({ name: f.name, preset: sanitize(p.t), dataUrl: null });
+                const layerDoc = Array.isArray(p.t.layers) ? sanitizeLayerDoc(p.t) : null;
+                found.push({ name: f.name, preset: layerDoc || sanitize(p.t), dataUrl: null, isLayer: !!layerDoc });
                 if (found.length >= 4) break;
             }
             if (!found.length) {

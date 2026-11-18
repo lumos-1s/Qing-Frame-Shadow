@@ -55,15 +55,26 @@ ipcMain.handle('agent:close', () => ({ ok: true }));
 ipcMain.handle('agent:cancel', () => ({ ok: true }));
 // 关键：agent:prompt 模拟 agent 写 4 个方案 JSON
 ipcMain.handle('agent:prompt', () => {
-    const base = JSON.parse(fs.readFileSync(path.join(PRESET_DIR, '圆角卡片.json'), 'utf8'));
-    for (let i = 1; i <= 4; i++) {
-        const t = JSON.parse(JSON.stringify(base));
-        t.templateName = '方案' + i;
-        // 故意让第 2 个方案带未知风格 + 越界参数，验证 sanitize 自动修复而非丢弃
-        t.photoFrameStyle = i === 2 ? 'NOT_A_REAL_STYLE' : 'CARD_3D';
-        t.styleParams = { CARD_3D: { padX: i === 2 ? 999 : 12 + i * 2 } };
-        fs.writeFileSync(frameFile('a' + i + '.json'), JSON.stringify(t, null, 2), 'utf8');
-    }
+    // 模拟 AI 输出 4 个「图层边框」文档（新设计，非现成预设）
+    const designs = [
+        { name: '细线胶片', layers: [
+            { type: 'rect', x: 0.06, y: 0.06, w: 0.88, h: 0.88, radius: 0.01, fill: '#10171a', fillOpacity: 0.0, stroke: '#dcba79', strokeWidth: 2 },
+            { type: 'line', x1: 0.12, y1: 0.8, x2: 0.88, y2: 0.8, color: '#dcba79', width: 1 },
+            { type: 'text', x: 0.5, y: 0.87, text: 'FILM', size: 0.03, color: '#f2e4c4', align: 'center' }
+        ]},
+        { name: '圆章留白', layers: [
+            { type: 'rect', x: 0.1, y: 0.1, w: 0.8, h: 0.8, radius: 0.02, fill: '#ffffff', fillOpacity: 0.9 },
+            { type: 'circle', cx: 0.5, cy: 0.25, r: 0.1, fill: '#129e78' }
+        ]},
+        { name: '双线极简', layers: [
+            { type: 'line', x1: 0.1, y1: 0.1, x2: 0.9, y2: 0.1, color: '#e6d9b8', width: 2 },
+            { type: 'text', x: 0.5, y: 0.92, text: 'QINGFRAME', size: 0.025, color: '#e6d9b8', align: 'center' }
+        ]},
+        { name: '墨绿边框', layers: [
+            { type: 'rect', x: 0.04, y: 0.04, w: 0.92, h: 0.92, radius: 0.015, fill: '#1e3a2f', fillOpacity: 0.0, stroke: '#dcba79', strokeWidth: 3 }
+        ]}
+    ];
+    designs.forEach((d, i) => fs.writeFileSync(frameFile('a' + (i + 1) + '.json'), JSON.stringify({ templateName: d.name, layers: d.layers }, null, 2), 'utf8'));
     return { ok: true };
 });
 
@@ -103,6 +114,8 @@ app.whenReady().then(async () => {
         imgs: document.querySelectorAll('.frame-swatch-img img').length })`);
     check(cards.n === 4, '生成 4 宫格方案', JSON.stringify(cards));
     check(cards.imgs === 4, '每张方案都渲染出缩略图', String(cards.imgs));
+    check(cards.names.join(',') === '细线胶片,圆章留白,双线极简,墨绿边框',
+        '展示的是 AI 全新设计的图层边框（非现成预设）', cards.names.join(','));
 
     // 2.5) 示例照片下拉：列出已导入照片，切换后画廊用新照片重渲染
     const sample = await exec(`(() => {
@@ -118,12 +131,11 @@ app.whenReady().then(async () => {
     check(before !== after, '切换示例照片后画廊重新渲染（用新照片）',
         JSON.stringify({ changed: before !== after, beforeLen: before.length, afterLen: after.length }));
 
-    // 3) 点第 2 张 → 应用到当前照片
+    // 3) 点第 2 张 → AI 图层方案给出「样片预览」提示（完整编辑/应用后续支持）
     await exec(`document.querySelectorAll('#frameGallery .frame-swatch')[1].click(); true`);
     await sleep(300);
-    const applied = await exec(`({ status: document.getElementById('frameStatus').textContent, name: App.template && App.template.templateName, style: App.template && App.template.photoFrameStyle })`);
-    check(/方案2/.test(applied.name || '') && /已套用/.test(applied.status), '点卡片套用对应方案', JSON.stringify(applied));
-    check(applied.style === 'CARD_3D', '未知风格已被自动修复为有效风格（不再丢弃整款）', String(applied.style));
+    const applied = await exec(`({ status: document.getElementById('frameStatus').textContent })`);
+    check(/预览样片|即将支持/.test(applied.status), '点 AI 图层样片给出明确提示', JSON.stringify(applied));
 
     // 4) 高级区仍可用：助手/模型已就绪
     const adv = await exec(`({ hasAdvanced: !!document.querySelector('.frame-advanced'), modelLabel: document.getElementById('frameModelLabel').textContent, agentSel: (document.getElementById('frameAgentSelect')||{}).value })`);
