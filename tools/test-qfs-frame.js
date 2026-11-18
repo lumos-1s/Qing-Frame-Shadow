@@ -70,6 +70,59 @@ const sk = fs.existsSync(entrySkill) ? fs.readFileSync(entrySkill, 'utf8') : '';
 check(/^---\r?\n/.test(sk) && /name:\s*qingframe/.test(sk) && /description:/.test(sk)
     && /qfs-frame\.js/.test(sk), '入口 skill 有标准 frontmatter 并指向 CLI',
     JSON.stringify({ exists: !!sk, name: /name:\s*qingframe/.test(sk), pointsToCli: /qfs-frame\.js/.test(sk) }));
+check(/check frames\//.test(sk) && /preview frames\//.test(sk) && !/不要跑[^\n]*check/.test(sk),
+    '入口 skill 把 check / preview 写进工作流（不再劝退自检）',
+    JSON.stringify({ check: /check frames\//.test(sk), preview: /preview frames\//.test(sk) }));
+
+// 8) 图层模式：init --blank 出的骨架必须过体检（出生即合法）
+const f5 = path.join(TMP, 'blank.json');
+r = run(['init', '--blank', '暖灰胶片', '-o', f5]);
+const blank = fs.existsSync(f5) ? JSON.parse(fs.readFileSync(f5, 'utf8')) : {};
+r = run(['check', f5]);
+check(r.code === 0 && /通过/.test(r.out) && /图层模式/.test(r.out),
+    'init --blank 骨架通过图层体检', r.out.trim().slice(-90));
+check(Array.isArray(blank.layers) && blank.layers.filter((l) => l.type === 'photo').length === 1,
+    '骨架只有一个 photo 槽位', JSON.stringify({ layers: (blank.layers || []).length }));
+
+// 9) 图层模式：5 个典型错误全部要抓到（旧版 check 在这里是假绿灯）
+const f6 = path.join(TMP, 'bad-layers.json');
+fs.writeFileSync(f6, JSON.stringify({
+    templateName: '坏样例',
+    layers: [
+        { type: 'rect', x: 0.04, y: 0.04, w: 1.2, h: 0.92, fill: '#f6efe0' },
+        { type: 'photo', x: 0.08, y: 0.08, w: 0.84, h: 0.7 },
+        { type: 'photo', x: 0.02, y: 0.02, w: 0.3, h: 0.3 },
+        { type: 'text', x: 0.5, y: 0.9, text: '溢出画布的标题', size: 0.2, color: '#111' },
+        { type: 'blur', x: 0.1, y: 0.1 }
+    ]
+}, null, 2), 'utf8');
+r = run(['check', f6]);
+check(r.code !== 0 && /2 个 photo/.test(r.out), 'check 抓多个 photo 槽位', r.out.trim().split('\n').slice(-4).join(' / '));
+check(/size=0\.2 超过 0\.06/.test(r.out) && /缺 maxW/.test(r.out) && /缺 maxLines/.test(r.out),
+    'check 抓文字超限与缺 maxW / maxLines');
+check(/type="blur" 不认识/.test(r.out) && /超出画布/.test(r.out), 'check 抓未知图元与越界');
+
+// 10) 图层模式：错名字段要提醒（width / fontSize 会被引擎静默忽略）
+const f7 = path.join(TMP, 'typo-field.json');
+fs.writeFileSync(f7, JSON.stringify({
+    templateName: '错名',
+    layers: [
+        { type: 'photo', x: 0.08, y: 0.08, w: 0.84, h: 0.7 },
+        { type: 'rect', x: 0.1, y: 0.1, width: 0.2, height: 0.2, fill: '#000' },
+        { type: 'text', x: 0.1, y: 0.9, text: 'A', fontSize: 0.03, maxW: 0.4, maxLines: 1 }
+    ]
+}, null, 2), 'utf8');
+r = run(['check', f7]);
+check(/未知字段 width/.test(r.out) && /未知字段 fontSize/.test(r.out) && /应写成 w/.test(r.out),
+    'check 提醒错名字段并给出正确写法', r.out.trim().split('\n').filter((s) => /未知字段/.test(s)).join(' / '));
+
+// 11) 整批体检：目录里一好一坏，汇总 1/2
+const batch = path.join(TMP, 'batch');
+fs.mkdirSync(batch, { recursive: true });
+fs.writeFileSync(path.join(batch, 'a1.json'), fs.readFileSync(f5, 'utf8'), 'utf8');
+fs.writeFileSync(path.join(batch, 'a2.json'), fs.readFileSync(f6, 'utf8'), 'utf8');
+r = run(['check', batch]);
+check(r.code !== 0 && /1\/2 份通过/.test(r.out), 'check 目录整批并汇总通过数', r.out.trim().slice(-60));
 
 console.log(failures.length ? `\n未通过 ${failures.length} 项：${failures.join(', ')}` : '\nALL PASS');
 process.exitCode = failures.length ? 1 : 0;

@@ -13,6 +13,9 @@ tools/qfs-frame.js             ← init / check / preview 三个子命令
 frames/SKILL.md                ← 完整手册（CLI 不带参数时打印的就是它）
 ```
 
+`init --blank` 出图层骨架，`check` 按引擎口径验图层 JSON（0 错误才算过），
+`preview` 用真实引擎出 PNG（直接 `node` 调用即可，内部自动转交 Electron）。
+
 最简单：让 agent 在仓库根运行 `node tools/qfs-frame.js`，它会打印完整手册并照着做。
 
 ## 方式二：用 npx skills 安装（发布后）

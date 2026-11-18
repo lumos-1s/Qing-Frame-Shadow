@@ -27,6 +27,8 @@ window.Date = class extends RealDate {
 <script src="../src/shared/png-srgb.js"></script>
 <script src="../src/renderer/js/engine.js"></script>
 <script src="../src/renderer/js/engine-styles.js"></script>
+<!-- AI 自由图层：qfs-frame preview 要渲染 {layers:[...]} 边框，缺这个脚本引擎会当普通照片画（静默无框）。 -->
+<script src="../src/renderer/js/app-ai-layers.js"></script>
 <script>
 // ── 确定性 PRNG:替换 Math.random,让 CYBER_GLITCH 等随机风格可复现 ──
 function mulberry32(seed) {
@@ -268,10 +270,14 @@ window.__QR = {
     const warnLog = takeMsgs();
     if (!error && warnLog.length) error = warnLog.join(' | ');
     const pfs = template.photoFrameStyle;
+    const layers = Array.isArray(template.aiLayers) && template.aiLayers.length ? template.aiLayers
+      : (Array.isArray(template.layers) ? template.layers : null);
     const path = (pfs && pfs !== 'NONE') ? 'style'
+      : (layers && layers.length) ? 'layer'
       : ((template.baseMargin || {}).bgBlurEnable === 1) ? 'card'
       : ((template.layerList || []).length) ? 'layer' : 'simple';
-    return { png: cEl.toDataURL('image/png'), W: cEl.width, H: cEl.height, path, error };
+    return { png: cEl.toDataURL('image/png'), W: cEl.width, H: cEl.height, path,
+      layers: layers ? layers.length : 0, error };
   }
 };
 </script>

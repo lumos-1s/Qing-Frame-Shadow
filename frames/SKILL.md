@@ -17,7 +17,21 @@ description: 为「清框影」设计照片边框。当你需要生成、修改�
 2. **顺序就是层级**：`photo` 之前的图层在照片下面（底色 / 卡纸 / 背景），`photo` 之后的图层在照片上面（文字 / 线条 / 装饰）。
 3. **坐标是 0..1 的比例**，相对画布宽高；不要写像素。
 4. **文字必须带 `maxW` 和 `maxLines`**，`size` 不超过 `0.06`（相对画布高），否则会被引擎强制缩字/截断。
-5. **不要跑 `qfs-frame` CLI 自检**（它只认旧版预设）。写完 JSON 后自己核对字段即可。
+5. **写完必须跑 `qfs-frame check`**：0 错误才算完成；再用 `preview` 出图看一眼。体检口径与引擎同源，会抓多/缺 `photo`、未知图元、错名字段（`width`/`fontSize` 这种会被静默忽略）、文字缺 `maxW`/`maxLines`、`size` 超限、越界、大面积盖照片。
+
+## 命令
+
+在仓库根目录：
+
+```sh
+node tools/qfs-frame.js                      # 打印本手册
+node tools/qfs-frame.js init --blank "名字" -o frames/a1.json   # 起一份能过体检的图层骨架
+node tools/qfs-frame.js check frames/a1.json # 体检；也可 check frames 整批
+node tools/qfs-frame.js preview frames/a1.json                  # 出 frames/a1.preview.png
+node tools/qfs-frame.js preview frames --image photo.jpg -o .tmp/previews  # 真实照片 + 整批
+```
+
+`preview` 内部会自动转交 Electron，直接 `node` 调用即可；不给 `--image` 时用内置合成底图。
 
 ## 图元格式
 
@@ -70,4 +84,4 @@ description: 为「清框影」设计照片边框。当你需要生成、修改�
 }
 ```
 
-写完只回复「完成」，不要输出 JSON 正文。
+交付前：`check` 全部 0 错误，`preview` 的图自己看过一遍。回复只写「完成」+ 文件路径 + 一句设计说明，不要输出 JSON 正文。
