@@ -196,6 +196,9 @@ if (!app.requestSingleInstanceLock()) {
     // 阴影的空间自适应系数（同上来源；PS 渲染上拟合，CRS2 格式，25KB 不压缩）
     const ACR_SHADOWS_PATH = path.join(__dirname, '..', '..', 'shared', 'acr', 'cr-shadows.bin');
     const TEMPLATES_DIR = path.join(app.getPath('userData'), 'templates');
+    // AI 边框工作流：agent 与协作面板共享的作品目录（放 userData，打包后可读写，
+    // 不像 shared/ 进 asar 只读）。qfs-frame.js 的 -o 也可以指向这里。
+    const FRAMES_DIR = path.join(app.getPath('userData'), 'frames');
     // 调色预设与整帧样式模板分库存：预设只含全局调色参数，几 KB，方便频繁读写与分享。
     const GRADE_PRESETS_DIR = path.join(app.getPath('userData'), 'grade-presets');
     const { loadState, saveState, validDir, freeFilePath } = createStateStore(path.join(app.getPath('userData'), 'state.json'));
@@ -847,6 +850,54 @@ handleIpc('load-preset', (_e, name) => {
         if (!p || !fs.existsSync(p)) return null;
         return JSON.parse(fs.readFileSync(p, 'utf-8'));
     } catch (e) { return null; }
+});
+
+// ── AI 边框协作：agent 与面板共享 userData/frames/*.json ──
+// 放 userData 而非 shared/：后者进 asar 只读，agent 写不进去。
+const fsEnsureDir = (d) => { try { fs.mkdirSync(d, { recursive: true }); } catch (_) { /* 忽略：建不出时后续读写会报错 */ } return d; };
+const framePath = (name) => {
+    const safe = safeLeafName(name, '');
+    return safe ? resolveInside(FRAMES_DIR, safe.endsWith('.json') ? safe : safe + '.json') : null;
+};
+handleIpc('frames:list', () => {
+    try {
+        fsEnsureDir(FRAMES_DIR);
+        return fs.readdirSync(FRAMES_DIR).filter((f) => f.toLowerCase().endsWith('.json')).sort();
+    } catch (_) { return []; }
+});
+handleIpc('frames:read', (_e, name) => {
+    try {
+        const p = framePath(name);
+        if (!p || !fs.existsSync(p)) return null;
+        return { name: path.basename(p), text: fs.readFileSync(p, 'utf8') };
+    } catch (_) { return null; }
+});
+handleIpc('frames:save', (_e, name, text) => {
+    try {
+        const p = framePath(name);
+        if (!p) return { ok: false, message: '文件名不合法' };
+        JSON.parse(String(text || '')); // 存前校验，坏 JSON 不落盘
+        fsEnsureDir(FRAMES_DIR);
+        fs.writeFileSync(p, String(text || ''), 'utf8');
+        return { ok: true, name: path.basename(p) };
+    } catch (e) { return { ok: false, message: e && e.message }; }
+});
+handleIpc('frames:dir', () => ({ path: FRAMES_DIR }));
+handleIpc('frames:openDir', () => { try { fsEnsureDir(FRAMES_DIR); shell.openPath(FRAMES_DIR); return { ok: true }; } catch (e) { return { ok: false, message: e.message }; } });
+// 目录变化推送：外部 agent 改文件 → 面板提示重载。fs.watch 结果去重（写一次会来多个事件）。
+let framesWatcher = null;
+handleIpc('frames:watch', () => {
+    try {
+        fsEnsureDir(FRAMES_DIR);
+        if (!framesWatcher) {
+            framesWatcher = fs.watch(FRAMES_DIR, (event, filename) => {
+                for (const win of BrowserWindow.getAllWindows()) {
+                    if (!win.isDestroyed()) win.webContents.send('frames-changed', { event, name: String(filename || '') });
+                }
+            });
+        }
+        return { ok: true, path: FRAMES_DIR };
+    } catch (err) { return { ok: false, message: err && err.message }; }
 });
 
 // 启动时要读全部预设:原来 list-presets + 逐个 load-preset = 78 次 IPC 往返,每次都在主进程

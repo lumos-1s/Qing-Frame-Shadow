@@ -15,6 +15,18 @@ contextBridge.exposeInMainWorld('qingframe', {
     },
     listPresets: () => ipcRenderer.invoke('list-presets'),
     loadPreset: (name) => ipcRenderer.invoke('load-preset', name),
+    // AI 边框协作面板
+    framesList: () => ipcRenderer.invoke('frames:list'),
+    framesRead: (name) => ipcRenderer.invoke('frames:read', name),
+    framesSave: (name, text) => ipcRenderer.invoke('frames:save', name, text),
+    framesDir: () => ipcRenderer.invoke('frames:dir'),
+    framesOpenDir: () => ipcRenderer.invoke('frames:openDir'),
+    framesWatch: () => ipcRenderer.invoke('frames:watch'),
+    onFramesChanged: (cb) => {
+        const h = (_e, payload) => cb(payload);
+        ipcRenderer.on('frames-changed', h);
+        return () => ipcRenderer.removeListener('frames-changed', h);
+    },
     loadAllPresets: () => ipcRenderer.invoke('load-all-presets'),
     saveImage: (data, filename) => ipcRenderer.invoke('save-image-base64', { data, filename }),
     saveImagesBatch: (files) => ipcRenderer.invoke('save-images-batch', files),

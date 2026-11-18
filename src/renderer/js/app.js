@@ -3660,6 +3660,9 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
             gbox.style.display = 'none';
         });
         bindBtn('btnSettings', () => this.openSettings());
+        bindBtn('btnFramePanel', () => {
+            if (window.QfsFramePanel) { window.QfsFramePanel.init(this); window.QfsFramePanel.open(); }
+        });
         bindBtn('settingsClose', () => this.closeSettings());
         const settingsTabs = Array.from(document.querySelectorAll('#settingsModal .settings-tab'));
         settingsTabs.forEach((b) => {
