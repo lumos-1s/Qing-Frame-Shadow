@@ -25,6 +25,16 @@ contextBridge.exposeInMainWorld('qingframe', {
     framesWatch: () => ipcRenderer.invoke('frames:watch'),
     agentDetect: () => ipcRenderer.invoke('agent:detect'),
     agentRun: (id, prompt) => ipcRenderer.invoke('agent:run', id, prompt),
+    agentStart: (id, skill, rules) => ipcRenderer.invoke('agent:start', id, skill, rules),
+    agentPrompt: (key, text) => ipcRenderer.invoke('agent:prompt', key, text),
+    agentCancel: (key) => ipcRenderer.invoke('agent:cancel', key),
+    agentSetModel: (key, modelId, value) => ipcRenderer.invoke('agent:setModel', key, modelId, value),
+    agentClose: (key) => ipcRenderer.invoke('agent:close', key),
+    onAgentEvent: (cb) => {
+        const h = (_e, payload) => cb(payload);
+        ipcRenderer.on('agent-event', h);
+        return () => ipcRenderer.removeListener('agent-event', h);
+    },
     onFramesChanged: (cb) => {
         const h = (_e, payload) => cb(payload);
         ipcRenderer.on('frames-changed', h);

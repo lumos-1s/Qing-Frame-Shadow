@@ -49,6 +49,8 @@ ipcMain.handle('frames:save', (_e, name, text) => {
 ipcMain.handle('frames:dir', () => ({ path: TMP }));
 ipcMain.handle('frames:openDir', () => ({ ok: true }));
 ipcMain.handle('frames:watch', () => ({ ok: true }));
+ipcMain.handle('agent:detect', () => [{ id: 'opencode', name: 'OpenCode', installed: true, path: 'mock', acp: true, acpPath: 'mock' }]);
+ipcMain.handle('frames:skill', () => ({ ok: true, text: '# 清框影边框设计规范' }));
 
 app.whenReady().then(async () => {
     // 放一份示例 frame

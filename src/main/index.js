@@ -908,11 +908,34 @@ handleIpc('frames:watch', () => {
     } catch (err) { return { ok: false, message: err && err.message }; }
 });
 
-// ── 本机编程助手接入（聊天面板让它读 skill、在 FRAMES_DIR 生成边框）──
+// ── 本机编程助手接入（ACP 长会话；流式事件推给渲染层）──
 handleIpc('agent:detect', () => localAgent.detect());
-handleIpc('agent:run', (_e, id, prompt) => {
+handleIpc('agent:start', async (_e, id, skillText, rules) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
-    return localAgent.run(String(id || ''), String(prompt || ''), FRAMES_DIR);
+    const skill = String(skillText || '');
+    const guide = String(rules || '');
+    return localAgent.start(String(id || ''), FRAMES_DIR, skill, guide);
+});
+handleIpc('agent:prompt', async (_e, key, text) => {
+    if (!isTrustedFrame(_e)) return BLOCKED;
+    const sender = _e.sender;
+    return localAgent.prompt(String(key || ''), String(text || ''), (update) => {
+        try {
+            if (!sender.isDestroyed()) sender.send('agent-event', { key: String(key || ''), update });
+        } catch (_) { /* 窗口已关 */ }
+    });
+});
+handleIpc('agent:cancel', (_e, key) => { if (isTrustedFrame(_e)) localAgent.cancel(String(key || '')); });
+handleIpc('agent:setModel', async (_e, key, modelId, value) => {
+    if (!isTrustedFrame(_e)) return BLOCKED;
+    return localAgent.setModel(String(key || ''), String(modelId || 'model'), String(value || ''));
+});
+handleIpc('agent:close', (_e, key) => { if (isTrustedFrame(_e)) localAgent.close(String(key || '')); });
+app.on('before-quit', () => localAgent.closeAll());
+// 保留一次性命令入口（没有 ACP 适配器时的降级）
+handleIpc('agent:run', (_e, id, promptText) => {
+    if (!isTrustedFrame(_e)) return BLOCKED;
+    return localAgent.run(String(id || ''), String(promptText || ''), FRAMES_DIR);
 });
 
 // 启动时要读全部预设:原来 list-presets + 逐个 load-preset = 78 次 IPC 往返,每次都在主进程

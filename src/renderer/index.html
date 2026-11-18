@@ -2295,10 +2295,12 @@
                         <div class="frame-preview-head">
                             <span>AI 助手</span>
                             <select id="frameAgentSelect" class="frame-agent-select" aria-label="选择本机编程助手"><option value="">检测中…</option></select>
+                            <select id="frameAgentModel" class="frame-agent-select" aria-label="选择模型" hidden><option value="">默认模型</option></select>
                             <span class="frame-agent-hint" id="frameAgentHint"></span>
                         </div>
                         <div class="frame-agent-row">
                             <input type="text" id="framePrompt" class="frame-prompt" placeholder="描述你想要的边框，如：暖色胶片风、下方留白大、右下角显示日期" />
+                            <button type="button" class="mini-btn" id="btnAgentNew" title="结束当前会话，下次发送开新会话">新会话</button>
                             <button type="button" class="mini-btn primary" id="btnAgentSend">发送</button>
                         </div>
                         <pre class="frame-agent-out" id="frameAgentOut" aria-live="polite"></pre>

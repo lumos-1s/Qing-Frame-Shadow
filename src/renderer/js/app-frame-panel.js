@@ -9,6 +9,10 @@
     let modal = null;
     let current = null;          // { name }
     let unwatch = null;
+    let agentKey = null;       // 当前 ACP 会话 key
+    let agentModelId = 'model';
+    let agentStream = '';      // 当前流式输出累积
+    let unwatchAgent = null;
 
     function api() { return window.qingframe || {}; }
 
@@ -171,34 +175,78 @@
         if (hint) hint.textContent = '已检测到 ' + installed.length + ' 个助手（不联网、无需 key）';
     }
 
+    // 把 ACP 的 session/update 转成可读文本
+    function updateText(u) {
+        if (!u) return '';
+        const t = u.type || u.sessionUpdate || '';
+        if (t === 'agent_message_chunk' || t === 'message_chunk') {
+            const c = u.content || {};
+            return typeof c === 'string' ? c : (c.text || '');
+        }
+        if (t === 'agent_thought_chunk') return '';
+        if (t === 'tool_call' || t === 'toolCall') return '\n[工具] ' + (u.title || u.name || '') + '\n';
+        if (t === 'tool_call_update') return '';
+        return '';
+    }
+
+    async function ensureAgentSession(id, skillText, rules) {
+        if (agentKey) return true;
+        const r = await (api().agentStart ? api().agentStart(id, skillText, rules) : null);
+        if (!r || !r.ok) { throw new Error((r && r.error) || '无法启动助手会话'); }
+        agentKey = r.key;
+        agentModelId = r.modelId || 'model';
+        // 填充模型下拉
+        const modelSel = $('frameAgentModel');
+        if (modelSel && Array.isArray(r.models) && r.models.length) {
+            modelSel.innerHTML = '';
+            for (const m of r.models) {
+                const o = document.createElement('option');
+                o.value = m.value; o.textContent = m.name;
+                if (m.current) o.selected = true;
+                modelSel.appendChild(o);
+            }
+            modelSel.hidden = false;
+        }
+        // 订阅流式事件
+        if (!unwatchAgent && api().onAgentEvent) {
+            unwatchAgent = api().onAgentEvent((payload) => {
+                if (!agentKey || payload.key !== agentKey) return;
+                agentStream += updateText(payload.update);
+                const out = $('frameAgentOut');
+                if (out) out.textContent = agentStream.slice(-4000);
+            });
+        }
+        return true;
+    }
+
     async function sendAgent() {
         const id = $('frameAgentSelect') && $('frameAgentSelect').value;
         const text = $('framePrompt') && $('framePrompt').value.trim();
         const out = $('frameAgentOut');
         if (!id) { if (out) out.textContent = '没有可用的本机助手'; return; }
         if (!text) { if (out) out.textContent = '先描述你想要的边框'; return; }
-        if (out) out.textContent = '已交给 ' + id + '，正在本机运行（可能要几十秒）…';
-        // 把 skill 精简版 + 用户想法拼成 prompt；agent 在 FRAMES_DIR 里只写 JSON。
+        agentStream = '';
+        if (out) out.textContent = '正在本机运行（流式输出）…';
         const skill = await (api().framesSkill ? api().framesSkill() : Promise.resolve({ text: '' }));
         const rules = [
-            '你是清框影边框设计师。当前工作目录是边框作品目录（userData/frames）。',
-            '用户想要：' + text,
-            '',
-            '规则：',
-            '1) 只在本目录创建或修改一个 *.json 边框文件，用 templateName 起个贴切的名字；不要动其它文件。',
-            '2) 边框文件是完整预设 JSON：templateName、photoFrameStyle（96 种风格名）、baseMargin、cornerConfig、layerList、styleParams、userSignature、manualExif。',
-            '3) photoFrameStyle 必须是引擎已知风格；styleParams 参数按声明表范围取值（如 CARD_3D 的 padX 5-40、thick 0.5-6）。',
-            '4) 暗房质感：发丝线、小圆角、暖灰/墨绿/金配色、克制留白；不用渐变发光、玻璃拟态、emoji。',
-            '5) 写完文件后，在回复里告诉我文件名和你调了什么。不要输出 JSON 正文到对话里。',
-            '',
-            '完整风格清单与设计原则（参考）：',
-            (skill.text || '').slice(0, 4000)
+            '你是清框影边框设计师。当前目录是边框作品目录，AGENTS.md 里有完整设计规范。',
+            '只在本目录创建或修改 *.json 边框文件；改完在回复里告诉我文件名和调了什么，不要输出 JSON 正文。'
         ].join('\n');
-        const r = await (api().agentRun ? api().agentRun(id, rules) : null);
-        if (!r || !r.ok) { if (out) out.textContent = '运行失败：' + ((r && r.error) || '未知错误'); return; }
-        if (out) out.textContent = (r.output || '(助手没有文字回复)').slice(-4000);
-        await loadList(); // agent 可能生成了新文件
-        setStatus('助手已完成，文件列表已刷新', 'ok');
+        try {
+            await ensureAgentSession(id, skill.text || '', rules);
+        } catch (e) { if (out) out.textContent = '启动失败：' + e.message; return; }
+        // 如果用户在下拉里换了模型，先切模型（如默认的 openrouter 需要 key，换自带模型）
+        const modelSel = $('frameAgentModel');
+        const chosen = modelSel && !modelSel.hidden ? modelSel.value : '';
+        if (chosen && api().agentSetModel) {
+            const mr = await api().agentSetModel(agentKey, agentModelId, chosen);
+            if (mr && !mr.ok) { if (out) out.textContent = '切换模型失败：' + mr.error; return; }
+        }
+        const r = await (api().agentPrompt ? api().agentPrompt(agentKey, text) : null);
+        if (!r || !r.ok) { if (out) out.textContent = (out.textContent || '') + '\n运行失败：' + ((r && r.error) || '未知错误'); return; }
+        if (!agentStream) if (out) out.textContent = '(助手没有文字回复，可能已直接写入文件)';
+        await loadList();
+        setStatus('助手已完成，文件列表已刷新（会话保留，可继续追问）', 'ok');
     }
 
     async function open() {
@@ -239,6 +287,12 @@
         $('btnFramePreview').addEventListener('click', renderPreview);
         $('btnFrameApply').addEventListener('click', applyCurrent);
         $('btnAgentSend').addEventListener('click', sendAgent);
+        $('btnAgentNew').addEventListener('click', () => {
+            if (agentKey && api().agentClose) api().agentClose(agentKey);
+            agentKey = null; agentStream = '';
+            const ms = $('frameAgentModel'); if (ms) { ms.hidden = true; ms.innerHTML = '<option value="">默认模型</option>'; }
+            if ($('frameAgentOut')) $('frameAgentOut').textContent = '已开启新会话，之前的对话结束。';
+        });
         // 造一张离屏示例底图（无 --image 时预览用）。引擎读 naturalWidth，
         // 必须用 Image 而非 canvas（canvas 没有 naturalWidth，会算出 NaN seed）。
         try {
