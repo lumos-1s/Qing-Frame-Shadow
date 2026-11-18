@@ -2511,10 +2511,11 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .frame-adv-label { flex: 0 0 auto; font-size: var(--fs-11); color: var(--text-3); }
 .frame-api-cfg {
     display: flex; flex-direction: column; gap: var(--sp-2);
-    padding: var(--sp-2) 0 0; margin-bottom: var(--sp-2);
+    padding: var(--sp-2) 0 0; margin-bottom: var(--sp-2); max-width: calc(560px * var(--font-scale));
     border-top: 1px dashed var(--border);
 }
 .frame-api-cfg[hidden] { display: none; }
+.frame-adv-row .frame-api-input { flex: 1 1 auto; width: auto; min-width: 0; }
 .frame-api-input {
     width: 100%; border: 1px solid var(--border-strong); border-radius: var(--r-s);
     background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-11);
