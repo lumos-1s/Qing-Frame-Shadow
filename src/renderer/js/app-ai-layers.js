@@ -101,13 +101,56 @@
                 ctx.stroke();
             } else if (l.type === 'text') {
                 const x = px(l.x || 0), y = py(l.y || 0);
-                const size = Math.max(6, (Number(l.size) || 0.04) * H);
-                ctx.fillStyle = withAlpha(l.color || '#ffffff', l.opacity != null ? l.opacity : 1);
-                ctx.font = `${l.weight || 400} ${size}px ${l.font || 'sans-serif'}`;
-                ctx.textAlign = l.align || 'left';
+                let size = Math.max(6, (Number(l.size) || 0.04) * H);
+                const align = l.align || 'left';
                 ctx.textBaseline = 'alphabetic';
-                if (ctx.letterSpacing != null && l.letterSpacing != null) ctx.letterSpacing = (l.letterSpacing * size) + 'px';
-                ctx.fillText(String(l.text || ''), x, y);
+                ctx.textAlign = align;
+                const font = () => `${l.weight || 400} ${size}px ${l.font || 'sans-serif'}`;
+                const spacing = (l.letterSpacing != null && ctx.letterSpacing != null) ? (l.letterSpacing * size) : 0;
+                const applySpacing = () => { if (ctx.letterSpacing != null) ctx.letterSpacing = spacing + 'px'; };
+                ctx.font = font(); applySpacing();
+                ctx.fillStyle = withAlpha(l.color || '#ffffff', l.opacity != null ? l.opacity : 1);
+
+                // 可用宽度：AI 可给 maxW；否则按对齐方式取到画布边缘的距离
+                let maxW = l.maxW != null ? px(l.maxW) :
+                    (align === 'center' ? Math.min(x, W - x) * 2 : align === 'right' ? x : W - x);
+                maxW = Math.max(size, maxW - spacing * 2 * String(l.text || '').length); // 扣掉字距累加
+                const text = String(l.text == null ? '' : l.text);
+                const lines = [];
+                const maxLines = Math.max(1, Number(l.maxLines) || 3);
+
+                // 先按可用宽度折行；若折行后仍超 maxLines，则整体缩字号再试
+                for (let attempt = 0; attempt < 4; attempt++) {
+                    lines.length = 0;
+                    ctx.font = font(); applySpacing();
+                    let cur = '';
+                    for (const ch of text) {
+                        if (ch === '\n') { lines.push(cur); cur = ''; continue; }
+                        const test = cur + ch;
+                        if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = ch; }
+                        else cur = test;
+                    }
+                    if (cur) lines.push(cur);
+                    if (lines.length <= maxLines) break;
+                    size *= 0.85; // 行太多，缩小字号重试
+                }
+                if (lines.length > maxLines) lines.length = maxLines;
+                ctx.font = font(); applySpacing();
+
+                // 起点：首行基线 y，后续行按行高下移；限制不超出画布上下
+                const lineH = size * 1.2;
+                let startY = Math.max(size, Math.min(H - 2, y - (lines.length - 1) * lineH * 0.5));
+                for (let i = 0; i < lines.length; i++) {
+                    let ly = startY + i * lineH;
+                    // 水平方向再夹一次，避免字距累加后越界
+                    const w = ctx.measureText(lines[i]).width;
+                    let lx = x;
+                    if (align === 'center') lx = Math.max(w / 2, Math.min(W - w / 2, x));
+                    else if (align === 'right') lx = Math.max(w, Math.min(W, x));
+                    else lx = Math.max(0, Math.min(W - w, x));
+                    ctx.fillText(lines[i], lx, Math.min(H - 2, ly));
+                }
+                if (ctx.letterSpacing != null) ctx.letterSpacing = '0px';
             } else if (l.type === 'image' && l.src) {
                 const x = px(l.x || 0), y = py(l.y || 0), w = px(l.w || 0), h = py(l.h || 0);
                 let img = imageCache && imageCache.get(l.src);

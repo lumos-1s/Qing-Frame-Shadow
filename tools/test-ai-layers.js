@@ -33,7 +33,9 @@ function mockCtx() {
         moveTo: noop('moveTo'), lineTo: noop('lineTo'), arc: noop('arc'), fill: noop('fill'),
         stroke: noop('stroke'), clip: noop('clip'), fillText: noop('fillText'),
         drawImage: noop('drawImage'), setLineDash: noop('setLineDash'),
-        rect: noop('rect'), roundRect: noop('roundRect')
+        rect: noop('rect'), roundRect: noop('roundRect'),
+        measureText: (s) => ({ width: String(s).length * 10 }),
+        letterSpacing: '0px'
     };
     ctx.fillStyle = ''; ctx.strokeStyle = ''; ctx.lineWidth = 0; ctx.font = ''; ctx.textAlign = '';
     return ctx;
@@ -56,6 +58,15 @@ check(hasText, 'text 绘制了内容', String(hasText));
 let threw = false;
 try { L.render(mockCtx(), [{ type: 'bogus' }, null, { type: 'rect', w: 0 }], 100, 100); } catch (e) { threw = true; }
 check(!threw, '非法/空图层不抛异常', String(threw));
+
+// 6) 长文字折行 + 不溢出：超长文字应被拆成多行，每行 x/y 落在画布内
+const ctx2 = mockCtx();
+const longText = '这是一段非常非常长的文字用来测试自动折行是否会超出画布边界清框影';
+L.render(ctx2, [{ type: 'text', x: 0.5, y: 0.5, text: longText, size: 0.05, align: 'center', maxW: 0.5 }], 400, 600);
+const drawn = ctx2.calls.filter((c) => c[0] === 'fillText');
+check(drawn.length >= 2, '超长文字被折成多行', '行数=' + drawn.length);
+const inside = drawn.every((c) => c[2] >= 0 && c[2] <= 400 && c[3] >= 0 && c[3] <= 600);
+check(inside, '每行文字坐标都落在画布内', JSON.stringify(drawn.slice(0, 2)));
 
 console.log(failures.length ? `\n未通过 ${failures.length} 项：${failures.join(', ')}` : '\nALL PASS');
 process.exitCode = failures.length ? 1 : 0;
