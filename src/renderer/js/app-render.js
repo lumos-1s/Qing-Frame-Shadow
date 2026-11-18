@@ -111,17 +111,12 @@ window.App = Object.assign(window.App || {}, {
     // 当前正在做的手势：拖动 / 旋转 / 拖角缩放。三者都只改一个元素，
     // 都能复用「静态背景 + 单元素重绘」的快速通道，避免每帧全量合成。
     _activeTransform() {
-        // AI 图层不在引擎的「排除被拖元素 → 静态背景 + 单元素重绘」快通道里：
-        // 引擎不认识 _skipUserEl 里的图层对象，缓存的背景里仍带着它，
-        // 再叠一层重绘会重影。这类手势老老实实走整帧合成。
         if (this._dragEl && this._dragEl.ref) {
-            if (this._dragEl.kind === 'aiLayer') return null;
             return { ref: this._dragEl.ref, kind: this._dragEl.kind || 'text' };
         }
         if (this._rotEl && this._rotEl.ref) return { ref: this._rotEl.ref, kind: 'text' };
         if (this._resizeEl && this._resizeEl.ref) {
-            if (this._resizeEl.isAi) return null;
-            return { ref: this._resizeEl.ref, kind: 'text' };
+            return { ref: this._resizeEl.ref, kind: 'text', isAi: !!this._resizeEl.isAi };
         }
         return null;
     },
@@ -233,7 +228,10 @@ window.App = Object.assign(window.App || {}, {
             // 拖动 / 旋转 / 拖角缩放中且背景缓存有效 → 只拷贝背景 + 重绘该元素,
             // 跳过整帧合成 (缓存键在校验尺寸/模板/图源,任一变即回落到正常整帧渲染)
             const xf = this._activeTransform();
-            const xfRef = xf && xf.ref;
+            // AI 图层不在引擎的「排除被拖元素 → 静态背景 + 单元素重绘」快通道里：
+            // 引擎不认识 _skipUserEl 里的图层对象，缓存的背景里仍带着它，
+            // 再叠一层重绘会重影。这类手势整帧合成，但仍保留 xf 供 drawLogoGuides 画参考线。
+            const xfRef = xf && xf.ref && xf.kind !== 'aiLayer' && !(xf.isAi) ? xf.ref : null;
             if (xfRef && this._dragBaseValid()) {
                 this._blitDragBase();
                 this._drawDraggedEl(this.dom.canvas.getContext('2d'), xfRef, xf.kind);

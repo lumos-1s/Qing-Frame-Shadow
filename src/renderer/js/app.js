@@ -1350,6 +1350,8 @@ window.App = {
             this.clearActivePuzzleSlot();
         }, true);
         window.addEventListener('mousemove', e => {
+            // 按住 Alt 临时关掉 AI 图层吸附（松手再恢复），方便做像素级微调
+            this._aiSnapOff = !!e.altKey;
             if (this._resizeEl) {
                 this.applyResize(this.screenToCanvas(e));
                 return;
@@ -1395,6 +1397,7 @@ window.App = {
             if (this._resizeEl) {
                 const r = this._resizeEl;
                 this._resizeEl = null;
+                this._aiGuides = null; this._aiSnap = null;
                 this._skipUserEl = null;
                 this._dropDragBase();
                 this._hideRotateHint();
@@ -1472,6 +1475,7 @@ window.App = {
                 const moved = this._dragEl.moved;
                 const aiLayer = this._dragEl.kind === 'aiLayer';
                 this._dragEl = null;
+                this._aiGuides = null; this._aiSnap = null; this._aiSnapOff = false;
                 this._skipUserEl = null;
                 this._dropDragBase();
                 this._logoSnapV = null; this._logoSnapH = null;
@@ -1500,7 +1504,7 @@ window.App = {
                 this._dragPz = null;
                 canvas.style.cursor = '';
             }
-            if (this._dragEl) { this._dragEl = null; this._skipUserEl = null; this._dropDragBase(); this._logoSnapV = null; this._logoSnapH = null; this._logoSnapEdgeV = null; this._logoSnapEdgeH = null; this._logoSnapPhotoV = null; this._logoSnapPhotoH = null; }
+            if (this._dragEl) { this._dragEl = null; this._aiGuides = null; this._aiSnap = null; this._skipUserEl = null; this._dropDragBase(); this._logoSnapV = null; this._logoSnapH = null; this._logoSnapEdgeV = null; this._logoSnapEdgeH = null; this._logoSnapPhotoV = null; this._logoSnapPhotoH = null; }
             if (this._resizeEl) { this._resizeEl = null; this._skipUserEl = null; this._dropDragBase(); canvas.style.cursor = ''; }
             if (this._rotEl) { this._rotEl = null; this._skipUserEl = null; this._dropDragBase(); canvas.style.cursor = ''; }
             this._hideRotateHint();

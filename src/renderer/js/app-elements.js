@@ -74,6 +74,94 @@ window.App = Object.assign(window.App || {}, {
         return { kind: 'aiLayer', obj: hit.layer, index: hit.index, x0: c.x, y0: c.y, z: 1 + hit.index };
     },
 
+    // AI 图层的吸附基准：画布像素 ↔ 引擎基准画布。
+    aiCanvasBase() {
+        const cv = this.dom && this.dom.canvas;
+        return {
+            cw: (cv && cv.width) || 0, ch: (cv && cv.height) || 0,
+            bw: this._canvasBaseW || (cv && cv.width) || 1,
+            bh: this._canvasBaseH || (cv && cv.height) || 1
+        };
+    },
+
+    // 照片槽位的像素矩形：优先用引擎这一帧写下的 _photoRect，回退到图层槽位比例。
+    aiPhotoRect(cw, ch) {
+        const { bw, bh } = this.aiCanvasBase();
+        const sx = cw / Math.max(1, bw), sy = ch / Math.max(1, bh);
+        if (this._photoRect) {
+            const r = this._photoRect;
+            return { x: r.x * sx, y: r.y * sy, w: r.w * sx, h: r.h * sy };
+        }
+        const layers = this.template && this.template.aiLayers;
+        if (!Array.isArray(layers) || !window.AiLayers) return null;
+        const pi = window.AiLayers.findPhotoIndex(layers);
+        if (pi < 0) return null;
+        const s = window.AiLayers.photoSlot(layers[pi]);
+        return { x: s.x * cw, y: s.y * ch, w: s.w * cw, h: s.h * ch };
+    },
+
+    // AI 图层吸附：拖动中的图层左/中/右（上/中/下）去贴画布三分线、画布边、
+    // 照片槽位边/中线、以及其它 AI 图层的边/中线。返回修正后的中心和要画的参考线。
+    aiSnapGuides(cx, cy, layer, cw, ch) {
+        const layers = this.template && this.template.aiLayers;
+        const out = { x: cx, y: cy, guides: [] };
+        if (!window.AiLayers || typeof window.AiLayers.layerBounds !== 'function'
+            || !Array.isArray(layers) || !layer) return out;
+        const ctx = this.aiMeasureCtx();
+        const b = window.AiLayers.layerBounds(ctx, layer, cw, ch);
+        if (!b) return out;
+        // Alt 临时关掉吸附（跟设计软件一致），不改变任何设置。
+        if (this._aiSnapOff) { this._aiGuides = []; return out; }
+        const rect = this.dom.canvas.getBoundingClientRect();
+        const k = rect.width > 0 ? cw / rect.width : 1;
+        const tol = 8 * k;
+        const vLines = [], hLines = [];
+        const V = (pos, type) => vLines.push({ pos, type });
+        const H = (pos, type) => hLines.push({ pos, type });
+        [cw / 3, cw / 2, cw * 2 / 3].forEach(p => V(p, 'grid'));
+        [ch / 3, ch / 2, ch * 2 / 3].forEach(p => H(p, 'grid'));
+        V(0, 'edge'); V(cw, 'edge'); H(0, 'edge'); H(ch, 'edge');
+        const pr = this.aiPhotoRect(cw, ch);
+        if (pr) {
+            V(pr.x, 'photo'); V(pr.x + pr.w / 2, 'photo'); V(pr.x + pr.w, 'photo');
+            H(pr.y, 'photo'); H(pr.y + pr.h / 2, 'photo'); H(pr.y + pr.h, 'photo');
+        }
+        layers.forEach(l => {
+            if (!l || l === layer) return;
+            const ob = window.AiLayers.layerBounds(ctx, l, cw, ch);
+            if (!ob) return;
+            V(ob.x, 'layer'); V(ob.x + ob.w / 2, 'layer'); V(ob.x + ob.w, 'layer');
+            H(ob.y, 'layer'); H(ob.y + ob.h / 2, 'layer'); H(ob.y + ob.h, 'layer');
+        });
+        // b 是当前（未被拖动）的包围盒，cx/cy 是「想把中心挪到哪」。
+        // 所以锚点偏移要相对包围盒自己的中心，不能相对 cx —— 否则
+        // 当前位置和目标位置的差会被算进偏移里，吸附到错误的那条线。
+        const av = [
+            { off: -b.w / 2, tag: 'left' },
+            { off: 0, tag: 'center' },
+            { off: b.w / 2, tag: 'right' }
+        ];
+        const ah = [
+            { off: -b.h / 2, tag: 'top' },
+            { off: 0, tag: 'center' },
+            { off: b.h / 2, tag: 'bottom' }
+        ];
+        let bestV = null, bestH = null;
+        for (const line of vLines) for (const a of av) {
+            const d = line.pos - (cx + a.off);
+            if (Math.abs(d) <= tol && (!bestV || Math.abs(d) < Math.abs(bestV.d))) bestV = { d, line, anchor: a };
+        }
+        for (const line of hLines) for (const a of ah) {
+            const d = line.pos - (cy + a.off);
+            if (Math.abs(d) <= tol && (!bestH || Math.abs(d) < Math.abs(bestH.d))) bestH = { d, line, anchor: a };
+        }
+        if (bestV) { out.x = cx + bestV.d; out.guides.push({ axis: 'v', pos: bestV.line.pos, type: bestV.line.type }); }
+        if (bestH) { out.y = cy + bestH.d; out.guides.push({ axis: 'h', pos: bestH.line.pos, type: bestH.line.type }); }
+        this._aiGuides = out.guides;
+        this._aiSnap = { x: out.x, y: out.y };
+        return out;
+    },
+
     hitTestLogos(pt) {
         const els = (this.template && this.template.logoElements) || [];
         // rel 比例(rx/ry)已统一为「显示画布 canvas.width/height」的分数,与引擎
@@ -618,6 +706,9 @@ window.App = Object.assign(window.App || {}, {
             const cv = this.dom.canvas;
             const ratio = Math.max(0.05, Math.min(20, d / r.d0));
             window.AiLayers.scaleLayer(r.ref, ratio, cv.width, cv.height);
+            // 缩放不移动中心；只按当前包围盒刷新对齐参考线，给用户「贴上了」的反馈。
+            const b = window.AiLayers.layerBounds(this.aiMeasureCtx(), r.ref, cv.width, cv.height);
+            if (b) this.aiSnapGuides(b.x + b.w / 2, b.y + b.h / 2, r.ref, cv.width, cv.height);
             this._positionTextEditor();
             this.scheduleRender();
             return true;
@@ -1006,10 +1097,11 @@ window.App = Object.assign(window.App || {}, {
         const cw = cv.width || 0, ch = cv.height || 0;
         if (drag.kind === 'aiLayer') {
             // 拖动坐标是画布像素；AI 图层内部存 0..1 比例，由 AiLayers 统一写回。
-            // 不走 snapToGuides（它写的是 logo/decor 的像素字段）。
+            // snapToGuides 只认 logo/decor 的像素字段，这里走 AI 专用的吸附。
             if (window.AiLayers && typeof window.AiLayers.setLayerCenter === 'function') {
+                const snap = this.aiSnapGuides(x, y, e, cw, ch);
                 // setLayerCenter 自己会把像素换算成 0..1 比例，这里传的就是画布像素。
-                window.AiLayers.setLayerCenter(e, x, y, cw, ch);
+                window.AiLayers.setLayerCenter(e, snap.x, snap.y, cw, ch);
             }
             this.onSettingChanged();
             return;
@@ -1472,6 +1564,7 @@ window.App = Object.assign(window.App || {}, {
             if (!canvas || !canvas.width) return;
             const ctx = canvas.getContext('2d');
             const cw = canvas.width, ch = canvas.height;
+            if (xf.kind === 'aiLayer' || xf.isAi) { this.drawAiGuides(ctx, xf.ref, cw, ch); return; }
             const vLines = [cw / 3, cw / 2, cw * 2 / 3];
             const hLines = [ch / 3, ch / 2, ch * 2 / 3];
             ctx.save();
@@ -1567,6 +1660,43 @@ window.App = Object.assign(window.App || {}, {
             if (this._rotEl || this._resizeEl) this._drawTransformAxes(ctx, xf, cw, ch);
             ctx.restore();
         } catch(err) { console.warn('drawLogoGuides', err); }
+    },
+
+    // AI 图层专用的参考线：网格/照片槽位常驻淡显，命中的对齐线绿色高亮。
+    drawAiGuides(ctx, layer, cw, ch) {
+        try {
+            ctx.save();
+            const line = (x1, y1, x2, y2, color, width, dash) => {
+                ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+                ctx.setLineDash(dash || []);
+                ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = width + 2.5; ctx.stroke();
+                ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+                ctx.setLineDash([]);
+            };
+            [cw / 3, cw / 2, cw * 2 / 3].forEach(x => line(x, 0, x, ch, 'rgba(255,255,255,0.38)', 1));
+            [ch / 3, ch / 2, ch * 2 / 3].forEach(y => line(0, y, cw, y, 'rgba(255,255,255,0.38)', 1));
+            const pr = this.aiPhotoRect(cw, ch);
+            if (pr) {
+                const g = 'rgba(255,180,84,0.55)';
+                line(pr.x, pr.y, pr.x, pr.y + pr.h, g, 1, [7, 5]);
+                line(pr.x + pr.w, pr.y, pr.x + pr.w, pr.y + pr.h, g, 1, [7, 5]);
+                line(pr.x, pr.y, pr.x + pr.w, pr.y, g, 1, [7, 5]);
+                line(pr.x, pr.y + pr.h, pr.x + pr.w, pr.y + pr.h, g, 1, [7, 5]);
+            }
+            (this._aiGuides || []).forEach(g => {
+                const color = g.type === 'photo' ? '#ffb454' : '#00e5a0';
+                ctx.shadowColor = color; ctx.shadowBlur = 8;
+                if (g.axis === 'v') line(g.pos, 0, g.pos, ch, color, 2.5);
+                else line(0, g.pos, cw, g.pos, color, 2.5);
+                ctx.shadowBlur = 0;
+            });
+            const snap = this._aiSnap;
+            if (snap) {
+                ctx.beginPath(); ctx.arc(snap.x, snap.y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#00e5a0'; ctx.fill();
+            }
+            ctx.restore();
+        } catch (err) { console.warn('drawAiGuides', err); }
     },
 
     // 旋转/缩放时围绕文字框画一组随角度转动的虚线轴：从框的四边向外延伸，
@@ -1940,14 +2070,21 @@ window.App = Object.assign(window.App || {}, {
     deleteElement() {
         const sel = this.selectedEls;
         if (!sel.length) { this.setStatus('请先选中元素'); return; }
+        if (sel.some(s => s.kind === 'aiLayer' && s.obj && s.obj.type === 'photo')) {
+            this.setStatus('照片槽位不能删除：它决定照片位置和画布比例');
+            return;
+        }
         this.onSettingCommit();
         const t = this.template;
         sel.forEach(s => {
             if (s.kind === 'logo') { const i = (t.logoElements || []).indexOf(s.obj); if (i >= 0) t.logoElements.splice(i, 1); }
             else if (s.kind === 'sticker') { const a = (t.decorConfig && t.decorConfig.stickers) || []; const i = a.indexOf(s.obj); if (i >= 0) a.splice(i, 1); }
             else if (s.kind === 'text') { const a = (t.decorConfig && t.decorConfig.textLines) || []; const i = a.indexOf(s.obj); if (i >= 0) a.splice(i, 1); }
+            else if (s.kind === 'aiLayer') { const a = t.aiLayers || []; const i = a.indexOf(s.obj); if (i >= 0) a.splice(i, 1); }
         });
         this.selectedEls = [];
+        this._aiGuides = null; this._aiSnap = null;
+        if (this._syncAiLayerEdit) this._syncAiLayerEdit();
         this.refreshUI();
         this.saveCurrentTemplate();
         this.scheduleRender(true);

@@ -337,6 +337,45 @@ app.whenReady().then(async () => {
     check(resized && resized.after > resized.before,
         '拖四角直接缩放 AI 图层字号', JSON.stringify(resized));
 
+    // 吸附 + 参考线：拖到画布中线附近会自动对齐，拖动中能看到绿色高亮线，松手清掉
+    await exec(`(() => { const cv=App.dom.canvas, l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        window.AiLayers.setLayerCenter(l, cv.width*0.48, cv.height*0.62, cv.width, cv.height);
+        App.selectedEls=[{kind:'aiLayer',obj:l,index:App.template.aiLayers.indexOf(l)}];
+        App.scheduleRender(true); return true; })()`);
+    await sleep(250);
+    const snapped = await exec(`(() => {
+        const cv=App.dom.canvas, r=cv.getBoundingClientRect(), l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        const cx=r.left+0.48*r.width, cy=r.top+0.62*r.height;
+        document.getElementById('previewCanvas').dispatchEvent(new MouseEvent('mousedown',{
+            bubbles:true, button:0, clientX:cx, clientY:cy, screenX:cx, screenY:cy }));
+        window.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:cx+3,clientY:cy+2,screenX:cx+3,screenY:cy+2}));
+        const cvb=window.AiLayers.layerBounds(App.aiMeasureCtx(),l,cv.width,cv.height);
+        const res={ x:l.x, guides:(App._aiGuides||[]).length,
+            types:JSON.stringify(App._aiGuides), cw:cv.width, rectW:r.width,
+            bounds:cvb, start:(App._dragEl||{}).x, snap:App._aiSnap };
+        window.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        res.cleared=(App._aiGuides||[]).length;
+        return res; })()`);
+    const guide = JSON.parse(snapped.types)[0] || {};
+    const aligned = guide.axis === 'v' && Math.abs(snapped.x * snapped.cw + snapped.bounds.w / 2 - guide.pos) < 2;
+    check(aligned && snapped.guides > 0 && snapped.cleared === 0,
+        '拖动自动吸附到对齐线并显示参考线', JSON.stringify({ x: snapped.x, guide, guides: snapped.guides, cleared: snapped.cleared }));
+
+    // Delete 删图层（照片槽位保留），Esc 取消选中
+    const del = await exec(`(() => { const t=App.template.aiLayers||[];
+        const l=t.find(x=>x.type==='text'); const before=t.length;
+        App.selectedEls=[{kind:'aiLayer',obj:l,index:t.indexOf(l)}];
+        App.deleteElement();
+        const after=(App.template.aiLayers||[]).length;
+        const photo=(App.template.aiLayers||[]).some(x=>x.type==='photo');
+        App.undo();
+        return { before, after, photo, restored:(App.template.aiLayers||[]).length }; })()`);
+    check(del.after === del.before - 1 && del.photo && del.restored === del.before,
+        'Delete 删除 AI 图层但保留照片槽位，可撤销', JSON.stringify(del));
+    await exec(`(() => { document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); return true; })()`);
+    const esc = await exec(`({ n: App.selectedEls.length, guides:(App._aiGuides||[]).length })`);
+    check(esc.n === 0 && esc.guides === 0, 'Esc 取消选中并清掉参考线', JSON.stringify(esc));
+
     // 3.6) 多选照片 → 批量套用
     await exec(`(() => { App.selectedIdx = [0, 1]; App.currentIdx = 0;
         document.getElementById('frameModalClose').click();
