@@ -121,6 +121,18 @@ window.App = Object.assign(window.App || {}, {
         return null;
     },
 
+    // 只有 photo 之后的前景层能走单元素重绘快通道：背景层在照片下面，
+    // 补画到缓存上面会盖住照片；照片槽位本身拖动会改变画布比例，必须整帧重算。
+    aiLayerFastOk(layer) {
+        const layers = this.template && this.template.aiLayers;
+        if (!layer || !Array.isArray(layers) || !window.AiLayers) return false;
+        const i = layers.indexOf(layer);
+        if (i < 0) return false;
+        const pi = window.AiLayers.findPhotoIndex(layers);
+        const anchor = pi >= 0 ? pi : window.AiLayers.fallbackPhotoIndex(layers);
+        return i > anchor;
+    },
+
     _dragBaseBuild() {
         const canvas = this.dom.canvas;
         const bmp = document.createElement('canvas');
@@ -135,11 +147,13 @@ window.App = Object.assign(window.App || {}, {
         const canvas = this.dom.canvas;
         const ctx = canvas.getContext('2d');
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        // 背景位图是在「拖动态当时」的画布尺寸下建的,而拖动期间 displayMax 会变(降级到 900 再复原),
+        // 背景位图是在「拖动态当时」的画布尺寸下建的,而拖动期间 displayMax 会变(降级再复原),
         // 因此要按当前画布尺寸缩放贴回,否则会把小图直接摊在画布一角
         const b = this._dragBase.bmp;
-        if (b.width === canvas.width && b.height === canvas.height) ctx.drawImage(b, 0, 0);
+        const same = b.width === canvas.width && b.height === canvas.height;
+        // 同尺寸时位图不透明且铺满画布，clearRect 一次千万级像素纯属浪费。
+        if (!same) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (same) ctx.drawImage(b, 0, 0);
         else ctx.drawImage(b, 0, 0, b.width, b.height, 0, 0, canvas.width, canvas.height);
     },
 
@@ -148,6 +162,17 @@ window.App = Object.assign(window.App || {}, {
     _drawDraggedEl(ctx, el, kind) {
         if (!el) return;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
+        if (kind === 'aiLayer' && window.AiLayers) {
+            // 引擎按「基准画布」画 AI 层，再由 setupCanvas 的 scale 放大到后备像素。
+            // 叠加层要套同一个 scale，否则拖动中的位置/字号会和松手后不一致。
+            const { bw, bh } = this.aiCanvasBase();
+            const s = (this.dom.canvas.width || 1) / Math.max(1, bw);
+            ctx.setTransform(s, 0, 0, s, 0, 0);
+            // 用 AiLayers.render 而不是 drawLayer：它会带上内部图片缓存，image 层不重复解码。
+            window.AiLayers.render(ctx, [el], bw, bh, null);
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            return;
+        }
         // 关键:引擎在 drawLogoElements 里用 canvas._logW/_logH(基准画布)作为 rel 比例的分母,
         // 即 rx/ry 是「相对基准画布」的比例,元素几何也在基准口径下计算。
         // 叠加层必须与引擎完全一致,否则拖动中元素位置/大小会与松手后不同(会跳一下)。
@@ -228,10 +253,12 @@ window.App = Object.assign(window.App || {}, {
             // 拖动 / 旋转 / 拖角缩放中且背景缓存有效 → 只拷贝背景 + 重绘该元素,
             // 跳过整帧合成 (缓存键在校验尺寸/模板/图源,任一变即回落到正常整帧渲染)
             const xf = this._activeTransform();
-            // AI 图层不在引擎的「排除被拖元素 → 静态背景 + 单元素重绘」快通道里：
-            // 引擎不认识 _skipUserEl 里的图层对象，缓存的背景里仍带着它，
-            // 再叠一层重绘会重影。这类手势整帧合成，但仍保留 xf 供 drawLogoGuides 画参考线。
-            const xfRef = xf && xf.ref && xf.kind !== 'aiLayer' && !(xf.isAi) ? xf.ref : null;
+            const aiKind = !!(xf && (xf.kind === 'aiLayer' || xf.isAi));
+            // AI 前景层（photo 之后）也能走快通道：引擎首帧把该层摘掉，
+            // 之后每帧 blit 背景 + 只重绘这一层。背景层/照片槽位不能这么干——
+            // 它们盖在照片下面，补画到最上层会遮住照片，只能整帧合成。
+            const aiFast = aiKind && this.aiLayerFastOk(xf.ref);
+            const xfRef = xf && xf.ref && (!aiKind || aiFast) ? xf.ref : null;
             if (xfRef && this._dragBaseValid()) {
                 this._blitDragBase();
                 this._drawDraggedEl(this.dom.canvas.getContext('2d'), xfRef, xf.kind);
@@ -258,6 +285,8 @@ window.App = Object.assign(window.App || {}, {
             // 帧结束立刻复位 —— 导出/缩略图/后续帧都不会被污染。
             const prevUseOrig = this._previewUseOriginal;
             this._previewUseOriginal = !!this._maskPreviewOriginal;
+            // 首帧让引擎把被拖的 AI 图层摘掉，建出的背景缓存才不含它。
+            this._skipAiLayer = aiFast ? xf.ref : null;
             try {
                 const puzzle = previewTpl && previewTpl.puzzle && previewTpl.puzzle.enabled;
                 const fire = () => {
@@ -273,6 +302,7 @@ window.App = Object.assign(window.App || {}, {
                 this._previewUseOriginal = prevUseOrig;
             }
             if (needDragBase) this._dragBaseBuild();
+            this._skipAiLayer = null;
             this.drawSelectionBox();
             this.drawLogoGuides();
             // 缩放/平移/窗口变化后，画布内文字编辑器要跟着画布走（它是 fixed 定位）

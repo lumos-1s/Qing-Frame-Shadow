@@ -368,7 +368,12 @@ function renderAiLayerStyle(app) {
     ctx.fillRect(0, 0, canvasW, canvasH);
 
     const pi = size.photoIndex >= 0 ? size.photoIndex : window.AiLayers.fallbackPhotoIndex(layers);
-    window.AiLayers.render(ctx, layers.slice(0, pi), canvasW, canvasH, () => {});
+    // 拖动 AI 图层时把该层从这一帧里摘掉，得到「不含被拖元素」的静态背景，
+    // 交给 app-render 的拖拽快通道缓存（和用户元素的 _skipUserEl 同一思路）。
+    const skip = app._skipAiLayer;
+    const bgLayers = layers.slice(0, pi).filter((l) => l !== skip);
+    const fgLayers = layers.slice(pi + 1).filter((l) => l !== skip);
+    window.AiLayers.render(ctx, bgLayers, canvasW, canvasH, () => {});
 
     // 照片槽位（这是唯一绘制照片的地方）
     window.AiLayers.drawPhoto(ctx, img, canvasW, canvasH, slot);
@@ -377,7 +382,7 @@ function renderAiLayerStyle(app) {
         w: slot.w * canvasW, h: slot.h * canvasH
     };
 
-    window.AiLayers.render(ctx, layers.slice(pi + 1), canvasW, canvasH, () => {});
+    window.AiLayers.render(ctx, fgLayers, canvasW, canvasH, () => {});
 
     // 全局光影（模板可选；AI 模板默认没有）
     applyGlobalLight(ctx, template.lightEffect, canvasW, canvasH);

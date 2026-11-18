@@ -1248,6 +1248,12 @@ window.App = {
                 // 选中即定位：右侧翻到能改它的页签并滚到对应分组（只在新选中时翻，避免拖动中来回跳）
                 if (changed && this.revealElementPanel) this.revealElementPanel(el.kind);
                 this._dragEl = { kind: el.kind, ref: el.obj, sx: e.screenX, sy: e.screenY, x: el.x0, y: el.y0, moved: false };
+                // AI 图层拖动时临时降分辨率：几千像素的画布每帧 blit 上千万像素太重，
+                // 1200 的预览精度足够看清对齐，松手立即恢复原分辨率重绘一次。
+                if (el.kind === 'aiLayer' && this.displayMax > 1200) {
+                    this._aiDragPrevMax = this.displayMax;
+                    this.displayMax = 1200;
+                }
                 // 整帧渲染时排除被拖元素,使其余内容可作为静态背景缓存(见 renderPreview)
                 this._skipUserEl = el.obj;
                 this._dropDragBase();
@@ -1397,6 +1403,7 @@ window.App = {
             if (this._resizeEl) {
                 const r = this._resizeEl;
                 this._resizeEl = null;
+                this._skipAiLayer = null;
                 this._aiGuides = null; this._aiSnap = null;
                 this._skipUserEl = null;
                 this._dropDragBase();
@@ -1475,6 +1482,11 @@ window.App = {
                 const moved = this._dragEl.moved;
                 const aiLayer = this._dragEl.kind === 'aiLayer';
                 this._dragEl = null;
+                if (this._aiDragPrevMax != null) {
+                    this.displayMax = this._aiDragPrevMax;
+                    this._aiDragPrevMax = null;
+                }
+                this._skipAiLayer = null;
                 this._aiGuides = null; this._aiSnap = null; this._aiSnapOff = false;
                 this._skipUserEl = null;
                 this._dropDragBase();
@@ -1504,7 +1516,7 @@ window.App = {
                 this._dragPz = null;
                 canvas.style.cursor = '';
             }
-            if (this._dragEl) { this._dragEl = null; this._aiGuides = null; this._aiSnap = null; this._skipUserEl = null; this._dropDragBase(); this._logoSnapV = null; this._logoSnapH = null; this._logoSnapEdgeV = null; this._logoSnapEdgeH = null; this._logoSnapPhotoV = null; this._logoSnapPhotoH = null; }
+            if (this._dragEl) { this._dragEl = null; if (this._aiDragPrevMax != null) { this.displayMax = this._aiDragPrevMax; this._aiDragPrevMax = null; } this._skipAiLayer = null; this._aiGuides = null; this._aiSnap = null; this._skipUserEl = null; this._dropDragBase(); this._logoSnapV = null; this._logoSnapH = null; this._logoSnapEdgeV = null; this._logoSnapEdgeH = null; this._logoSnapPhotoV = null; this._logoSnapPhotoH = null; }
             if (this._resizeEl) { this._resizeEl = null; this._skipUserEl = null; this._dropDragBase(); canvas.style.cursor = ''; }
             if (this._rotEl) { this._rotEl = null; this._skipUserEl = null; this._dropDragBase(); canvas.style.cursor = ''; }
             this._hideRotateHint();

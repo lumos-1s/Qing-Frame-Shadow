@@ -328,7 +328,8 @@ app.whenReady().then(async () => {
     check(edited.text === '2026 画布改字' && !edited.hasEditor && edited.src === canvasBefore.src,
         '画布内改字写回 AI 图层且不动照片', JSON.stringify(edited));
 
-    const resized = await exec(`(() => { const h=App._resizeHandles&&App._resizeHandles[0]; if(!h) return null;
+    const resized = await exec(`(() => { if(!App._resizeHandles) App.drawSelectionBox();
+        const h=App._resizeHandles&&App._resizeHandles[0]; if(!h) return null;
         const l=(App.template.aiLayers||[]).find(x=>x.type==='text'); const before=l.size;
         const rs=App.beginResize({x:h.x,y:h.y}); if(!rs) return null;
         App.applyResize({x:h.x-30,y:h.y-30});   // 角手柄向外拖 = 放大
@@ -339,27 +340,40 @@ app.whenReady().then(async () => {
 
     // 吸附 + 参考线：拖到画布中线附近会自动对齐，拖动中能看到绿色高亮线，松手清掉
     await exec(`(() => { const cv=App.dom.canvas, l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        App._testPrevMax = App.displayMax; App.displayMax = 3600;
         window.AiLayers.setLayerCenter(l, cv.width*0.48, cv.height*0.62, cv.width, cv.height);
         App.selectedEls=[{kind:'aiLayer',obj:l,index:App.template.aiLayers.indexOf(l)}];
         App.scheduleRender(true); return true; })()`);
     await sleep(250);
-    const snapped = await exec(`(() => {
-        const cv=App.dom.canvas, r=cv.getBoundingClientRect(), l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+    await exec(`(() => {
+        const r=App.dom.canvas.getBoundingClientRect();
         const cx=r.left+0.48*r.width, cy=r.top+0.62*r.height;
         document.getElementById('previewCanvas').dispatchEvent(new MouseEvent('mousedown',{
             bubbles:true, button:0, clientX:cx, clientY:cy, screenX:cx, screenY:cy }));
         window.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:cx+3,clientY:cy+2,screenX:cx+3,screenY:cy+2}));
+        return true; })()`);
+    await sleep(250);   // 让 rAF 真正渲一帧，背景缓存才会建好
+    const snapped = await exec(`(() => {
+        const cv=App.dom.canvas, l=(App.template.aiLayers||[]).find(x=>x.type==='text');
         const cvb=window.AiLayers.layerBounds(App.aiMeasureCtx(),l,cv.width,cv.height);
         const res={ x:l.x, guides:(App._aiGuides||[]).length,
-            types:JSON.stringify(App._aiGuides), cw:cv.width, rectW:r.width,
-            bounds:cvb, start:(App._dragEl||{}).x, snap:App._aiSnap };
+            types:JSON.stringify(App._aiGuides), cw:cv.width, rectW:cv.getBoundingClientRect().width,
+            bounds:cvb, start:(App._dragEl||{}).x, snap:App._aiSnap,
+            fast:App._dragBaseValid(), lowMax:App.displayMax };
         window.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
         res.cleared=(App._aiGuides||[]).length;
+        res.restored=App.displayMax;
+        App.displayMax=App._testPrevMax; App._testPrevMax=null;
         return res; })()`);
     const guide = JSON.parse(snapped.types)[0] || {};
-    const aligned = guide.axis === 'v' && Math.abs(snapped.x * snapped.cw + snapped.bounds.w / 2 - guide.pos) < 2;
+    const midX = snapped.x * snapped.cw;
+    const edges = [midX - snapped.bounds.w / 2, midX, midX + snapped.bounds.w / 2];
+    const aligned = guide.axis === 'v' && edges.some((v) => Math.abs(v - guide.pos) < 2);
     check(aligned && snapped.guides > 0 && snapped.cleared === 0,
         '拖动自动吸附到对齐线并显示参考线', JSON.stringify({ x: snapped.x, guide, guides: snapped.guides, cleared: snapped.cleared }));
+    check(snapped.fast === true && snapped.lowMax === 1200 && snapped.restored !== 1200,
+        '拖动走背景缓存快通道并在松手后恢复分辨率',
+        JSON.stringify({ fast: snapped.fast, lowMax: snapped.lowMax, restored: snapped.restored }));
 
     // Delete 删图层（照片槽位保留），Esc 取消选中
     const del = await exec(`(() => { const t=App.template.aiLayers||[];
