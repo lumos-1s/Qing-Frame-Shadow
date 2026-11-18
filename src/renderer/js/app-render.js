@@ -147,8 +147,9 @@ window.App = Object.assign(window.App || {}, {
         const canvas = this.dom.canvas;
         const ctx = canvas.getContext('2d');
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        // 背景位图是在「拖动态当时」的画布尺寸下建的,而拖动期间 displayMax 会变(降级再复原),
-        // 因此要按当前画布尺寸缩放贴回,否则会把小图直接摊在画布一角
+        // 背景位图是在建缓存那一刻的画布尺寸下建的；拖动期间尺寸仍可能变
+        // （_backingCap 降后备像素、窗口缩放），所以按当前画布尺寸缩放贴回，
+        // 否则会把小图直接摊在画布一角。
         const b = this._dragBase.bmp;
         const same = b.width === canvas.width && b.height === canvas.height;
         // 同尺寸时位图不透明且铺满画布，clearRect 一次千万级像素纯属浪费。
@@ -301,7 +302,13 @@ window.App = Object.assign(window.App || {}, {
                 this.template = prevTpl;
                 this._previewUseOriginal = prevUseOrig;
             }
-            if (needDragBase) this._dragBaseBuild();
+            if (needDragBase) {
+                this._dragBaseBuild();
+                // 这一帧是「不含被拖元素」的静态背景（引擎按 _skipAiLayer/_skipUserEl 把它摘掉了）。
+                // 必须立刻把元素补画回来，否则用户按住不动时看到的是「元素凭空消失」，
+                // 要等第一次 mousemove 走快通道才重新出现。
+                if (xfRef) this._drawDraggedEl(this.dom.canvas.getContext('2d'), xfRef, xf.kind);
+            }
             this._skipAiLayer = null;
             this.drawSelectionBox();
             this.drawLogoGuides();

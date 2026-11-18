@@ -395,9 +395,60 @@ app.whenReady().then(async () => {
     const aligned = guide.axis === 'v' && edges.some((v) => Math.abs(v - guide.pos) < 2);
     check(aligned && snapped.guides > 0 && snapped.cleared === 0,
         '拖动自动吸附到对齐线并显示参考线', JSON.stringify({ x: snapped.x, guide, guides: snapped.guides, cleared: snapped.cleared }));
-    check(snapped.fast === true && snapped.lowMax === 1200 && snapped.restored !== 1200,
-        '拖动走背景缓存快通道并在松手后恢复分辨率',
-        JSON.stringify({ fast: snapped.fast, lowMax: snapped.lowMax, restored: snapped.restored }));
+    check(snapped.fast === true && snapped.lowMax === 3600 && snapped.restored === 3600,
+        '拖动走背景缓存快通道且不动预览档位',
+        JSON.stringify({ fast: snapped.fast, max: snapped.lowMax, restored: snapped.restored }));
+
+    // 拖动不能改显示尺寸：曾经在按下时把 displayMax 压到 1200，画面整幅缩一圈，
+    // 且 _dragEl.x0 是旧画布像素口径，除以新宽度后元素直接飞到画外。
+    await exec(`(() => { const cv=App.dom.canvas, l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        window.AiLayers.setLayerCenter(l, cv.width*0.35, cv.height*0.5, cv.width, cv.height);
+        App.selectedEls=[{kind:'aiLayer',obj:l,index:App.template.aiLayers.indexOf(l)}];
+        App.scheduleRender(true); return true; })()`);
+    await sleep(300);
+    const dragBefore = await exec(`(() => {
+        const cv=App.dom.canvas, r=cv.getBoundingClientRect(), l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        const c=window.AiLayers.layerCenter(l, cv.width, cv.height);
+        return { cw:cv.width, ch:cv.height, rw:r.width, rh:r.height, max:App.displayMax,
+                 lx:l.x, ly:l.y, sx:r.left + c.x/cv.width*r.width, sy:r.top + c.y/cv.height*r.height };
+    })()`);
+    await exec(`(() => {
+        const cv=App.dom.canvas, r=cv.getBoundingClientRect(), l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        const c=window.AiLayers.layerCenter(l, cv.width, cv.height);
+        const sx=r.left + c.x/cv.width*r.width, sy=r.top + c.y/cv.height*r.height;
+        window.__d = { sx, sy };
+        document.getElementById('previewCanvas').dispatchEvent(new MouseEvent('mousedown',{
+            bubbles:true, button:0, clientX:sx, clientY:sy, screenX:sx, screenY:sy }));
+        return true; })()`);
+    await sleep(250);
+    const atDown = await exec(`(() => {
+        const cv=App.dom.canvas, r=cv.getBoundingClientRect();
+        return { cw:cv.width, rw:r.width, max:App.displayMax, drag:!!App._dragEl,
+                 x0:App._dragEl && App._dragEl.x, cw0:App._dragEl && App._dragEl.cw0 };
+    })()`);
+    // 按住 Alt 关吸附，量「鼠标走多少、元素走多少」
+    await exec(`(() => {
+        const p=window.__d;
+        window.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,altKey:true,
+            clientX:p.sx+60, clientY:p.sy, screenX:p.sx+60, screenY:p.sy}));
+        return true; })()`);
+    await sleep(250);
+    const afterDrag = await exec(`(() => {
+        const cv=App.dom.canvas, r=cv.getBoundingClientRect(), l=(App.template.aiLayers||[]).find(x=>x.type==='text');
+        const res={ cw:cv.width, rw:r.width, max:App.displayMax, lx:l.x, ly:l.y, guides:(App._aiGuides||[]).length };
+        window.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        res.afterMax=App.displayMax;
+        return res; })()`);
+    const movedCanvas = (afterDrag.lx - dragBefore.lx) * afterDrag.cw;
+    const expectCanvas = 60 * (afterDrag.cw / afterDrag.rw);
+    check(atDown.cw === dragBefore.cw && Math.abs(atDown.rw - dragBefore.rw) < 1 && atDown.max === dragBefore.max,
+        '按下瞬间不改画布尺寸/预览档位（画面不缩）',
+        JSON.stringify({ cw0: dragBefore.cw, cw1: atDown.cw, rw0: Math.round(dragBefore.rw), rw1: Math.round(atDown.rw), max0: dragBefore.max, max1: atDown.max }));
+    check(Math.abs(movedCanvas - expectCanvas) <= 3 && Math.abs(afterDrag.ly - dragBefore.ly) < 0.002
+        && afterDrag.afterMax === dragBefore.max,
+        '拖动位移与鼠标精确同比例（不漂移）',
+        JSON.stringify({ movedCanvas: Math.round(movedCanvas), expect: Math.round(expectCanvas),
+            lx0: dragBefore.lx, lx1: afterDrag.lx, dy: +(afterDrag.ly - dragBefore.ly).toFixed(4), max: afterDrag.afterMax }));
 
     // Delete 删图层（照片槽位保留），Esc 取消选中
     const del = await exec(`(() => { const t=App.template.aiLayers||[];

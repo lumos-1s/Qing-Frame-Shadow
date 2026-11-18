@@ -1247,12 +1247,18 @@ window.App = {
                 this.selectedEls = changed ? [el] : this.selectedEls;
                 // 选中即定位：右侧翻到能改它的页签并滚到对应分组（只在新选中时翻，避免拖动中来回跳）
                 if (changed && this.revealElementPanel) this.revealElementPanel(el.kind);
-                this._dragEl = { kind: el.kind, ref: el.obj, sx: e.screenX, sy: e.screenY, x: el.x0, y: el.y0, moved: false };
-                // AI 图层拖动时临时降分辨率：几千像素的画布每帧 blit 上千万像素太重，
-                // 1200 的预览精度足够看清对齐，松手立即恢复原分辨率重绘一次。
-                if (el.kind === 'aiLayer' && this.displayMax > 1200) {
-                    this._aiDragPrevMax = this.displayMax;
-                    this.displayMax = 1200;
+                // cw0/ch0 记下按下时的画布像素口径：x0/y0 就是这套单位下的中心点。
+                // 拖动期间画布尺寸若变化（切预览质量 / 窗口缩放），位移要按比例换算回这套口径，
+                // 否则 AI 图层会把「大画布像素」当成「小画布像素」直接飞出画面。
+                this._dragEl = { kind: el.kind, ref: el.obj, sx: e.screenX, sy: e.screenY, x: el.x0, y: el.y0,
+                    cw0: canvas.width, ch0: canvas.height, moved: false };
+                // 拖动期间**不要**动 displayMax。它同时决定后备像素和 CSS 显示尺寸，
+                // 一改就是「按下瞬间整幅画面缩小」，且 x0 的口径跟着失效、元素会瞬移。
+                // 流畅度靠两件事：renderPreview 的「静态背景 + 单元素重绘」快通道，
+                // 以及下面这个只压后备像素、不动显示尺寸的 _backingCap。
+                if (el.kind === 'aiLayer' && canvas.width > 4000) {
+                    this._backingCap = 2600;
+                    this._dropDragBase();
                 }
                 // 整帧渲染时排除被拖元素,使其余内容可作为静态背景缓存(见 renderPreview)
                 this._skipUserEl = el.obj;
@@ -1390,7 +1396,15 @@ window.App = {
                     }
                     const rect = canvas.getBoundingClientRect();
                     const kx = canvas.width / rect.width, ky = canvas.height / rect.height;
-                    this.moveElement(this._dragEl, this._dragEl.x + dx * kx, this._dragEl.y + dy * ky);
+                    // AI 图层的 x0/y0 是「按下时的画布像素」口径（见 pickElement 的 layerCenter）。
+                    // 若拖动中画布尺寸变了（切预览质量、窗口缩放），先按比例换算到当前口径，
+                    // 否则 setLayerCenter 会拿旧口径的像素除以新宽度，元素一下飞到画外。
+                    let bx = this._dragEl.x, by = this._dragEl.y;
+                    if (this._dragEl.kind === 'aiLayer') {
+                        if (this._dragEl.cw0 > 1 && canvas.width > 1 && this._dragEl.cw0 !== canvas.width) bx *= canvas.width / this._dragEl.cw0;
+                        if (this._dragEl.ch0 > 1 && canvas.height > 1 && this._dragEl.ch0 !== canvas.height) by *= canvas.height / this._dragEl.ch0;
+                    }
+                    this.moveElement(this._dragEl, bx + dx * kx, by + dy * ky);
                 }
                 return;
             }
@@ -1482,11 +1496,8 @@ window.App = {
                 const moved = this._dragEl.moved;
                 const aiLayer = this._dragEl.kind === 'aiLayer';
                 this._dragEl = null;
-                if (this._aiDragPrevMax != null) {
-                    this.displayMax = this._aiDragPrevMax;
-                    this._aiDragPrevMax = null;
-                }
                 this._skipAiLayer = null;
+                this._backingCap = 0;   // 松手恢复全分辨率（下面的 scheduleRender 会按新尺寸重绘）
                 this._aiGuides = null; this._aiSnap = null; this._aiSnapOff = false;
                 this._skipUserEl = null;
                 this._dropDragBase();
@@ -1516,7 +1527,7 @@ window.App = {
                 this._dragPz = null;
                 canvas.style.cursor = '';
             }
-            if (this._dragEl) { this._dragEl = null; if (this._aiDragPrevMax != null) { this.displayMax = this._aiDragPrevMax; this._aiDragPrevMax = null; } this._skipAiLayer = null; this._aiGuides = null; this._aiSnap = null; this._skipUserEl = null; this._dropDragBase(); this._logoSnapV = null; this._logoSnapH = null; this._logoSnapEdgeV = null; this._logoSnapEdgeH = null; this._logoSnapPhotoV = null; this._logoSnapPhotoH = null; }
+            if (this._dragEl) { this._dragEl = null; this._skipAiLayer = null; this._backingCap = 0; this._aiGuides = null; this._aiSnap = null; this._skipUserEl = null; this._dropDragBase(); this._logoSnapV = null; this._logoSnapH = null; this._logoSnapEdgeV = null; this._logoSnapEdgeH = null; this._logoSnapPhotoV = null; this._logoSnapPhotoH = null; }
             if (this._resizeEl) { this._resizeEl = null; this._skipUserEl = null; this._dropDragBase(); canvas.style.cursor = ''; }
             if (this._rotEl) { this._rotEl = null; this._skipUserEl = null; this._dropDragBase(); canvas.style.cursor = ''; }
             this._hideRotateHint();

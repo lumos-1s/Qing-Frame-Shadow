@@ -222,7 +222,14 @@ function setupCanvas(app, canvasW, canvasH) {
     const displayScale = (typeof app.exportScale === 'number' && app.exportScale > 0)
         ? uiScale
         : Math.min(1, sizeMax / Math.max(canvasW, canvasH));
-    const scale = uiScale * dpr;
+    // 手势期后备像素长边上限(app._backingCap，拖动大画布时设)：
+    // 只压后备缓冲，_logW/_logH 仍按 displayScale 算 —— 画面尺寸不变，只是拖动中糊一点。
+    // 绝不能改成压 displayMax：那会连 CSS 尺寸一起变小，用户看到的是「一拖整幅画面缩一圈」。
+    let scale = uiScale * dpr;
+    const backingCap = (typeof app._backingCap === 'number' && app._backingCap > 0) ? app._backingCap : 0;
+    if (backingCap && scale * Math.max(canvasW, canvasH) > backingCap) {
+        scale = backingCap / Math.max(canvasW, canvasH);
+    }
     canvas.width = Math.max(1, Math.round(canvasW * scale));
     canvas.height = Math.max(1, Math.round(canvasH * scale));
     // 逻辑显示尺寸(CSS 像素),供 applyZoomStyle 使用(与后备缓冲解耦,不会因 DPR 放得更大)
