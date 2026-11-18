@@ -12,6 +12,7 @@ const { normalizeAutoCheck, shouldAutoCheck } = require('./update-policy');
 const { importLogoPack } = require('./logo-pack');
 const gradePresetStore = require('./grade-preset-store');
 const localAgent = require('./local-agent');
+const aiProvider = require('./ai-provider');
 
 // 仓库改名后统一从这里取,避免菜单 / 更新源 / 下载兜底 / 外链白名单各写一份。
 const REPO_URL = 'https://github.com/lumos-1s/Qing-Fram-Shadow';
@@ -939,6 +940,29 @@ handleIpc('agent:setModel', async (_e, key, modelId, value) => {
     return localAgent.setModel(String(key || ''), String(modelId || 'model'), String(value || ''));
 });
 handleIpc('agent:close', (_e, key) => { if (isTrustedFrame(_e)) localAgent.close(String(key || '')); });
+
+// ── API 通道（OpenAI 兼容）：不依赖本机装 CLI ──
+// 密钥只在主进程里待着；渲染层只拿到结果文本。
+function aiCfg(payload) {
+    const p = payload && typeof payload === 'object' ? payload : {};
+    const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+    return {
+        baseUrl: str(p.baseUrl, 500),
+        apiKey: str(p.apiKey, 400),
+        model: str(p.model, 200),
+        temperature: Number(p.temperature),
+        maxTokens: Number(p.maxTokens),
+        timeout: Number(p.timeout)
+    };
+}
+handleIpc('ai:chat', async (_e, cfg, messages) => {
+    if (!isTrustedFrame(_e)) return BLOCKED;
+    return aiProvider.chat(aiCfg(cfg), messages);
+});
+handleIpc('ai:models', async (_e, cfg) => {
+    if (!isTrustedFrame(_e)) return BLOCKED;
+    return aiProvider.models(aiCfg(cfg));
+});
 app.on('before-quit', () => localAgent.closeAll());
 // 保留一次性命令入口（没有 ACP 适配器时的降级）
 handleIpc('agent:run', (_e, id, promptText) => {

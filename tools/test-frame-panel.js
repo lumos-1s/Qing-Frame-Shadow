@@ -82,6 +82,30 @@ function writeDesigns(names, text) {
     ];
     designs.forEach((d, i) => fs.writeFileSync(frameFile('a' + (i + 1) + '.json'), JSON.stringify({ templateName: d.name, layers: d.layers }, null, 2), 'utf8'));
 }
+// API 通道：不写文件，直接回一段（可能裹着围栏的）JSON，专门塞两款「会被体检修掉」的方案
+let aiCalls = 0;
+ipcMain.handle('ai:chat', (_e, cfg, messages) => {
+    aiCalls++;
+    if (!cfg || !cfg.apiKey || !cfg.model) return { ok: false, error: '缺配置（模拟）' };
+    const txt = String((messages && messages[0] && messages[0].content) || '');
+    if (txt.indexOf('模拟空回') >= 0) return { ok: true, content: '抱歉，这次我没想法' };
+    const mk = (name, color, extra) => ({
+        templateName: name, layers: [
+            { type: 'rect', x: 0, y: 0, w: 1, h: 1, fill: '#f7f5f0' },
+            { type: 'photo', x: 0.08, y: 0.08, w: 0.84, h: 0.62, fit: 'cover' },
+            Object.assign({ type: 'text', x: 0.5, y: 0.93, text: 'QINGFRAME', size: 0.03, color, align: 'center', maxW: 0.8, maxLines: 1 }, extra || {})
+        ]
+    });
+    const plans = [
+        mk('接口款一', '#1b1b1b'),
+        mk('接口款二', '#fbfbfb'),                                            // 白字白底 → 自动改色
+        { templateName: '接口款三', layers: [{ type: 'photo', x: 0.3, y: 0.3, w: 0.4, h: 0.28 }] }, // 窄槽位 → 自动放宽
+        mk('接口款四', '#3a3a3a', { y: 0.45 })                                // 压住照片 → 自动挪走
+    ];
+    return { ok: true, content: '好的，这是 4 款：\n```json\n' + JSON.stringify(plans) + '\n```' };
+});
+ipcMain.handle('ai:models', () => ({ ok: true, models: ['mock-1'] }));
+
 ipcMain.handle('agent:prompt', (_e, _key, text) => {
     const t = String(text || '');
     if (t.indexOf('慢速') >= 0) {
@@ -525,6 +549,60 @@ app.whenReady().then(async () => {
     await sleep(450);
     const fav2 = await exec(`document.querySelectorAll('#frameGallery .frame-swatch').length`);
     check(fav2 === 1, '收藏跨面板重开保留', String(fav2));
+
+    // 12) 照片速写：面板要能读出这张照片的骨架
+    await exec(`document.querySelector('.frame-tab[data-view="current"]').click(); true`);
+    await sleep(300);
+    const brief = await exec(`(() => {
+        const el = document.getElementById('frameBrief');
+        return { shown: !el.hidden, text: el.textContent, title: el.title,
+            app: App._frameBrief && { ratio: App._frameBrief.ratio, tone: App._frameBrief.luma.tone, x: App._frameBrief.centroid.x } };
+    })()`);
+    check(brief.shown === true && /已读照片/.test(brief.text), '面板显示「已读照片」速写', JSON.stringify(brief.text));
+    check(!!brief.app && brief.app.ratio === '4:5', '速写识别出 4:5 竖幅', JSON.stringify(brief.app));
+    check(/主色/.test(brief.title) && /重心/.test(brief.title), '速写标题带主色与重心', String(brief.title).slice(0, 80));
+
+    // 13) API 通道：没配置时拒绝生成
+    await exec(`window.QfsAiProvider.setChannel('api'); window.QfsAiProvider.save({baseUrl:'https://mock.local/v1', apiKey:'', model:''}); true`);
+    await exec(`document.getElementById('framePrompt').value = '暖色胶片'; document.getElementById('btnGenerate').click(); true`);
+    await sleep(500);
+    const noCfg = await exec(`document.getElementById('frameStatus').textContent`);
+    check(/还没配好/.test(noCfg), 'API 通道未配置时给出明确提示', noCfg);
+
+    // 14) API 通道：回 4 个 JSON（含两款不合格）→ 出 4 款 + 自动体检修正
+    await exec(`window.QfsAiProvider.save({baseUrl:'https://mock.local/v1', apiKey:'sk-test-1234', model:'mock-1'}); true`);
+    const beforeAi = aiCalls;
+    await exec(`document.getElementById('btnGenerate').click(); true`);
+    await sleep(2000);
+    const apiRun = await exec(`({ names: [...document.querySelectorAll('.frame-swatch-name')].map(x=>x.textContent),
+        imgs: document.querySelectorAll('.frame-swatch-img img').length,
+        badges: [...document.querySelectorAll('.frame-swatch-lint')].map(x=>x.textContent),
+        status: document.getElementById('frameStatus').textContent,
+        channel: window.QfsAiProvider.channel() })`);
+    check(aiCalls - beforeAi === 1, 'API 通道真的被调用一次', String(aiCalls - beforeAi));
+    check(apiRun.names.join(',') === '接口款一,接口款二,接口款三,接口款四', 'API 通道出 4 款（围栏 JSON 也能解析）', apiRun.names.join(','));
+    check(apiRun.imgs === 4, 'API 方案都渲染出缩略图', String(apiRun.imgs));
+    check(/自动修正/.test(apiRun.status), '状态栏报告自动修正处数', apiRun.status);
+    check(apiRun.badges.length >= 2, '不合格方案挂上体检标记', JSON.stringify(apiRun.badges));
+    const fixedDoc = await exec(`(() => {
+        const st = JSON.parse(localStorage.getItem('qfs_ai_gallery_v1') || '{}');
+        const r = (st.rounds || [])[0];
+        const bad = r && r.items.find(x => x.templateName === '接口款二');
+        const narrow = r && r.items.find(x => x.templateName === '接口款三');
+        const slot = narrow && narrow.layers.find(l => l.type === 'photo');
+        const txt = bad && bad.layers.find(l => l.type === 'text');
+        return { color: txt && txt.color, slot: slot && [slot.w, slot.h] };
+    })()`);
+    check(fixedDoc.color && fixedDoc.color !== '#fbfbfb', '白字白底被改成可读颜色', String(fixedDoc.color));
+    check(fixedDoc.slot && fixedDoc.slot[0] > 0.4 && fixedDoc.slot[1] > 0.28, '窄槽位被放宽', JSON.stringify(fixedDoc.slot));
+
+    // 15) API 回垃圾文本 → 明确报错，不是静默空白
+    await exec(`document.getElementById('framePrompt').value = '模拟空回'; document.getElementById('btnGenerate').click(); true`);
+    await sleep(1200);
+    const garbage = await exec(`({ msg: document.getElementById('frameErrorMsg').textContent,
+        hidden: document.getElementById('frameError').hidden })`);
+    check(garbage.hidden === false && /可解析/.test(garbage.msg), '模型回垃圾时给出可读原因', JSON.stringify(garbage));
+    await exec(`window.QfsAiProvider.setChannel('local'); true`);
 
     console.log(failures.length ? `\n未通过 ${failures.length} 项：${failures.join(', ')}` : '\nALL PASS');
     win.destroy();

@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('qingframe', {
     agentClose: (key) => ipcRenderer.invoke('agent:close', key),
     agentSetModel: (key, m, v) => ipcRenderer.invoke('agent:setModel', key, m, v),
     agentRun: (id, p) => ipcRenderer.invoke('agent:run', id, p),
+    aiChat: (cfg, messages) => ipcRenderer.invoke('ai:chat', cfg, messages),
+    aiModels: (cfg) => ipcRenderer.invoke('ai:models', cfg),
     framesSkill: () => ipcRenderer.invoke('frames:skill'),
     onAgentEvent: (cb) => { const h = (_e, p) => cb(p); ipcRenderer.on('agent-event', h); return () => ipcRenderer.removeListener('agent-event', h); },
     onFramesChanged: (cb) => {

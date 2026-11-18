@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('qingframe', {
     agentCancel: (key) => ipcRenderer.invoke('agent:cancel', key),
     agentSetModel: (key, modelId, value) => ipcRenderer.invoke('agent:setModel', key, modelId, value),
     agentClose: (key) => ipcRenderer.invoke('agent:close', key),
+    // API 通道：免装本机 CLI，key 只在主进程里用
+    aiChat: (cfg, messages) => ipcRenderer.invoke('ai:chat', cfg, messages),
+    aiModels: (cfg) => ipcRenderer.invoke('ai:models', cfg),
     onAgentEvent: (cb) => {
         const h = (_e, payload) => cb(payload);
         ipcRenderer.on('agent-event', h);

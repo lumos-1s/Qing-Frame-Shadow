@@ -2268,6 +2268,7 @@
                         <span class="frame-progress-dot"></span><span id="frameProgressText">正在洗样片…</span>
                         <button type="button" class="mini-btn frame-cancel-btn" id="btnFrameCancel">停止</button>
                     </div>
+                    <div class="frame-brief" id="frameBrief" hidden aria-live="polite"></div>
                 </div>
                 <div class="frame-toolbar">
                     <div class="frame-tabs" role="tablist" aria-label="边框来源">
@@ -2330,6 +2331,23 @@
                 <details class="frame-advanced">
                     <summary>高级：助手 / 模型 / 文件 / 调参</summary>
                     <div class="frame-advanced-body">
+                        <div class="frame-adv-row">
+                            <label class="frame-adv-label" for="frameChannel">模型通道</label>
+                            <select id="frameChannel" class="frame-agent-select" aria-label="模型通道">
+                                <option value="local">本机助手（免 Key）</option>
+                                <option value="api">API 通道（免安装）</option>
+                            </select>
+                            <span class="frame-agent-hint" id="frameChannelHint"></span>
+                        </div>
+                        <div class="frame-api-cfg" id="frameApiCfg" hidden>
+                            <input type="text" id="frameApiBase" class="frame-api-input" placeholder="接口地址，如 https://api.openai.com/v1（留空走内置默认）" autocomplete="off" spellcheck="false" />
+                            <input type="password" id="frameApiKey" class="frame-api-input" placeholder="API Key（只存在本机）" autocomplete="off" spellcheck="false" />
+                            <div class="frame-adv-row">
+                                <input type="text" id="frameApiModel" class="frame-api-input" placeholder="模型，如 gpt-4o-mini" autocomplete="off" spellcheck="false" />
+                                <button type="button" class="mini-btn" id="btnFrameApiTest">测试连接</button>
+                            </div>
+                            <div class="frame-api-note" id="frameApiNote">任何 OpenAI 兼容接口都行：官方 / 中转 / 自建网关。填完先用「测试连接」验一次。打包版还可以用环境变量 QFS_AI_PROXY 指到内置中转。</div>
+                        </div>
                         <div class="frame-adv-row">
                             <select id="frameAgentSelect" class="frame-agent-select" aria-label="选择本机编程助手"><option value="">检测中…</option></select>
                             <div class="frame-model-wrap">
@@ -2655,6 +2673,10 @@
     <script src="js/app-color-grade.js"></script>
     <script src="js/app-mask.js"></script>
     <script src="js/app-ai-layers.js"></script>
+    <script src="js/app-photo-brief.js"></script>
+    <script src="js/app-frame-lint.js"></script>
+    <script src="js/app-frame-plans.js"></script>
+    <script src="js/app-ai-provider.js"></script>
     <script src="js/app-frame-panel.js"></script>
 </body>
 </html>

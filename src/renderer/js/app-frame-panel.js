@@ -196,6 +196,38 @@
         if (app && Array.isArray(app.images) && Number.isInteger(i) && app.images[i]) return app.images[i];
         return (app && app.image) || null;
     }
+    // ── 照片速写：让 AI「看着这张照片配」，而不是盲配 ──
+    // 统计在 64px 缩略图上做，几千个像素，每次生成前跑一次也不心疼。
+    let lastBrief = null;
+    function briefOf() {
+        const im = photoImage();
+        if (!im || !window.PhotoBrief) return null;
+        const src = (window.photoSrc && window.photoSrc(im)) || im.el;
+        if (!src) return null;
+        const brief = window.PhotoBrief.analyze(src);
+        if (!brief) return null;
+        const exif = im.exif || (app && app.image && app.image.exif) || {};
+        return { brief, text: window.PhotoBrief.toPromptText(brief, exif), advice: window.PhotoBrief.toAdvice(brief) };
+    }
+    function refreshBrief() {
+        lastBrief = briefOf();
+        const el = $('frameBrief');
+        if (app) app._frameBrief = lastBrief ? lastBrief.brief : null;
+        if (!el) return;
+        if (!lastBrief) { el.hidden = true; el.textContent = ''; el.removeAttribute('title'); return; }
+        const b = lastBrief.brief;
+        el.hidden = false;
+        el.textContent = '';
+        const sw = document.createElement('span');
+        sw.className = 'frame-brief-swatch';
+        sw.style.background = b.dominant.hex;
+        const txt = document.createElement('span');
+        txt.textContent = '已读照片：' + b.ratio + ' ' + b.orient + '构图 · ' + b.luma.tone
+            + ' · 主色 ' + b.dominant.name + ' · 重心' + b.centroid.label;
+        el.appendChild(sw);
+        el.appendChild(txt);
+        el.title = lastBrief.text + '\n\n' + lastBrief.advice;
+    }
     // 预览必须走引擎同一取源：调色后的照片在 im._grade.canvas 里，直接用 im.el 会预览成未调色。
     function photoSource() {
         const im = photoImage();
@@ -362,6 +394,18 @@
         fav.setAttribute('aria-label', fav.title);
         acts.appendChild(expand); acts.appendChild(fav);
         imgBox.appendChild(acts);
+        if (entry.lint && ((entry.lint.fixes && entry.lint.fixes.length) || (entry.lint.issues && entry.lint.issues.length))) {
+            const issues = entry.lint.issues || [];
+            const warnN = issues.filter((x) => x.level === 'warn').length;
+            const errN = issues.filter((x) => x.level === 'error').length;
+            const badge = document.createElement('span');
+            badge.className = 'frame-swatch-lint' + (warnN || errN ? ' warn' : '');
+            badge.textContent = (entry.lint.fixes && entry.lint.fixes.length)
+                ? '已修正 ' + entry.lint.fixes.length
+                : (errN ? errN + ' 处问题' : warnN + ' 处提醒');
+            badge.title = [entry.lint.summary, window.FrameLint ? window.FrameLint.describe(issues) : ''].filter(Boolean).join('\n');
+            imgBox.appendChild(badge);
+        }
 
         const foot = document.createElement('div'); foot.className = 'frame-swatch-foot';
         const name = document.createElement('span'); name.className = 'frame-swatch-name'; name.textContent = entry.preset.templateName || '方案';
@@ -439,11 +483,10 @@
     // ── 生成：一句话 → N 个方案 ──
     // 生成规则是「会话级约定」，不能把用户第一句话写进 AGENTS.md：
     // 每次请求单独把规则 + 本轮要求/参考版一起发给助手。
-    function designRules() {
+    // 图层协议只有一份：本机助手（写文件）和 API 通道（直接回 JSON）共用，避免两边漂移
+    function layerSchemaLines() {
         return [
-            '你是清框影边框设计师。',
-            '请生成 4 个各不相同的边框方案，在本目录写 4 个 JSON：a1.json / a2.json / a3.json / a4.json。',
-            '每个文件是一个「图层边框」对象，格式：',
+            '每个方案是一个「图层边框」对象，格式：',
             '{"templateName":"方案名","layers":[ ...图层... ]}',
             'layers 从底到顶绘制，每层是以下之一（坐标为 0..1 比例，相对画布宽高）：',
             ' {"type":"photo","x":0.08,"y":0.08,"w":0.84,"h":0.7,"radius":0.01,"fit":"cover"}',
@@ -454,13 +497,39 @@
             '必须包含且只包含一个 photo 槽位：它就是照片的位置和大小，画布比例由它决定。',
             'photo 之前的图层画在照片下面（底色/卡纸/背景），photo 之后的图层画在照片上面（文字/线条/装饰）；不要把照片整张盖住。',
             '文字务必带 maxW（0..1，建议 0.6~0.9）和 maxLines，size 不要超过 0.06，避免溢出画面。',
-            '可加 shadow:{color,blur,offsetX,offsetY,opacity}。颜色用十六进制。',
+            '可加 shadow:{color,blur,offsetX,offsetY,opacity}。颜色用十六进制。'
+        ];
+    }
+    function designRules() {
+        return [
+            '你是清框影边框设计师。',
+            '请生成 4 个各不相同的边框方案，在本目录写 4 个 JSON：a1.json / a2.json / a3.json / a4.json。'
+        ].concat(layerSchemaLines(), [
             '要求：4 款在风格/配色/留白/排版上明显不同，且都用图层组合出真实的新设计（不要只写一行文字）。',
             '写好 4 个文件后只回复「完成」，不要输出 JSON 正文。'
-        ].join('\n');
+        ]).join('\n');
     }
-    function buildFullPrompt(promptText, base, avoid) {
-        const parts = [designRules(), '', '====', '用户这次的要求：' + promptText];
+    function designRulesApi() {
+        return [
+            '你是清框影边框设计师。只输出一个 JSON 数组，数组里有 4 个「图层边框」对象；不要输出解释，不要用 Markdown 代码块包裹。'
+        ].concat(layerSchemaLines(), [
+            '要求：4 款在风格/配色/留白/排版上明显不同，都用图层组合出真实设计（不要只写一行文字）。',
+            '文字必须能读：浅底深字、深底浅字；文字别压在照片主体上；照片槽位短边不小于画面的 45%。'
+        ]).join('\n');
+    }
+    function buildFullPrompt(promptText, base, avoid, photo, notes, rules) {
+        const parts = [rules || designRules(), '', '====', '用户这次的要求：' + promptText];
+        if (photo && photo.text) {
+            parts.push('', '照片速写（根据这张照片的真实像素统计，不是猜的）：');
+            parts.push(photo.text);
+            if (photo.advice) parts.push('排版与配色建议：' + photo.advice);
+            parts.push('4 款都要照顾这张照片（文字放哪儿、底色明暗、留白给谁），但边框本身要立得住，不要做成融进照片的隐形框。');
+        }
+        if (notes) {
+            parts.push('', '上一轮生成的方案体检不合格：');
+            parts.push(String(notes).slice(0, 400));
+            parts.push('这一轮逐条避开：文字不要压在照片主体上，文字与底色的对比要够（浅底深字 / 深底浅字），照片槽位短边不小于画面的 45%，别用不透明层盖住照片。');
+        }
         if (base) {
             const doc = { templateName: base.templateName || '参考方案', layers: layersOfDoc(base) || [] };
             parts.push('', '参考这一版（上一轮已生成的方案）。请保留它的骨架与照片槽位关系，按新要求做 4 个明显不同的变体：');
@@ -502,6 +571,82 @@
         setStatus('已停止生成。助手会话还在，可以直接重来或点「新会话」', '');
         hideError();
     }
+
+    // ── 通道：本机助手 / OpenAI 兼容 API ──
+    function channelOf() {
+        if (window.QfsAiProvider && typeof window.QfsAiProvider.channel === 'function') return window.QfsAiProvider.channel();
+        const el = $('frameChannel');
+        return el && el.value === 'api' ? 'api' : 'local';
+    }
+    // 从模型回复里抠出 JSON 数组（宽容解析见 app-frame-plans.js）
+    function parsePlansFromText(raw) {
+        if (window.FramePlans && window.FramePlans.plansFromText) return window.FramePlans.plansFromText(raw);
+        return [];
+    }
+    async function apiGenerate(text, base, avoid, photo, notes) {
+        const P = window.QfsAiProvider;
+        if (!P) throw new Error('API 通道未加载');
+        const rules = designRulesApi();
+        const full = buildFullPrompt(text, base, avoid, photo, notes, rules);
+        const r = await P.chat([{ role: 'user', content: full }], { temperature: 0.9 });
+        if (!r || !r.ok) throw new Error((r && r.error) || '模型调用失败');
+        const plans = parsePlansFromText(r.content);
+        if (!plans.length) {
+            throw new Error('模型没有给出可解析的方案 JSON（' + String(r.content || '').slice(0, 120) + '…）');
+        }
+        return plans;
+    }
+
+    // ── 收下方案：体检 → 画廊 → 渲染 → 历史（本机助手与 API 通道共用） ──
+    async function adoptPlans(plans, my, text, opts) {
+        if (my !== runSeq) return;
+        const brief = (lastBrief && lastBrief.brief) || null;
+        const docs = (plans || []).map((p) => sanitizeLayerDoc(p)).filter(Boolean);
+        if (!docs.length) throw new Error('模型没有给出可用的图层方案');
+        // 生成之后先自己看一眼：能修的当场修（对比度/槽位/层级），修不了的照实提醒。
+        const checked = docs.map((p) => {
+            if (!window.FrameLint) return { ok: true, preset: p, lint: null };
+            const res = window.FrameLint.checkAndFix(p, {
+                bg: p.aiBackground || '#ffffff',
+                photo: brief ? { ar: brief.ar, lumaMean: brief.luma.mean } : null
+            });
+            return { ok: res.usable, preset: res.doc, lint: res };
+        });
+        let picks = checked.filter((x) => x.ok);
+        // 一款都站不住：带着体检结论自动重出一次，而不是把烂方案端给用户
+        if (!picks.length && !opts.retry) {
+            const why = checked.map((x) => (x.lint ? window.FrameLint.describe(x.lint.issues) : '')).join('\n')
+                .replace(/\n+/g, '；').slice(0, 400);
+            progress(true, '方案站不住，正在自动重出…');
+            setTimeout(() => generate({ prompt: text, base: opts.base || null, avoid: (lastRequest && lastRequest.avoid) || [], retry: why }), 80);
+            return;
+        }
+        if (!picks.length) picks = checked;   // 重出仍不合格：降级给出，卡片上标出来
+        const at = Date.now();
+        gallery = picks.map((g, i) => ({
+            key: 'cur:' + my + ':' + i, preset: g.preset, dataUrl: null, isLayer: true,
+            source: 'current', roundPrompt: text, roundAt: at, lint: g.lint
+        }));
+        previousNames = picks.map((g) => g.preset.templateName || '');
+        view = 'current';
+        syncTabs();
+        renderGallery();
+        // 逐张渲染到用户照片（走 photoSrc：调过色的照片预览也用同一条取源）
+        const img = photoSource();
+        progress(true, '正在套用你的照片…');
+        let rendered = 0;
+        for (let i = 0; i < gallery.length; i++) {
+            if (my !== runSeq) return;
+            gallery[i].dataUrl = renderFrameToUrl(gallery[i].preset, img);
+            if (gallery[i].dataUrl) rendered++;
+            renderGallery();
+        }
+        if (!rendered) throw new Error('样片渲染失败：照片未就绪或图层没有可用图元（展开「高级」看日志）');
+        pushRound(text, picks.map((g) => g.preset));
+        renderGallery();
+        const fixedN = picks.reduce((n, g) => n + ((g.lint && g.lint.fixes.length) || 0), 0);
+        setStatus('已生成 ' + gallery.length + ' 款' + (fixedN ? '，自动修正 ' + fixedN + ' 处' : '') + '，点卡片即可套用', 'ok');
+    }
     async function generate(opts) {
         opts = opts || {};
         const promptEl = $('framePrompt');
@@ -509,8 +654,13 @@
         const base = opts.base ? clone(opts.base) : null;
         if (generating) return;
         if (!text) { setStatus('先描述你想要的风格', 'bad'); return; }
+        const channel = channelOf();
         const id = $('frameAgentSelect') && $('frameAgentSelect').value;
-        if (!id) { setStatus('未检测到本机助手（在「高级」里查看）', 'bad'); return; }
+        if (channel === 'local' && !id) { setStatus('未检测到本机助手；也可以在「高级」里改用 API 通道', 'bad'); return; }
+        if (channel === 'api' && !(window.QfsAiProvider && window.QfsAiProvider.ready())) {
+            setStatus('API 通道还没配好：高级 → 接口地址 / Key / 模型', 'bad');
+            return;
+        }
         hideError();
         hideIterate();
         generating = true;
@@ -522,6 +672,15 @@
         agentStream = '';
         if ($('frameAgentOut')) $('frameAgentOut').textContent = '';
         try {
+            const photo = lastBrief || briefOf();
+            // API 通道：不碰本机助手会话与文件，直接让模型回 4 个 JSON
+            if (channel === 'api') {
+                progress(true, base ? '正在基于这一款改 4 个变体…' : '正在让模型出 4 款…');
+                const plans = await apiGenerate(text, base, lastRequest.avoid, photo, opts.retry);
+                if (my !== runSeq) return;
+                await adoptPlans(plans, my, text, opts);
+                return;
+            }
             // 上一次被停止的 prompt 可能还没收尾：先等它（最多 3 秒），别在 ACP 会话里并发压两条。
             if (cancelWait) {
                 progress(true, '正在收回上一轮…');
@@ -552,7 +711,7 @@
             }
             if (my !== runSeq) return;
             progress(true, base ? '正在改 4 个变体…' : '正在洗 4 款样片…');
-            const fullPrompt = buildFullPrompt(text, base, lastRequest.avoid);
+            const fullPrompt = buildFullPrompt(text, base, lastRequest.avoid, photo, opts.retry);
             const p = api().agentPrompt ? api().agentPrompt(agentKey, fullPrompt) : Promise.resolve(null);
             activePrompt = p;
             let r;
@@ -590,29 +749,8 @@
                 const why = seen ? `助手写了 ${seen} 个 JSON，但没有一个含有效图层。` : '助手没有产出可解析的边框文件。';
                 throw new Error(why + (tail ? '日志：' + tail : '展开「高级」看日志。'));
             }
-            const at = Date.now();
-            gallery = found.map((g, i) => ({
-                key: 'cur:' + my + ':' + i, preset: g.preset, dataUrl: null, isLayer: true,
-                source: 'current', roundPrompt: text, roundAt: at
-            }));
-            previousNames = found.map((g) => g.preset.templateName || '');
-            view = 'current';
-            syncTabs();
-            renderGallery();
-            // 逐张渲染到用户照片（走 photoSrc：调过色的照片预览也用同一条取源）
-            const img = photoSource();
-            progress(true, '正在套用你的照片…');
-            let rendered = 0;
-            for (let i = 0; i < gallery.length; i++) {
-                if (my !== runSeq) return;
-                gallery[i].dataUrl = renderFrameToUrl(gallery[i].preset, img);
-                if (gallery[i].dataUrl) rendered++;
-                renderGallery();
-            }
-            if (!rendered) throw new Error('样片渲染失败：照片未就绪或图层没有可用图元（展开「高级」看日志）');
-            pushRound(text, found.map((g) => g.preset));
-            renderGallery();
-            setStatus('已生成 ' + gallery.length + ' 款，点卡片即可套用', 'ok');
+            if (my !== runSeq) return;
+            await adoptPlans(found.map((g) => g.preset), my, text, opts);
         } catch (e) {
             if (my !== runSeq) return;
             const msg = e && e.message ? e.message : '生成失败';
@@ -1007,7 +1145,8 @@
         const installed = (list || []).filter((a) => a.installed);
         if (!installed.length) {
             const o = document.createElement('option'); o.value = ''; o.textContent = '未检测到本机助手'; sel.appendChild(o);
-            const hint = $('frameAgentHint'); if (hint) hint.textContent = '在「高级」里：需先装 Claude Code / Codex / OpenCode';
+            const hint = $('frameAgentHint');
+            if (hint) hint.textContent = channelOf() === 'api' ? '当前走 API 通道，本机助手可以不装' : '在「高级」里：需先装 Claude Code / Codex / OpenCode';
             return;
         }
         for (const a of installed) { const o = document.createElement('option'); o.value = a.id; o.textContent = a.name; sel.appendChild(o); }
@@ -1078,6 +1217,8 @@
     async function open() {
         if (!modal) return; modal.style.display = 'flex';
         refreshSamplePhotos();
+        refreshBrief();
+        if (window.QfsAiProvider) syncChannelUI();
         // 关掉面板期间可能调过色/裁切：历史与收藏的预览都按当前照片重画，不能拿旧缓存。
         previewCache.clear();
         if (gallery.length) {
@@ -1103,10 +1244,70 @@
         refreshTweakPanel(true);
     }
 
+    // ── 通道配置 UI ──
+    function syncChannelUI() {
+        const P = window.QfsAiProvider;
+        const ch = P ? P.channel() : 'local';
+        const sel = $('frameChannel');
+        if (sel) sel.value = ch;
+        const box = $('frameApiCfg');
+        if (box) box.hidden = ch !== 'api';
+        const cfg = P ? P.load() : { baseUrl: '', apiKey: '', model: '' };
+        const base = $('frameApiBase'), key = $('frameApiKey'), model = $('frameApiModel');
+        if (base && base.value !== cfg.baseUrl) base.value = cfg.baseUrl;
+        if (key && !key.value) key.value = cfg.apiKey;
+        if (model && model.value !== cfg.model) model.value = cfg.model;
+        const hint = $('frameChannelHint');
+        if (hint) {
+            if (ch !== 'api') hint.textContent = '用本机已装的助手，不花 Key';
+            else if (P && P.ready(cfg)) hint.textContent = '已配置 · ' + P.mask(cfg.apiKey) + ' · ' + cfg.model;
+            else hint.textContent = '填地址 / Key / 模型，免装 CLI';
+        }
+        const note = $('frameApiNote');
+        if (note) {
+            note.textContent = (P && P.ready(cfg))
+                ? '当前：' + (cfg.baseUrl || '内置默认地址') + ' · ' + cfg.model
+                : '任何 OpenAI 兼容接口都行：官方 / 中转 / 自建网关。填完先用「测试连接」验一次。打包版还可以用环境变量 QFS_AI_PROXY 指到内置中转。';
+        }
+    }
+    function apiFormCfg() {
+        return {
+            baseUrl: ($('frameApiBase') && $('frameApiBase').value) || '',
+            apiKey: ($('frameApiKey') && $('frameApiKey').value) || '',
+            model: ($('frameApiModel') && $('frameApiModel').value) || ''
+        };
+    }
+    function bindChannelUI() {
+        const P = window.QfsAiProvider;
+        if (!P) return;
+        syncChannelUI();
+        const sel = $('frameChannel');
+        if (sel) sel.addEventListener('change', () => { P.setChannel(sel.value); syncChannelUI(); });
+        for (const id of ['frameApiBase', 'frameApiKey', 'frameApiModel']) {
+            const el = $(id); if (!el) continue;
+            el.addEventListener('change', () => { P.save(apiFormCfg()); syncChannelUI(); });
+        }
+        const test = $('btnFrameApiTest');
+        if (test) test.addEventListener('click', async () => {
+            P.save(apiFormCfg());
+            syncChannelUI();
+            const old = test.textContent;
+            test.disabled = true; test.textContent = '测试中…';
+            try {
+                const r = await P.test();
+                if (r && r.ok) setStatus('API 通道可用 · ' + (r.model || '') + ' · 回复「' + (r.text || '') + '」', 'ok');
+                else setStatus('API 通道不可用：' + ((r && r.error) || '未知原因'), 'bad');
+            } finally {
+                test.disabled = false; test.textContent = old;
+            }
+        });
+    }
+
     function init(a) {
         app = a; modal = $('frameModal');
         if (a) a._syncAiLayerEdit = syncFromCanvas;
         if (!modal || modal.dataset.bound === '1') return; modal.dataset.bound = '1';
+        bindChannelUI();
         $('frameModalClose').addEventListener('click', close);
         modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
         $('btnGenerate').addEventListener('click', () => generate({ prompt: $('framePrompt').value }));
@@ -1116,6 +1317,7 @@
         $('frameSamplePhoto').addEventListener('change', () => {
             // 换示例照片：用同一批方案即时重渲染，用户能比较不同照片的效果
             previewCache.clear();
+            refreshBrief();
             if (!gallery.length) { if (view !== 'current') renderGallery(); return; }
             const img = photoSource();
             gallery.forEach((g) => { g.dataUrl = renderFrameToUrl(g.preset, img); });
