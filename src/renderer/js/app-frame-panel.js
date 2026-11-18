@@ -7,7 +7,9 @@
 (function () {
     const $ = (id) => document.getElementById(id);
     let app = null, modal = null;
-    let agentKey = null, agentModelId = 'model', agentModels = [], currentModel = '', modelPopUnwatch = null;
+    let agentKey = null, agentModelId = 'model', agentModels = [], modelPopUnwatch = null;
+    const MODEL_KEY = 'qfs_ai_model';
+    let currentModel = ''; try { currentModel = localStorage.getItem(MODEL_KEY) || ''; } catch (_) {}
     let agentStream = '', unwatchAgent = null;
     let current = null;          // 高级区选中的文件 { name }
     let gallery = [];            // 本轮方案 [{ name, preset, dataUrl }]
@@ -87,12 +89,19 @@
         const ctx = cv.getContext('2d');
         try {
             if (preset && Array.isArray(preset.layers) && preset.layers.length && window.AiLayers) {
-                // 白底 → 照片铺满（作为底层）→ AI 图层（边框/装饰叠加其上）
+                // 分三层合成：背景层（behind / 大面积实心 rect）→ 照片 → 前景层（文字/线/圆/小rect）
+                const L = preset.layers;
+                const isBg = (l) => l && (l.behind === true || (l.type === 'rect'
+                    && ((Number(l.w) || 0) * (Number(l.h) || 0) > 0.45)
+                    && (l.fillOpacity == null || Number(l.fillOpacity) > 0.5)));
+                const renderPart = (filter) => window.AiLayers.render(ctx, L, cv.width, cv.height, () => {}, filter);
                 ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height);
-                ctx.drawImage(img, 0, 0, cv.width, cv.height);
-                window.AiLayers.render(ctx, preset.layers, cv.width, cv.height, () => {
-                    // 图片异步加载后由调用方重绘（这里画廊可接受一次性）
-                });
+                renderPart(isBg);
+                // 照片画在中央内容区（背景框内），保持不变形
+                const inset = 0.08;
+                const iw = cv.width * (1 - inset * 2), ih = cv.height * (1 - inset * 2);
+                ctx.drawImage(img, cv.width * inset, cv.height * inset, iw, ih);
+                renderPart((l) => !isBg(l));
                 return cv.toDataURL('image/png');
             }
             if (!window.__render) return null;
@@ -162,12 +171,26 @@
     function applyGalleryItem(i) {
         const g = gallery[i];
         if (!g) return;
+        const inst = window.App || app;
         if (g.isLayer) {
-            setStatus('这是 AI 新设计的预览样片；逐层编辑与完整应用即将支持', 'ok');
+            // AI 图层边框：把「当前示例照片 + 图层」合成图作为新位图套到当前照片
+            if (!inst || !inst.image || !inst.applyPresetToCurrent) { setStatus('应用未就绪', 'bad'); return; }
+            const url = g.dataUrl || renderFrameToUrl(g.preset, photoEl());
+            if (!url) { setStatus('合成失败', 'bad'); return; }
+            const im = new Image();
+            im.onload = () => {
+                inst.image.el = im;
+                inst.image.thumb = url;
+                if (typeof inst.buildThumbnails === 'function') inst.buildThumbnails();
+                if (typeof inst.refreshUI === 'function') inst.refreshUI();
+                if (typeof inst.scheduleRender === 'function') inst.scheduleRender(true);
+                setStatus('已套用「' + (g.preset.templateName || 'AI 边框') + '」', 'ok');
+            };
+            im.src = url;
             return;
         }
-        if (!app || typeof app.applyPresetToCurrent !== 'function') return;
-        app.applyPresetToCurrent(g.preset);
+        if (!inst || typeof inst.applyPresetToCurrent !== 'function') return;
+        inst.applyPresetToCurrent(g.preset);
         setStatus('已套用「' + (g.preset.templateName || '方案') + '」', 'ok');
     }
 
@@ -258,6 +281,10 @@
         if (!r || !r.ok) throw new Error((r && r.error) || '无法启动助手会话');
         agentKey = r.key; agentModelId = r.modelId || 'model';
         populateModels(r.models || []);
+        // 把记忆的模型应用到新会话（若有）
+        if (currentModel && api().agentSetModel) {
+            api().agentSetModel(agentKey, agentModelId, currentModel).catch(() => {});
+        }
         if (!unwatchAgent && api().onAgentEvent) {
             unwatchAgent = api().onAgentEvent((payload) => {
                 if (!agentKey || payload.key !== agentKey) return;
@@ -276,7 +303,8 @@
         agentModels = Array.isArray(models) ? models.slice() : [];
         const label = $('frameModelLabel');
         if (!agentModels.length) { if (label) label.textContent = '默认模型'; return; }
-        const cur = agentModels.find((m) => m.current) || agentModels[0];
+        const cur = (currentModel && agentModels.find((m) => m.value === currentModel))
+            || agentModels.find((m) => m.current) || agentModels[0];
         currentModel = cur ? cur.value : ''; if (label) label.textContent = cur ? cur.name : '默认模型';
         renderModelList('');
     }
@@ -299,7 +327,9 @@
         }
     }
     async function chooseModel(m) {
-        currentModel = m.value; const label = $('frameModelLabel'); if (label) label.textContent = m.name;
+        currentModel = m.value;
+        try { localStorage.setItem(MODEL_KEY, m.value); } catch (_) {}
+        const label = $('frameModelLabel'); if (label) label.textContent = m.name;
         renderModelList($('frameModelSearch') && $('frameModelSearch').value); closeModelPop();
         if (agentKey && api().agentSetModel) {
             const r = await api().agentSetModel(agentKey, agentModelId, m.value);

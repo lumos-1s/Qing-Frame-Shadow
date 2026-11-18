@@ -101,56 +101,58 @@
                 ctx.stroke();
             } else if (l.type === 'text') {
                 const x = px(l.x || 0), y = py(l.y || 0);
-                let size = Math.max(6, (Number(l.size) || 0.04) * H);
                 const align = l.align || 'left';
+                const tracking = (Number(l.letterSpacing) || 0); // 相对字号的字距倍数；手动绘制，测量一致
+                let size = Math.max(6, (Number(l.size) || 0.04) * H);
                 ctx.textBaseline = 'alphabetic';
-                ctx.textAlign = align;
-                const font = () => `${l.weight || 400} ${size}px ${l.font || 'sans-serif'}`;
-                const spacing = (l.letterSpacing != null && ctx.letterSpacing != null) ? (l.letterSpacing * size) : 0;
-                const applySpacing = () => { if (ctx.letterSpacing != null) ctx.letterSpacing = spacing + 'px'; };
-                ctx.font = font(); applySpacing();
+                ctx.textAlign = 'left'; // 统一左对齐，自己算起点，避免 align 与手动画不一致
                 ctx.fillStyle = withAlpha(l.color || '#ffffff', l.opacity != null ? l.opacity : 1);
-
-                // 可用宽度：AI 可给 maxW；否则按对齐方式取到画布边缘的距离
+                const font = () => `${l.weight || 400} ${size}px ${l.font || 'sans-serif'}`;
+                // 手动逐字宽度（含字距），与绘制完全一致
+                const measure = (s) => {
+                    ctx.font = font();
+                    let w = 0;
+                    for (const ch of s) w += ctx.measureText(ch).width + tracking * size;
+                    return Math.max(0, w - (s.length ? tracking * size : 0));
+                };
+                const text = String(l.text == null ? '' : l.text);
+                // 可用宽度：maxW 优先；兜底按对齐到画布边缘
                 let maxW = l.maxW != null ? px(l.maxW) :
                     (align === 'center' ? Math.min(x, W - x) * 2 : align === 'right' ? x : W - x);
-                maxW = Math.max(size, maxW - spacing * 2 * String(l.text || '').length); // 扣掉字距累加
-                const text = String(l.text == null ? '' : l.text);
-                const lines = [];
+                maxW = Math.max(size, maxW);
                 const maxLines = Math.max(1, Number(l.maxLines) || 3);
-
-                // 先按可用宽度折行；若折行后仍超 maxLines，则整体缩字号再试
-                for (let attempt = 0; attempt < 4; attempt++) {
+                const lines = [];
+                // 折行 + 必要时缩字号，直到行数合规
+                for (let attempt = 0; attempt < 6; attempt++) {
                     lines.length = 0;
-                    ctx.font = font(); applySpacing();
                     let cur = '';
                     for (const ch of text) {
                         if (ch === '\n') { lines.push(cur); cur = ''; continue; }
                         const test = cur + ch;
-                        if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = ch; }
+                        if (measure(test) > maxW && cur) { lines.push(cur); cur = ch; }
                         else cur = test;
                     }
                     if (cur) lines.push(cur);
-                    if (lines.length <= maxLines) break;
-                    size *= 0.85; // 行太多，缩小字号重试
+                    if (lines.length <= maxLines && lines.every((ln) => measure(ln) <= maxW + 0.5)) break;
+                    size *= 0.82; // 还有单行超宽（长词）或行太多 → 缩小重试
                 }
                 if (lines.length > maxLines) lines.length = maxLines;
-                ctx.font = font(); applySpacing();
-
-                // 起点：首行基线 y，后续行按行高下移；限制不超出画布上下
+                ctx.font = font();
                 const lineH = size * 1.2;
                 let startY = Math.max(size, Math.min(H - 2, y - (lines.length - 1) * lineH * 0.5));
+                // 逐字绘制（带手动字距），起点按 align 且夹在画布内
                 for (let i = 0; i < lines.length; i++) {
-                    let ly = startY + i * lineH;
-                    // 水平方向再夹一次，避免字距累加后越界
-                    const w = ctx.measureText(lines[i]).width;
-                    let lx = x;
-                    if (align === 'center') lx = Math.max(w / 2, Math.min(W - w / 2, x));
-                    else if (align === 'right') lx = Math.max(w, Math.min(W, x));
-                    else lx = Math.max(0, Math.min(W - w, x));
-                    ctx.fillText(lines[i], lx, Math.min(H - 2, ly));
+                    const ln = lines[i];
+                    const w = measure(ln);
+                    let sx = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+                    sx = Math.max(0, Math.min(W - w, sx));
+                    const ly = Math.min(H - 2, startY + i * lineH);
+                    let cx = sx;
+                    for (const ch of ln) {
+                        ctx.fillText(ch, cx, ly);
+                        cx += ctx.measureText(ch).width + tracking * size;
+                    }
                 }
-                if (ctx.letterSpacing != null) ctx.letterSpacing = '0px';
             } else if (l.type === 'image' && l.src) {
                 const x = px(l.x || 0), y = py(l.y || 0), w = px(l.w || 0), h = py(l.h || 0);
                 let img = imageCache && imageCache.get(l.src);
@@ -185,10 +187,10 @@
         return img;
     }
 
-    // 画整组图层（从底到顶）
-    function render(ctx, layers, W, H, onLoad) {
+    // 画整组图层（从底到顶）。filter(layer) 为真才画，用于分阶段合成。
+    function render(ctx, layers, W, H, onLoad, filter) {
         const arr = Array.isArray(layers) ? layers : [];
-        for (const l of arr) drawLayer(ctx, l, W, H, _imgs);
+        for (const l of arr) if (!filter || filter(l)) drawLayer(ctx, l, W, H, _imgs);
         // 图片异步加载完成后回调重绘
         for (const l of arr) {
             if (l && l.type === 'image' && l.src) {

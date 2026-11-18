@@ -131,11 +131,11 @@ app.whenReady().then(async () => {
     check(before !== after, '切换示例照片后画廊重新渲染（用新照片）',
         JSON.stringify({ changed: before !== after, beforeLen: before.length, afterLen: after.length }));
 
-    // 3) 点第 2 张 → AI 图层方案给出「样片预览」提示（完整编辑/应用后续支持）
+    // 3) 点第 2 张 → 真正套用：合成图成为当前照片位图
     await exec(`document.querySelectorAll('#frameGallery .frame-swatch')[1].click(); true`);
-    await sleep(300);
-    const applied = await exec(`({ status: document.getElementById('frameStatus').textContent })`);
-    check(/预览样片|即将支持/.test(applied.status), '点 AI 图层样片给出明确提示', JSON.stringify(applied));
+    await sleep(600);
+    const applied = await exec(`({ status: document.getElementById('frameStatus').textContent, src: App.image.el && App.image.el.src ? App.image.el.src.slice(0,40) : 'canvas' })`);
+    check(/已套用/.test(applied.status), '点 AI 图层样片真正套用', JSON.stringify(applied));
 
     // 4) 高级区仍可用：助手/模型已就绪
     const adv = await exec(`({ hasAdvanced: !!document.querySelector('.frame-advanced'), modelLabel: document.getElementById('frameModelLabel').textContent, agentSel: (document.getElementById('frameAgentSelect')||{}).value })`);

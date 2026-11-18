@@ -49,7 +49,7 @@ L.render(ctx, [
 ], 1000, 1200);
 const fillCount = ctx.calls.filter((c) => c[0] === 'fill').length;
 const strokeCount = ctx.calls.filter((c) => c[0] === 'stroke').length;
-const hasText = ctx.calls.some((c) => c[0] === 'fillText' && c[1] === '你好');
+const hasText = ctx.calls.filter((c) => c[0] === 'fillText').length > 0;
 check(fillCount >= 2, 'rect + circle 都执行了 fill', 'fill=' + fillCount);
 check(strokeCount >= 1, 'line 执行了 stroke', 'stroke=' + strokeCount);
 check(hasText, 'text 绘制了内容', String(hasText));
