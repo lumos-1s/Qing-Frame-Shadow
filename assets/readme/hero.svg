@@ -1,118 +1,111 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-labelledby="heroTitle heroDesc">
-  <title id="heroTitle">清框影 QINGFRAME</title>
-  <desc id="heroDesc">深绿与金色的边框工作室头图：左侧是项目名称与“全部在本地完成”的说明，右侧是叠放的相框样张与裁切标记。</desc>
+  <title id="heroTitle">清框影 QINGFRAME — 本地照片加框工作台</title>
+  <desc id="heroDesc">深色暗房配色的首图：左侧是清框影名称与“给照片一副好框”的说明，右侧是两张真实边框样张与裁切标记，底部是导入、选框、调色、导出的四步线索。</desc>
 
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0c1813"/>
-      <stop offset=".55" stop-color="#11241c"/>
-      <stop offset="1" stop-color="#09130f"/>
+      <stop offset="0" stop-color="#0b1512"/>
+      <stop offset=".55" stop-color="#10221b"/>
+      <stop offset="1" stop-color="#08110e"/>
     </linearGradient>
-    <radialGradient id="glow" cx=".78" cy=".4" r=".58">
-      <stop offset="0" stop-color="#31503f" stop-opacity=".55"/>
+    <radialGradient id="glow" cx=".76" cy=".42" r=".6">
+      <stop offset="0" stop-color="#3a5d49" stop-opacity=".5"/>
       <stop offset="1" stop-color="#0a1410" stop-opacity="0"/>
     </radialGradient>
-    <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-      <path d="M60 0H0V60" fill="none" stroke="#e6c384" stroke-opacity=".055"/>
-    </pattern>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#6fb8d8"/>
-      <stop offset=".42" stop-color="#e7a3a4"/>
-      <stop offset=".7" stop-color="#d98492"/>
-      <stop offset="1" stop-color="#4b4266"/>
-    </linearGradient>
-    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#554a70"/>
-      <stop offset="1" stop-color="#211f33"/>
-    </linearGradient>
-    <radialGradient id="sunGlow" cx=".5" cy=".5" r=".5">
-      <stop offset="0" stop-color="#ffedbb" stop-opacity=".9"/>
-      <stop offset=".55" stop-color="#ffd696" stop-opacity=".28"/>
-      <stop offset="1" stop-color="#ffc896" stop-opacity="0"/>
-    </radialGradient>
     <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#f2dcae"/>
+      <stop offset="0" stop-color="#f4e1bb"/>
       <stop offset=".5" stop-color="#e6c384"/>
       <stop offset="1" stop-color="#b98d52"/>
     </linearGradient>
-    <clipPath id="photoFront"><rect x="26" y="80" width="278" height="186" rx="6"/></clipPath>
-    <clipPath id="photoBack"><rect x="178" y="44" width="202" height="232" rx="4"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6fb8d8"/>
+      <stop offset=".42" stop-color="#e7a3a4"/>
+      <stop offset=".72" stop-color="#d98492"/>
+      <stop offset="1" stop-color="#4b4266"/>
+    </linearGradient>
+    <radialGradient id="sunGlow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ffedbb" stop-opacity=".9"/>
+      <stop offset=".55" stop-color="#ffd696" stop-opacity=".26"/>
+      <stop offset="1" stop-color="#ffc896" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M60 0H0V60" fill="none" stroke="#e6c384" stroke-opacity=".05"/>
+    </pattern>
+    <clipPath id="frontPhoto"><rect x="26" y="76" width="278" height="182" rx="6"/></clipPath>
+    <clipPath id="backPhoto"><rect x="178" y="40" width="200" height="230" rx="4"/></clipPath>
   </defs>
 
   <rect width="1200" height="420" fill="url(#bg)"/>
   <rect width="1200" height="420" fill="url(#glow)"/>
   <rect width="1200" height="420" fill="url(#grid)"/>
 
-  <!-- crop ticks -->
-  <g stroke="#e6c384" stroke-opacity=".38" stroke-width="1.4">
+  <!-- 裁切标记：项目里反复出现的边框母题 -->
+  <g stroke="#e6c384" stroke-opacity=".4" stroke-width="1.4">
     <path d="M20 34V20h14M1166 20h14v14M20 386v14h14M1180 386v14h-14"/>
   </g>
 
-  <!-- brand mark: frame + register line, from the app icon -->
+  <!-- 品牌标记：取自应用图标的框 + 注册线 -->
   <g>
-    <rect x="72" y="42" width="32" height="32" rx="8" fill="#10211a" stroke="url(#gold)" stroke-width="2"/>
-    <path d="M88 48v20M88 58h10" stroke="url(#gold)" stroke-width="2" stroke-linecap="round"/>
+    <rect x="68" y="40" width="32" height="32" rx="8" fill="#10211a" stroke="url(#gold)" stroke-width="2"/>
+    <path d="M84 46v20M84 56h10" stroke="url(#gold)" stroke-width="2" stroke-linecap="round"/>
   </g>
-  <text x="118" y="63" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="11" letter-spacing="2.4" fill="#d9c39a">QINGFRAME · LOCAL-FIRST PHOTO FRAMING</text>
+  <text x="114" y="61" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11" letter-spacing="2.4" fill="#d9c39a">QINGFRAME · LOCAL PHOTO STUDIO</text>
 
-  <text x="68" y="186" font-family="'Noto Serif SC','Songti SC','STSong','SimSun',serif" font-size="100" letter-spacing="4" fill="#f4ead8">清框影</text>
-  <text x="72" y="228" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="22" letter-spacing="9" fill="#e6c384">QINGFRAME</text>
+  <text x="64" y="182" font-family="'Songti SC','Noto Serif SC','SimSun',serif" font-size="96" letter-spacing="4" fill="#f4ead8">清框影</text>
+  <text x="68" y="224" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="22" letter-spacing="9" fill="#e6c384">QINGFRAME</text>
 
-  <text x="72" y="276" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif" font-size="20" fill="#f4ead8" fill-opacity=".86">边框、光影、相机参数与签名，全部在本地完成。</text>
-  <text x="72" y="306" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif" font-size="20" fill="#f4ead8" fill-opacity=".86">不登录，不上传，照片只留在你的电脑里。</text>
-  <text x="72" y="336" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="12" letter-spacing=".5" fill="#a9926b">Frames, light, EXIF and signatures — rendered entirely on your machine.</text>
+  <text x="68" y="272" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="21" fill="#f4ead8" fill-opacity=".9">给照片一副好框，给参数一个位置。</text>
+  <text x="68" y="302" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" font-size="20" fill="#f4ead8" fill-opacity=".76">边框、调色、RAW、EXIF 与签名，一次完成。</text>
+  <text x="68" y="334" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" letter-spacing=".4" fill="#a9926b">Frames, grading, RAW, EXIF and batch export — rendered entirely on your machine.</text>
 
-  <path d="M72 368H520" stroke="#e6c384" stroke-opacity=".24"/>
-  <text x="72" y="394" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="12" letter-spacing="2" fill="#b8a37e">84 PRESETS</text>
-  <text x="190" y="394" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="12" letter-spacing="2" fill="#b8a37e">88 STYLES</text>
-  <circle cx="300" cy="390" r="3" fill="#6fe3c6"/>
-  <text x="312" y="394" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="12" letter-spacing="2" fill="#b8a37e">100% LOCAL</text>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12" letter-spacing="1.6" fill="#b8a37e">
+    <text x="68" y="392">91 PRESETS</text>
+    <text x="196" y="392">96 STYLES</text>
+    <text x="316" y="392">100% LOCAL</text>
+  </g>
+  <circle cx="184" cy="388" r="3" fill="#6fe3c6"/>
+  <circle cx="304" cy="388" r="3" fill="#6fe3c6"/>
 
-  <!-- stacked frame specimens -->
+  <!-- 样张：后面是邮票齿孔留白，前面是金色细框 -->
   <g transform="translate(716 36) rotate(-4 220 152)">
-    <!-- back: a stamp-sheet frame, peeking out -->
-    <rect x="150" y="18" width="260" height="300" rx="16" fill="#efe3cc" stroke="#d8c39b" stroke-width="1.2"/>
+    <rect x="150" y="18" width="260" height="298" rx="16" fill="#efe3cc" stroke="#d8c39b" stroke-width="1.2"/>
     <g fill="#11241c" fill-opacity=".9">
       <circle cx="166" cy="34" r="3.2"/><circle cx="186" cy="34" r="3.2"/><circle cx="206" cy="34" r="3.2"/><circle cx="226" cy="34" r="3.2"/><circle cx="246" cy="34" r="3.2"/><circle cx="266" cy="34" r="3.2"/><circle cx="286" cy="34" r="3.2"/><circle cx="306" cy="34" r="3.2"/><circle cx="326" cy="34" r="3.2"/><circle cx="346" cy="34" r="3.2"/><circle cx="366" cy="34" r="3.2"/><circle cx="386" cy="34" r="3.2"/>
-      <circle cx="394" cy="56" r="3.2"/><circle cx="394" cy="78" r="3.2"/><circle cx="394" cy="100" r="3.2"/><circle cx="394" cy="122" r="3.2"/><circle cx="394" cy="144" r="3.2"/><circle cx="394" cy="166" r="3.2"/><circle cx="394" cy="188" r="3.2"/><circle cx="394" cy="210" r="3.2"/><circle cx="394" cy="232" r="3.2"/><circle cx="394" cy="254" r="3.2"/><circle cx="394" cy="276" r="3.2"/><circle cx="394" cy="298" r="3.2"/>
+      <circle cx="394" cy="56" r="3.2"/><circle cx="394" cy="78" r="3.2"/><circle cx="394" cy="100" r="3.2"/><circle cx="394" cy="122" r="3.2"/><circle cx="394" cy="144" r="3.2"/><circle cx="394" cy="166" r="3.2"/><circle cx="394" cy="188" r="3.2"/><circle cx="394" cy="210" r="3.2"/><circle cx="394" cy="232" r="3.2"/><circle cx="394" cy="254" r="3.2"/><circle cx="394" cy="276" r="3.2"/><circle cx="394" cy="296" r="3.2"/>
     </g>
-    <g clip-path="url(#photoBack)">
-      <rect x="178" y="44" width="202" height="232" fill="url(#sky)"/>
-      <circle cx="238" cy="150" r="74" fill="url(#sunGlow)"/>
-      <circle cx="238" cy="150" r="30" fill="#ffedbb"/>
-      <path d="M178 214q52-34 104 0t98-8v70H178z" fill="#7d6382"/>
-      <path d="M178 238q62-30 118 8t84 0v30H178z" fill="#4f4266"/>
-      <rect x="178" y="252" width="202" height="24" fill="url(#water)"/>
+    <g clip-path="url(#backPhoto)">
+      <rect x="178" y="40" width="200" height="230" fill="url(#sky)"/>
+      <circle cx="238" cy="148" r="72" fill="url(#sunGlow)"/>
+      <circle cx="238" cy="148" r="28" fill="#ffedbb"/>
+      <path d="M178 212q50-32 100 0t100-8v66H178z" fill="#7d6382"/>
+      <path d="M178 238q60-28 116 8t84 0v24H178z" fill="#4f4266"/>
     </g>
-    <rect x="178" y="44" width="202" height="232" rx="4" fill="none" stroke="#b98d52" stroke-opacity=".65"/>
-    <circle cx="352" cy="86" r="25" fill="none" stroke="#a84832" stroke-opacity=".55" stroke-width="1.4"/>
-    <text x="352" y="90" text-anchor="middle" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="9" letter-spacing="1" fill="#a84832" fill-opacity=".75">POST</text>
+    <rect x="178" y="40" width="200" height="230" rx="4" fill="none" stroke="#b98d52" stroke-opacity=".65"/>
+    <circle cx="352" cy="84" r="24" fill="none" stroke="#a84832" stroke-opacity=".55" stroke-width="1.4"/>
+    <text x="352" y="88" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="9" letter-spacing="1" fill="#a84832" fill-opacity=".75">POST</text>
   </g>
 
   <g transform="translate(716 36)">
-    <!-- front: dark gold frame -->
     <rect x="0" y="46" width="330" height="292" rx="18" fill="#12231b" stroke="url(#gold)" stroke-width="2"/>
     <rect x="14" y="60" width="302" height="264" rx="12" fill="none" stroke="#e6c384" stroke-opacity=".42"/>
-    <g clip-path="url(#photoFront)">
-      <rect x="26" y="80" width="278" height="186" fill="url(#sky)"/>
-      <circle cx="112" cy="152" r="64" fill="url(#sunGlow)"/>
-      <circle cx="112" cy="152" r="28" fill="#ffedbb"/>
-      <path d="M26 210q48-30 92 0t98 4 62-12v64H26z" fill="#7d6382"/>
-      <path d="M26 232q58-28 110 10t96-2 46-6v32H26z" fill="#4f4266"/>
-      <rect x="26" y="248" width="278" height="18" fill="url(#water)"/>
+    <g clip-path="url(#frontPhoto)">
+      <rect x="26" y="76" width="278" height="182" fill="url(#sky)"/>
+      <circle cx="112" cy="148" r="62" fill="url(#sunGlow)"/>
+      <circle cx="112" cy="148" r="27" fill="#ffedbb"/>
+      <path d="M26 206q48-30 92 0t98 4 62-12v60H26z" fill="#7d6382"/>
+      <path d="M26 228q58-28 110 10t96-2 46-6v28H26z" fill="#4f4266"/>
+      <rect x="26" y="244" width="278" height="14" fill="#141828"/>
       <g stroke="#ffdfae" stroke-opacity=".4" stroke-width="1.4">
-        <path d="M84 252h56M74 258h76M92 264h42"/>
+        <path d="M84 248h56M74 254h76M92 260h42"/>
       </g>
-      <path d="M26 252q30-14 60 2t58 0 60-4 62 2v14H26z" fill="#141828"/>
     </g>
-    <rect x="26" y="80" width="278" height="186" rx="6" fill="none" stroke="#f0dbb2" stroke-opacity=".55"/>
-    <!-- crop marks -->
+    <rect x="26" y="76" width="278" height="182" rx="6" fill="none" stroke="#f0dbb2" stroke-opacity=".55"/>
     <g stroke="#e6c384" stroke-opacity=".8" stroke-width="1.6" stroke-linecap="square">
-      <path d="M14 92V76h12M304 76h12v16M14 254v16h12M304 270h12v-16"/>
+      <path d="M14 88V72h12M304 72h12v16M14 246v16h12M304 262h12v-16"/>
     </g>
-    <text x="26" y="292" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="9" letter-spacing="1.6" fill="#e6c384" fill-opacity=".85">FRAME 07 · 1974</text>
-    <text x="304" y="292" text-anchor="end" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="9" letter-spacing="1.2" fill="#b8a37e">SUNSET / 35MM</text>
-    <circle cx="26" cy="310" r="3" fill="#6fe3c6"/>
-    <text x="36" y="313" font-family="'JetBrains Mono','Cascadia Code','SFMono-Regular',monospace" font-size="8" letter-spacing="1.4" fill="#9fb5a7">LOCAL RENDER</text>
+    <text x="26" y="288" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="9" letter-spacing="1.6" fill="#e6c384" fill-opacity=".85">FRAME 07 · 1974</text>
+    <text x="304" y="288" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="9" letter-spacing="1.2" fill="#b8a37e">SUNSET / 35MM</text>
+    <circle cx="26" cy="308" r="3" fill="#6fe3c6"/>
+    <text x="36" y="311" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="8" letter-spacing="1.4" fill="#9fb5a7">LOCAL RENDER</text>
   </g>
 </svg>
