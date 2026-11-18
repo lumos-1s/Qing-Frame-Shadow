@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('qingframe', {
     framesRead: (name) => ipcRenderer.invoke('frames:read', name),
     framesSave: (name, text) => ipcRenderer.invoke('frames:save', name, text),
     framesDir: () => ipcRenderer.invoke('frames:dir'),
+    framesRemove: (name) => ipcRenderer.invoke('frames:remove', name),
     framesSkill: () => ipcRenderer.invoke('frames:skill'),
     framesOpenDir: () => ipcRenderer.invoke('frames:openDir'),
     framesWatch: () => ipcRenderer.invoke('frames:watch'),

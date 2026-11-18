@@ -26,6 +26,34 @@
         try { const t = JSON.parse(text); if (!t || typeof t !== 'object' || Array.isArray(t)) return { ok: false, issues: ['根节点不是对象'] }; return { ok: true, t }; }
         catch (e) { return { ok: false, issues: ['JSON 解析失败：' + e.message] }; }
     }
+    // 自动修复 agent 的生成结果：未知风格回退到已知、参数夹到范围、补必要字段。
+    // 宁可展示一个"被修正过的方案"，也不要因为一个小错整款丢弃。
+    const FALLBACK_STYLE = 'CARD_3D';
+    function sanitize(t) {
+        const SC = window.StyleCaps, SP = window.StyleParams;
+        const out = JSON.parse(JSON.stringify(t));
+        if (typeof out.templateName !== 'string' || !out.templateName) out.templateName = 'AI 方案';
+        let style = String(out.photoFrameStyle || '').toUpperCase();
+        if (!style || (SC && SC.MEASURED && !Object.prototype.hasOwnProperty.call(SC.MEASURED, style))) {
+            style = FALLBACK_STYLE;
+        }
+        out.photoFrameStyle = style;
+        out.baseMargin = (out.baseMargin && typeof out.baseMargin === 'object') ? out.baseMargin : {};
+        out.cornerConfig = (out.cornerConfig && typeof out.cornerConfig === 'object') ? out.cornerConfig : {};
+        if (SP && SP.forStyle(style)) {
+            for (const p of SP.forStyle(style)) {
+                if (p.path !== 'style') continue;
+                if (!out.styleParams || typeof out.styleParams !== 'object') out.styleParams = {};
+                if (!out.styleParams[style] || typeof out.styleParams[style] !== 'object') out.styleParams[style] = {};
+                const raw = out.styleParams[style][p.key];
+                if (raw != null) {
+                    const n = Number(raw);
+                    out.styleParams[style][p.key] = Number.isFinite(n) ? Math.max(p.min, Math.min(p.max, n)) : p.def;
+                }
+            }
+        }
+        return out;
+    }
     function inspect(t) {
         const issues = [];
         if (!t.templateName || typeof t.templateName !== 'string') issues.push('缺 templateName');
@@ -140,16 +168,30 @@
                 'styleParams 按 AGENTS.md 的范围取值。写完只回复「完成」，不要输出 JSON 正文。'
             ].join('\n');
             await ensureAgentSession(id, skill.text || '', rules);
-            const r = await (api().agentPrompt ? api().agentPrompt(agentKey, text) : null);
+            // 关键：把「生成规则 + 用户想法」一起发给 agent（rules 只在建会话时用，不会随 prompt 发送）
+            const fullPrompt = rules + '\n\n====\n用户这次的要求：' + text;
+            // 清掉上一轮的约定文件，避免读到旧方案
+            if (api().framesRemove) for (const n of ['a1.json','a2.json','a3.json','a4.json']) await api().framesRemove(n);
+            const r = await (api().agentPrompt ? api().agentPrompt(agentKey, fullPrompt) : null);
             if (!r || !r.ok) throw new Error((r && r.error) || '生成失败');
-            // 读回本轮生成的方案（按约定名 a1-a4）
-            const names = api().framesRead ? ['a1.json', 'a2.json', 'a3.json', 'a4.json'] : [];
+            // 读回本轮生成的方案：先按约定名 a1-a4，不足再读目录里所有 json 补齐。
+            // 每个都 sanitize（自动修正未知风格/越界参数），不再因小错整款丢弃。
+            const candidates = ['a1.json', 'a2.json', 'a3.json', 'a4.json'];
+            const all = api().framesList ? (await api().framesList()) : [];
+            for (const n of (all || [])) if (!candidates.includes(n)) candidates.push(n);
             const found = [];
-            for (const n of names) {
+            for (const n of candidates) {
                 const f = await api().framesRead(n);
-                if (f) { const p = parse(f.text); if (p.ok && inspect(p.t).length === 0) found.push({ name: n, preset: p.t, dataUrl: null }); }
+                if (!f) continue;
+                const p = parse(f.text);
+                if (!p.ok) continue;
+                found.push({ name: f.name, preset: sanitize(p.t), dataUrl: null });
+                if (found.length >= 4) break;
             }
-            if (!found.length) throw new Error('助手没有产出可用的边框文件，展开「高级」看日志');
+            if (!found.length) {
+                const tail = (agentStream || '').slice(-300);
+                throw new Error('助手没有产出可解析的边框文件。' + (tail ? '日志：' + tail : '展开「高级」看日志。'));
+            }
             gallery = found;
             renderGallery();
             // 逐张渲染到用户照片

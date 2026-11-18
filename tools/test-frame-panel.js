@@ -45,6 +45,7 @@ ipcMain.handle('frames:save', (_e, name, text) => {
 ipcMain.handle('frames:dir', () => ({ path: TMP }));
 ipcMain.handle('frames:openDir', () => ({ ok: true }));
 ipcMain.handle('frames:watch', () => ({ ok: true }));
+ipcMain.handle('frames:remove', (_e, name) => { try { const p = frameFile(name); if (fs.existsSync(p)) fs.unlinkSync(p); return { ok: true }; } catch (e) { return { ok: false }; } });
 ipcMain.handle('frames:skill', () => ({ ok: true, text: '# 清框影边框设计规范' }));
 ipcMain.handle('agent:detect', () => [{ id: 'opencode', name: 'OpenCode', installed: true, path: 'mock', acp: true, acpPath: 'mock' }]);
 ipcMain.handle('agent:start', () => ({ ok: true, key: 'k1', agent: 'opencode', name: 'OpenCode', modelId: 'model',
@@ -58,8 +59,9 @@ ipcMain.handle('agent:prompt', () => {
     for (let i = 1; i <= 4; i++) {
         const t = JSON.parse(JSON.stringify(base));
         t.templateName = '方案' + i;
-        t.photoFrameStyle = 'CARD_3D';
-        t.styleParams = { CARD_3D: { padX: 12 + i * 2 } };
+        // 故意让第 2 个方案带未知风格 + 越界参数，验证 sanitize 自动修复而非丢弃
+        t.photoFrameStyle = i === 2 ? 'NOT_A_REAL_STYLE' : 'CARD_3D';
+        t.styleParams = { CARD_3D: { padX: i === 2 ? 999 : 12 + i * 2 } };
         fs.writeFileSync(frameFile('a' + i + '.json'), JSON.stringify(t, null, 2), 'utf8');
     }
     return { ok: true };
@@ -119,8 +121,9 @@ app.whenReady().then(async () => {
     // 3) 点第 2 张 → 应用到当前照片
     await exec(`document.querySelectorAll('#frameGallery .frame-swatch')[1].click(); true`);
     await sleep(300);
-    const applied = await exec(`({ status: document.getElementById('frameStatus').textContent, name: App.template && App.template.templateName })`);
+    const applied = await exec(`({ status: document.getElementById('frameStatus').textContent, name: App.template && App.template.templateName, style: App.template && App.template.photoFrameStyle })`);
     check(/方案2/.test(applied.name || '') && /已套用/.test(applied.status), '点卡片套用对应方案', JSON.stringify(applied));
+    check(applied.style === 'CARD_3D', '未知风格已被自动修复为有效风格（不再丢弃整款）', String(applied.style));
 
     // 4) 高级区仍可用：助手/模型已就绪
     const adv = await exec(`({ hasAdvanced: !!document.querySelector('.frame-advanced'), modelLabel: document.getElementById('frameModelLabel').textContent, agentSel: (document.getElementById('frameAgentSelect')||{}).value })`);

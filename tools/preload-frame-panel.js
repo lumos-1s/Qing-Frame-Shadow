@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('qingframe', {
     framesDir: () => ipcRenderer.invoke('frames:dir'),
     framesOpenDir: () => ipcRenderer.invoke('frames:openDir'),
     framesWatch: () => ipcRenderer.invoke('frames:watch'),
+    framesRemove: (n) => ipcRenderer.invoke('frames:remove', n),
     agentDetect: () => ipcRenderer.invoke('agent:detect'),
     agentStart: (id, skill, rules) => ipcRenderer.invoke('agent:start', id, skill, rules),
     agentPrompt: (key, text) => ipcRenderer.invoke('agent:prompt', key, text),

@@ -884,6 +884,14 @@ handleIpc('frames:save', (_e, name, text) => {
     } catch (e) { return { ok: false, message: e && e.message }; }
 });
 handleIpc('frames:dir', () => ({ path: FRAMES_DIR }));
+handleIpc('frames:remove', (_e, name) => {
+    try {
+        const p = framePath(name);
+        if (!p) return { ok: false };
+        if (fs.existsSync(p)) fs.unlinkSync(p);
+        return { ok: true };
+    } catch (e) { return { ok: false, message: e.message }; }
+});
 handleIpc('frames:skill', () => {
     // SKILL.md 在仓库根/frames；打包后在 asar 内的同名相对位置。
     try {
