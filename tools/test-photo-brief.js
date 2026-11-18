@@ -6,7 +6,9 @@ const path = require('path');
 const B = require(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app-photo-brief.js'));
 
 const failures = [];
+let total = 0;
 const check = (ok, label, extra) => {
+    total++;
     console.log((ok ? 'OK   ' : 'FAIL ') + label + (extra ? ' | ' + extra : ''));
     if (!ok) failures.push(label);
 };
@@ -100,4 +102,4 @@ if (failures.length) {
     console.log('FAILED ' + failures.length + ' 项：' + failures.join(' / '));
     process.exit(1);
 }
-console.log('ALL PASS · 照片速写 ' + 30 + ' 项');
+console.log('ALL PASS · 照片速写 ' + total + ' 项');
