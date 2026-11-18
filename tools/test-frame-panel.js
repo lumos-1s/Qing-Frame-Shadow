@@ -74,6 +74,19 @@ app.whenReady().then(async () => {
     await exec(`(() => { localStorage.setItem('qfs_intro_done','1'); if (App.closeIntro) App.closeIntro(); return true; })()`);
     await sleep(1200);
 
+    // 注入 2 张已导入照片（模拟用户导入），验证画廊示例图可选
+    await exec(`(async () => {
+        const mk = (color) => { const c=document.createElement('canvas'); c.width=400;c.height=500;
+            const g=c.getContext('2d'); g.fillStyle=color; g.fillRect(0,0,400,500); return c; };
+        const img = async (color) => { const im=new Image(); await new Promise(r=>{im.onload=r;im.src=mk(color).toDataURL('image/png')}); return im; };
+        const a = await img('#c0392b'), b = await img('#2980b9');
+        App.images = [ {name:'红色照片.jpg', el:a, thumb:'', w:400,h:500,exif:{}},
+                       {name:'蓝色照片.jpg', el:b, thumb:'', w:400,h:500,exif:{}} ];
+        App.image = App.images[0]; App.currentIdx = 0;
+        return true;
+    })()`);
+    await sleep(200);
+
     // 1) 打开面板，空态引导出现
     await exec(`document.getElementById('btnFramePanel').click(); true`);
     await sleep(400);
@@ -88,6 +101,20 @@ app.whenReady().then(async () => {
         imgs: document.querySelectorAll('.frame-swatch-img img').length })`);
     check(cards.n === 4, '生成 4 宫格方案', JSON.stringify(cards));
     check(cards.imgs === 4, '每张方案都渲染出缩略图', String(cards.imgs));
+
+    // 2.5) 示例照片下拉：列出已导入照片，切换后画廊用新照片重渲染
+    const sample = await exec(`(() => {
+        const sel = document.getElementById('frameSamplePhoto');
+        return { n: sel.options.length, labels: [...sel.options].map(o=>o.textContent), value: sel.value };
+    })()`);
+    check(sample.n === 2 && /红色照片/.test(sample.labels.join(' ')) && /蓝色照片/.test(sample.labels.join(' ')),
+        '示例照片下拉列出已导入照片', JSON.stringify(sample));
+    const before = await exec(`document.querySelector('.frame-swatch-img img').src`);
+    await exec(`(() => { const s=document.getElementById('frameSamplePhoto'); s.value='1'; s.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`);
+    await sleep(300);
+    const after = await exec(`document.querySelector('.frame-swatch-img img').src`);
+    check(before !== after, '切换示例照片后画廊重新渲染（用新照片）',
+        JSON.stringify({ changed: before !== after, beforeLen: before.length, afterLen: after.length }));
 
     // 3) 点第 2 张 → 应用到当前照片
     await exec(`document.querySelectorAll('#frameGallery .frame-swatch')[1].click(); true`);

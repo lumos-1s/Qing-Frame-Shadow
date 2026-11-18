@@ -2366,6 +2366,12 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .frame-compose-row { display: flex; gap: var(--sp-2); align-items: stretch; }
 .frame-compose-row .frame-prompt { flex: 1 1 auto; font-size: var(--fs-13); padding: calc(9px * var(--font-scale)) calc(12px * var(--font-scale)); }
 .frame-compose-row .mini-btn { flex: 0 0 auto; padding-inline: calc(18px * var(--font-scale)); }
+.frame-sample-select {
+    flex: 0 0 auto; max-width: calc(150px * var(--font-scale));
+    border: 1px solid var(--border-strong); border-radius: var(--r-s);
+    background: var(--surface); color: var(--text-2); font: inherit; font-size: var(--fs-11);
+    padding: calc(6px * var(--font-scale)) calc(8px * var(--font-scale)); cursor: pointer;
+}
 .frame-progress { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-12); color: var(--primary-text); }
 .frame-progress[hidden] { display: none; }
 .frame-progress-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: frame-pulse 1s ease-in-out infinite; }

@@ -2260,6 +2260,7 @@
             <div class="frame-body frame-studio">
                 <div class="frame-compose">
                     <div class="frame-compose-row">
+                        <select id="frameSamplePhoto" class="frame-sample-select" aria-label="选择示例照片" title="用哪张已导入的照片来展示效果"></select>
                         <input type="text" id="framePrompt" class="frame-prompt" placeholder="描述你想要的风格，如：暖色胶片、底部加日期、留白多一点" aria-label="描述风格" />
                         <button type="button" class="mini-btn primary" id="btnGenerate">生成 4 款</button>
                     </div>
@@ -2268,8 +2269,8 @@
                 <div class="frame-gallery" id="frameGallery" role="list" aria-label="生成的边框方案">
                     <div class="frame-gallery-empty" id="frameGalleryEmpty">
                         <div class="frame-gallery-empty-ico">◫</div>
-                        <div>说一句你想要的风格，AI 用你的照片洗出 <b>4 款</b> 让你挑</div>
-                        <div class="frame-gallery-empty-sub">先导入一张照片，效果会更直观</div>
+                        <div>选一张你已导入的照片，说一句想要的风格，AI 洗出 <b>4 款</b> 让你挑</div>
+                        <div class="frame-gallery-empty-sub">没导入照片也能看效果，但用你自己的照片更直观</div>
                     </div>
                 </div>
                 <details class="frame-advanced">

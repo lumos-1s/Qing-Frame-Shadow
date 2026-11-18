@@ -60,7 +60,29 @@
             return cv.toDataURL('image/png');
         } catch (e) { return null; }
     }
-    function photoEl() { return (app && app.image && app.image.el) || window.__qfsPhotoStub; }
+    // 用户已导入的照片列表（画廊示例图）：默认当前照片，可自己选
+    function refreshSamplePhotos() {
+        const sel = $('frameSamplePhoto'); if (!sel) return;
+        const imgs = (app && Array.isArray(app.images)) ? app.images : [];
+        sel.innerHTML = '';
+        if (!imgs.length) {
+            const o = document.createElement('option'); o.value = ''; o.textContent = '（用示例图）'; sel.appendChild(o);
+            return;
+        }
+        imgs.forEach((im, i) => {
+            const o = document.createElement('option');
+            o.value = String(i);
+            o.textContent = (im.name || ('照片 ' + (i + 1))) + (im === (app && app.image) ? ' · 当前' : '');
+            if (im === (app && app.image)) o.selected = true;
+            sel.appendChild(o);
+        });
+    }
+    function photoEl() {
+        const sel = $('frameSamplePhoto');
+        const i = sel ? parseInt(sel.value, 10) : NaN;
+        if (app && Array.isArray(app.images) && Number.isInteger(i) && app.images[i] && app.images[i].el) return app.images[i].el;
+        return (app && app.image && app.image.el) || window.__qfsPhotoStub;
+    }
 
     // ── 画廊 ──
     function renderGallery() {
@@ -282,6 +304,7 @@
     // ── 生命周期 ──
     async function open() {
         if (!modal) return; modal.style.display = 'flex';
+        refreshSamplePhotos();
         renderGallery(); detectAgents(); loadList();
         if (api().framesWatch) api().framesWatch();
     }
@@ -294,6 +317,14 @@
         modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
         $('btnGenerate').addEventListener('click', generate);
         $('framePrompt').addEventListener('keydown', (e) => { if (e.key === 'Enter') generate(); });
+        $('frameSamplePhoto').addEventListener('change', () => {
+            // 换示例照片：用同一批方案即时重渲染，用户能比较不同照片的效果
+            if (!gallery.length) return;
+            const img = photoEl();
+            gallery.forEach((g) => { g.dataUrl = renderFrameToUrl(g.preset, img); });
+            renderGallery();
+            setStatus('已换成所选照片预览', 'ok');
+        });
         $('btnFrameRefresh').addEventListener('click', () => { loadList(); setStatus('已刷新', 'ok'); });
         $('btnFrameOpenDir').addEventListener('click', () => api().framesOpenDir && api().framesOpenDir());
         $('btnFrameCopyDir').addEventListener('click', async () => {
