@@ -11,6 +11,7 @@ const { normalizeMirror, mirrorUrlFor, downloadVerified, releaseAssetUrl } = req
 const { normalizeAutoCheck, shouldAutoCheck } = require('./update-policy');
 const { importLogoPack } = require('./logo-pack');
 const gradePresetStore = require('./grade-preset-store');
+const localAgent = require('./local-agent');
 
 // 仓库改名后统一从这里取,避免菜单 / 更新源 / 下载兜底 / 外链白名单各写一份。
 const REPO_URL = 'https://github.com/lumos-1s/Qing-Fram-Shadow';
@@ -883,6 +884,13 @@ handleIpc('frames:save', (_e, name, text) => {
     } catch (e) { return { ok: false, message: e && e.message }; }
 });
 handleIpc('frames:dir', () => ({ path: FRAMES_DIR }));
+handleIpc('frames:skill', () => {
+    // SKILL.md 在仓库根/frames；打包后在 asar 内的同名相对位置。
+    try {
+        const p = path.join(__dirname, '..', '..', 'frames', 'SKILL.md');
+        return { ok: true, text: fs.readFileSync(p, 'utf8') };
+    } catch (e) { return { ok: false, text: '', message: e.message }; }
+});
 handleIpc('frames:openDir', () => { try { fsEnsureDir(FRAMES_DIR); shell.openPath(FRAMES_DIR); return { ok: true }; } catch (e) { return { ok: false, message: e.message }; } });
 // 目录变化推送：外部 agent 改文件 → 面板提示重载。fs.watch 结果去重（写一次会来多个事件）。
 let framesWatcher = null;
@@ -898,6 +906,13 @@ handleIpc('frames:watch', () => {
         }
         return { ok: true, path: FRAMES_DIR };
     } catch (err) { return { ok: false, message: err && err.message }; }
+});
+
+// ── 本机编程助手接入（聊天面板让它读 skill、在 FRAMES_DIR 生成边框）──
+handleIpc('agent:detect', () => localAgent.detect());
+handleIpc('agent:run', (_e, id, prompt) => {
+    if (!isTrustedFrame(_e)) return BLOCKED;
+    return localAgent.run(String(id || ''), String(prompt || ''), FRAMES_DIR);
 });
 
 // 启动时要读全部预设:原来 list-presets + 逐个 load-preset = 78 次 IPC 往返,每次都在主进程

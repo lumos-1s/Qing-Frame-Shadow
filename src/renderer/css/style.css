@@ -2405,6 +2405,28 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .frame-preview-stage img { max-width: 100%; max-height: 100%; display: block; }
 .frame-preview-empty { font-size: var(--fs-11); color: var(--text-3); }
 
+/* AI 助手条：接本机编程助手，读 skill 生成边框 */
+.frame-agent { flex: 0 0 auto; border-top: 1px solid var(--border); padding: var(--sp-2); }
+.frame-agent-select {
+    border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+    border-radius: var(--r-xs); font: inherit; font-size: var(--fs-11);
+    padding: calc(3px * var(--font-scale)) calc(6px * var(--font-scale));
+}
+.frame-agent-hint { font-size: var(--fs-10); color: var(--text-3); margin-left: auto; }
+.frame-agent-row { display: flex; gap: var(--sp-1-5); }
+.frame-prompt {
+    flex: 1 1 auto; min-width: 0;
+    border: 1px solid var(--border-strong); border-radius: var(--r-s);
+    background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-12);
+    padding: calc(5px * var(--font-scale)) calc(8px * var(--font-scale)); outline: none;
+}
+.frame-prompt:focus { border-color: var(--primary); }
+.frame-agent-out {
+    margin: calc(6px * var(--font-scale)) 0 0; max-height: 90px; overflow: auto;
+    font: var(--fs-10)/1.5 ui-monospace, 'JetBrains Mono', 'Cascadia Code', monospace;
+    color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
 /* ── 新手引导 ──
    像暗房里的一张流程卡：金色品牌标记 + 等宽步号 + 发丝线分步，
    不再用①②③圆圈、卡片底板和内联样式堆出「欢迎页」的观感。 */

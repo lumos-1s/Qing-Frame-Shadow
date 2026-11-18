@@ -148,10 +148,64 @@
         setStatus('已应用到当前照片（保留了你的签名/Logo/贴纸）', 'ok');
     }
 
+    async function detectAgents() {
+        const sel = $('frameAgentSelect');
+        if (!sel || !api().agentDetect) return;
+        const list = await api().agentDetect();
+        sel.innerHTML = '';
+        const installed = (list || []).filter((a) => a.installed);
+        if (!installed.length) {
+            const o = document.createElement('option');
+            o.value = ''; o.textContent = '未检测到本机助手';
+            sel.appendChild(o);
+            const hint = $('frameAgentHint');
+            if (hint) hint.textContent = '需先安装 Claude Code / Codex / OpenCode 并加入 PATH';
+            return;
+        }
+        for (const a of installed) {
+            const o = document.createElement('option');
+            o.value = a.id; o.textContent = a.name;
+            sel.appendChild(o);
+        }
+        const hint = $('frameAgentHint');
+        if (hint) hint.textContent = '已检测到 ' + installed.length + ' 个助手（不联网、无需 key）';
+    }
+
+    async function sendAgent() {
+        const id = $('frameAgentSelect') && $('frameAgentSelect').value;
+        const text = $('framePrompt') && $('framePrompt').value.trim();
+        const out = $('frameAgentOut');
+        if (!id) { if (out) out.textContent = '没有可用的本机助手'; return; }
+        if (!text) { if (out) out.textContent = '先描述你想要的边框'; return; }
+        if (out) out.textContent = '已交给 ' + id + '，正在本机运行（可能要几十秒）…';
+        // 把 skill 精简版 + 用户想法拼成 prompt；agent 在 FRAMES_DIR 里只写 JSON。
+        const skill = await (api().framesSkill ? api().framesSkill() : Promise.resolve({ text: '' }));
+        const rules = [
+            '你是清框影边框设计师。当前工作目录是边框作品目录（userData/frames）。',
+            '用户想要：' + text,
+            '',
+            '规则：',
+            '1) 只在本目录创建或修改一个 *.json 边框文件，用 templateName 起个贴切的名字；不要动其它文件。',
+            '2) 边框文件是完整预设 JSON：templateName、photoFrameStyle（96 种风格名）、baseMargin、cornerConfig、layerList、styleParams、userSignature、manualExif。',
+            '3) photoFrameStyle 必须是引擎已知风格；styleParams 参数按声明表范围取值（如 CARD_3D 的 padX 5-40、thick 0.5-6）。',
+            '4) 暗房质感：发丝线、小圆角、暖灰/墨绿/金配色、克制留白；不用渐变发光、玻璃拟态、emoji。',
+            '5) 写完文件后，在回复里告诉我文件名和你调了什么。不要输出 JSON 正文到对话里。',
+            '',
+            '完整风格清单与设计原则（参考）：',
+            (skill.text || '').slice(0, 4000)
+        ].join('\n');
+        const r = await (api().agentRun ? api().agentRun(id, rules) : null);
+        if (!r || !r.ok) { if (out) out.textContent = '运行失败：' + ((r && r.error) || '未知错误'); return; }
+        if (out) out.textContent = (r.output || '(助手没有文字回复)').slice(-4000);
+        await loadList(); // agent 可能生成了新文件
+        setStatus('助手已完成，文件列表已刷新', 'ok');
+    }
+
     async function open() {
         if (!modal) return;
         modal.style.display = 'flex';
         await loadList();
+        await detectAgents();
         if (api().framesWatch) api().framesWatch();
         if (!unwatch && api().onFramesChanged) {
             unwatch = api().onFramesChanged((payload) => {
@@ -184,6 +238,7 @@
         $('btnFrameCheck').addEventListener('click', doCheck);
         $('btnFramePreview').addEventListener('click', renderPreview);
         $('btnFrameApply').addEventListener('click', applyCurrent);
+        $('btnAgentSend').addEventListener('click', sendAgent);
         // 造一张离屏示例底图（无 --image 时预览用）。引擎读 naturalWidth，
         // 必须用 Image 而非 canvas（canvas 没有 naturalWidth，会算出 NaN seed）。
         try {

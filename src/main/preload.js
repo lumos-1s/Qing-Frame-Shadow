@@ -20,8 +20,11 @@ contextBridge.exposeInMainWorld('qingframe', {
     framesRead: (name) => ipcRenderer.invoke('frames:read', name),
     framesSave: (name, text) => ipcRenderer.invoke('frames:save', name, text),
     framesDir: () => ipcRenderer.invoke('frames:dir'),
+    framesSkill: () => ipcRenderer.invoke('frames:skill'),
     framesOpenDir: () => ipcRenderer.invoke('frames:openDir'),
     framesWatch: () => ipcRenderer.invoke('frames:watch'),
+    agentDetect: () => ipcRenderer.invoke('agent:detect'),
+    agentRun: (id, prompt) => ipcRenderer.invoke('agent:run', id, prompt),
     onFramesChanged: (cb) => {
         const h = (_e, payload) => cb(payload);
         ipcRenderer.on('frames-changed', h);
