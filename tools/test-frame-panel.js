@@ -51,6 +51,7 @@ ipcMain.handle('frames:openDir', () => ({ ok: true }));
 ipcMain.handle('frames:watch', () => ({ ok: true }));
 ipcMain.handle('agent:detect', () => [{ id: 'opencode', name: 'OpenCode', installed: true, path: 'mock', acp: true, acpPath: 'mock' }]);
 ipcMain.handle('frames:skill', () => ({ ok: true, text: '# 清框影边框设计规范' }));
+ipcMain.handle('agent:start', () => ({ ok: false, error: '测试环境不启动真实助手' }));
 
 app.whenReady().then(async () => {
     // 放一份示例 frame
@@ -72,6 +73,8 @@ app.whenReady().then(async () => {
     const opened = await exec(`getComputedStyle(document.getElementById('frameModal')).display === 'flex'
         && document.querySelectorAll('#frameList .frame-file').length`);
     check(opened === true || opened >= 1, '点按钮打开面板且列出边框文件', String(opened));
+    const modelUi = await exec(`!!document.getElementById('btnFrameModel') && !!document.getElementById('frameModelPop') && !!document.getElementById('frameModelSearch')`);
+    check(modelUi, '模型选择器（按钮+搜索浮层）已就位', String(modelUi));
 
     // 2) 选中 sample → JSON 填入
     await exec(`[...document.querySelectorAll('#frameList .frame-file')].find(b => b.textContent === 'sample.json').click(); true`);

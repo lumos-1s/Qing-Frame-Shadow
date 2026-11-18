@@ -2426,6 +2426,45 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
     font: var(--fs-10)/1.5 ui-monospace, 'JetBrains Mono', 'Cascadia Code', monospace;
     color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere;
 }
+/* 模型选择器：按钮 + 带搜索分组的浮层 */
+.frame-model-wrap { position: relative; flex: 0 0 auto; }
+.frame-model-btn {
+    display: inline-flex; align-items: center; gap: calc(5px * var(--font-scale));
+    max-width: calc(200px * var(--font-scale));
+    border: 1px solid var(--border-strong); border-radius: var(--r-xs);
+    background: var(--surface); color: var(--text-2); font: inherit; font-size: var(--fs-11);
+    padding: calc(3px * var(--font-scale)) calc(8px * var(--font-scale)); cursor: pointer;
+}
+.frame-model-btn:hover { border-color: var(--primary); color: var(--text); }
+.frame-model-btn span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frame-model-caret { color: var(--text-3); }
+.frame-model-pop {
+    position: absolute; z-index: 20; top: calc(100% + 4px); left: 0;
+    width: calc(320px * var(--font-scale)); max-width: 80vw;
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: var(--r-s); box-shadow: var(--shadow);
+    padding: var(--sp-2);
+}
+.frame-model-pop[hidden] { display: none; }
+.frame-model-search {
+    width: 100%; box-sizing: border-box;
+    border: 1px solid var(--border-strong); border-radius: var(--r-xs);
+    background: var(--bg-soft); color: var(--text); font: inherit; font-size: var(--fs-12);
+    padding: calc(5px * var(--font-scale)) calc(7px * var(--font-scale)); outline: none;
+}
+.frame-model-search:focus { border-color: var(--primary); }
+.frame-model-list { max-height: 260px; overflow-y: auto; margin-top: var(--sp-1-5); }
+.frame-model-group { font-size: var(--fs-10); color: var(--text-3); padding: calc(5px * var(--font-scale)) calc(4px * var(--font-scale)) calc(2px * var(--font-scale)); text-transform: uppercase; letter-spacing: .08em; }
+.frame-model-opt {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    border: 1px solid transparent; border-radius: var(--r-xs); background: transparent;
+    color: var(--text-2); font: inherit; font-size: var(--fs-11);
+    padding: calc(4px * var(--font-scale)) calc(7px * var(--font-scale));
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.frame-model-opt:hover { background: var(--surface-alt); color: var(--text); }
+.frame-model-opt.active { border-color: var(--primary); color: var(--primary-text); background: var(--primary-soft); }
+.frame-model-empty { font-size: var(--fs-11); color: var(--text-3); padding: var(--sp-2); text-align: center; }
 
 /* ── 新手引导 ──
    像暗房里的一张流程卡：金色品牌标记 + 等宽步号 + 发丝线分步，

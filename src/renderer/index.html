@@ -2295,7 +2295,13 @@
                         <div class="frame-preview-head">
                             <span>AI 助手</span>
                             <select id="frameAgentSelect" class="frame-agent-select" aria-label="选择本机编程助手"><option value="">检测中…</option></select>
-                            <select id="frameAgentModel" class="frame-agent-select" aria-label="选择模型" hidden><option value="">默认模型</option></select>
+                            <div class="frame-model-wrap">
+                                <button type="button" id="btnFrameModel" class="frame-model-btn" title="选择模型" aria-haspopup="listbox" aria-expanded="false"><span id="frameModelLabel">默认模型</span> <span class="frame-model-caret">▾</span></button>
+                                <div class="frame-model-pop" id="frameModelPop" hidden>
+                                    <input type="text" id="frameModelSearch" class="frame-model-search" placeholder="搜索模型…" aria-label="搜索模型" />
+                                    <div class="frame-model-list" id="frameModelList" role="listbox" aria-label="模型列表"></div>
+                                </div>
+                            </div>
                             <span class="frame-agent-hint" id="frameAgentHint"></span>
                         </div>
                         <div class="frame-agent-row">

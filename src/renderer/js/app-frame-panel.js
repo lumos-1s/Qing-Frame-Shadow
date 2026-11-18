@@ -11,6 +11,9 @@
     let unwatch = null;
     let agentKey = null;       // 当前 ACP 会话 key
     let agentModelId = 'model';
+    let agentModels = [];      // 当前会话的模型列表
+    let currentModel = '';     // 当前选中的模型 value
+    let modelPopUnwatch = null;
     let agentStream = '';      // 当前流式输出累积
     let unwatchAgent = null;
 
@@ -173,6 +176,112 @@
         }
         const hint = $('frameAgentHint');
         if (hint) hint.textContent = '已检测到 ' + installed.length + ' 个助手（不联网、无需 key）';
+        // 选中第一个助手后预启动会话，提前加载模型列表（打开面板即可切）
+        if (installed.length) {
+            sel.value = installed[0].id;
+            const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
+            preloadSession(installed[0].id);
+        }
+    }
+
+    // 模型分组：从 value 的前缀取 provider（opencode/ xxx、openrouter/anthropic/...）
+    function modelGroup(m) {
+        const v = String(m.value || '');
+        let p = v.split('/')[0] || '模型';
+        if (p === 'openrouter' && v.split('/')[1]) p = 'openrouter / ' + v.split('/')[1];
+        return p;
+    }
+
+    function populateModels(models) {
+        agentModels = Array.isArray(models) ? models.slice() : [];
+        const label = $('frameModelLabel');
+        if (!agentModels.length) { if (label) label.textContent = '默认模型'; return; }
+        const cur = agentModels.find((m) => m.current) || agentModels[0];
+        currentModel = cur ? cur.value : '';
+        if (label) label.textContent = cur ? cur.name : '默认模型';
+        renderModelList('');
+    }
+
+    function renderModelList(query) {
+        const list = $('frameModelList');
+        if (!list) return;
+        const q = String(query || '').trim().toLowerCase();
+        const matches = agentModels.filter((m) => !q || String(m.name).toLowerCase().includes(q) || String(m.value).toLowerCase().includes(q));
+        list.innerHTML = '';
+        if (!matches.length) {
+            const em = document.createElement('div');
+            em.className = 'frame-model-empty';
+            em.textContent = '没有匹配的模型';
+            list.appendChild(em);
+            return;
+        }
+        const groups = new Map();
+        for (const m of matches) {
+            const g = modelGroup(m);
+            if (!groups.has(g)) groups.set(g, []);
+            groups.get(g).push(m);
+        }
+        for (const [g, ms] of groups) {
+            const h = document.createElement('div');
+            h.className = 'frame-model-group';
+            h.textContent = g;
+            list.appendChild(h);
+            for (const m of ms) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'frame-model-opt' + (m.value === currentModel ? ' active' : '');
+                b.textContent = m.name;
+                b.title = m.value;
+                b.addEventListener('click', () => chooseModel(m));
+                list.appendChild(b);
+            }
+        }
+    }
+
+    async function chooseModel(m) {
+        currentModel = m.value;
+        const label = $('frameModelLabel');
+        if (label) label.textContent = m.name;
+        renderModelList($('frameModelSearch') && $('frameModelSearch').value);
+        closeModelPop();
+        if (agentKey && api().agentSetModel) {
+            const r = await api().agentSetModel(agentKey, agentModelId, m.value);
+            setStatus(r && r.ok ? ('模型已切换：' + m.name) : ('(模型切换将在下次发送生效)'), r && r.ok ? 'ok' : '');
+        }
+    }
+
+    function openModelPop() {
+        const pop = $('frameModelPop');
+        if (!pop) return;
+        pop.hidden = false;
+        const btn = $('btnFrameModel');
+        if (btn) btn.setAttribute('aria-expanded', 'true');
+        renderModelList($('frameModelSearch') && $('frameModelSearch').value);
+        const s = $('frameModelSearch');
+        if (s) { s.value = ''; renderModelList(''); s.focus(); }
+        if (!modelPopUnwatch) {
+            modelPopUnwatch = (e) => {
+                const wrap = document.querySelector('.frame-model-wrap');
+                if (wrap && !wrap.contains(e.target)) closeModelPop();
+            };
+            document.addEventListener('mousedown', modelPopUnwatch);
+        }
+    }
+    function closeModelPop() {
+        const pop = $('frameModelPop');
+        if (pop) pop.hidden = true;
+        const btn = $('btnFrameModel');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    // 预启动会话：只 init + session/new 拿模型，不发 prompt（无副作用）
+    async function preloadSession(id) {
+        if (agentKey) return;
+        try {
+            const skill = await (api().framesSkill ? api().framesSkill() : Promise.resolve({ text: '' }));
+            const rules = '你是清框影边框设计师。当前目录是边框作品目录，AGENTS.md 里有完整设计规范。只创建或修改本目录的 *.json 边框文件。';
+            await ensureAgentSession(id, skill.text || '', rules);
+        } catch (e) { /* 预启动失败不阻塞，发送时再重试 */ }
     }
 
     // 把 ACP 的 session/update 转成可读文本
@@ -195,18 +304,7 @@
         if (!r || !r.ok) { throw new Error((r && r.error) || '无法启动助手会话'); }
         agentKey = r.key;
         agentModelId = r.modelId || 'model';
-        // 填充模型下拉
-        const modelSel = $('frameAgentModel');
-        if (modelSel && Array.isArray(r.models) && r.models.length) {
-            modelSel.innerHTML = '';
-            for (const m of r.models) {
-                const o = document.createElement('option');
-                o.value = m.value; o.textContent = m.name;
-                if (m.current) o.selected = true;
-                modelSel.appendChild(o);
-            }
-            modelSel.hidden = false;
-        }
+        populateModels(r.models || []);
         // 订阅流式事件
         if (!unwatchAgent && api().onAgentEvent) {
             unwatchAgent = api().onAgentEvent((payload) => {
@@ -235,13 +333,6 @@
         try {
             await ensureAgentSession(id, skill.text || '', rules);
         } catch (e) { if (out) out.textContent = '启动失败：' + e.message; return; }
-        // 如果用户在下拉里换了模型，先切模型（如默认的 openrouter 需要 key，换自带模型）
-        const modelSel = $('frameAgentModel');
-        const chosen = modelSel && !modelSel.hidden ? modelSel.value : '';
-        if (chosen && api().agentSetModel) {
-            const mr = await api().agentSetModel(agentKey, agentModelId, chosen);
-            if (mr && !mr.ok) { if (out) out.textContent = '切换模型失败：' + mr.error; return; }
-        }
         const r = await (api().agentPrompt ? api().agentPrompt(agentKey, text) : null);
         if (!r || !r.ok) { if (out) out.textContent = (out.textContent || '') + '\n运行失败：' + ((r && r.error) || '未知错误'); return; }
         if (!agentStream) if (out) out.textContent = '(助手没有文字回复，可能已直接写入文件)';
@@ -287,11 +378,26 @@
         $('btnFramePreview').addEventListener('click', renderPreview);
         $('btnFrameApply').addEventListener('click', applyCurrent);
         $('btnAgentSend').addEventListener('click', sendAgent);
+        $('btnFrameModel').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const pop = $('frameModelPop');
+            if (pop && !pop.hidden) closeModelPop(); else openModelPop();
+        });
+        const fs = $('frameModelSearch');
+        if (fs) fs.addEventListener('input', () => renderModelList(fs.value));
+        $('frameAgentSelect').addEventListener('change', (e) => {
+            // 换助手：结束旧会话，预启动新助手以加载它的模型
+            if (agentKey && api().agentClose) api().agentClose(agentKey);
+            agentKey = null; agentStream = ''; agentModels = [];
+            const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
+            preloadSession(e.target.value);
+        });
         $('btnAgentNew').addEventListener('click', () => {
             if (agentKey && api().agentClose) api().agentClose(agentKey);
-            agentKey = null; agentStream = '';
-            const ms = $('frameAgentModel'); if (ms) { ms.hidden = true; ms.innerHTML = '<option value="">默认模型</option>'; }
+            agentKey = null; agentStream = ''; agentModels = [];
+            const label = $('frameModelLabel'); if (label) label.textContent = '默认模型';
             if ($('frameAgentOut')) $('frameAgentOut').textContent = '已开启新会话，之前的对话结束。';
+            preloadSession($('frameAgentSelect') && $('frameAgentSelect').value);
         });
         // 造一张离屏示例底图（无 --image 时预览用）。引擎读 naturalWidth，
         // 必须用 Image 而非 canvas（canvas 没有 naturalWidth，会算出 NaN seed）。
