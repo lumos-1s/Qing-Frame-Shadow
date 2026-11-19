@@ -27,6 +27,22 @@ const StyleCaps = require(path.join(ROOT, 'src', 'renderer', 'js', 'style-caps.j
 // 图层体检复用引擎自己的 normalize / 图元表：校验口径与 App 渲染完全同源，
 // 不再维护第二套「什么算合法图层」。
 const AiLayers = require(path.join(ROOT, 'src', 'renderer', 'js', 'app-ai-layers.js'));
+const FrameLint = require(path.join(ROOT, 'src', 'renderer', 'js', 'app-frame-lint.js'));
+
+// 纯 Node 没有 canvas，用等宽估算的假 ctx 供 boldness 量文字框（只用来判「够不够大胆」）
+function mockTextCtx() {
+    let font = '16px sans-serif';
+    return {
+        get font() { return font; },
+        set font(v) { font = String(v); },
+        textAlign: 'left', textBaseline: 'alphabetic', fillStyle: '#000',
+        measureText(str) {
+            const m = /(\d+(?:\.\d+)?)px/.exec(font);
+            const size = m ? parseFloat(m[1]) : 16;
+            return { width: String(str).length * size * 0.6 };
+        }
+    };
+}
 
 function parseArgs(argv) {
     const [cmd, ...rest] = argv;
@@ -197,8 +213,8 @@ function checkLayerDoc(t) {
             if (!String(l.text == null ? '' : l.text).trim()) errors.push(`${at} 文字为空`);
             if (l.size == null) warnings.push(`${at} 缺 size，引擎会按 0.04 画`);
             else if (!isNum(l.size)) errors.push(`${at} size 不是数：${JSON.stringify(l.size)}`);
-            else if (Number(l.size) > 1) errors.push(`${at} size=${l.size} 像是像素值；图层模式请用相对画布高的比例（≤0.13）`);
-            else if (Number(l.size) > 0.13) errors.push(`${at} size=${l.size} 超过 0.13 上限（硬规则），引擎会夹到 20% 画布高`);
+            else if (Number(l.size) > 1) errors.push(`${at} size=${l.size} 像是像素值；图层模式请用相对画布高的比例（≤0.20）`);
+            else if (Number(l.size) > 0.20) errors.push(`${at} size=${l.size} 超过 0.20 上限（硬规则），引擎会压回 22% 画布高`);
             else if (Number(l.size) < 0.012) warnings.push(`${at} size=${l.size} 偏小，缩略图下会看不清`);
             if (l.maxW == null) errors.push(`${at} 缺 maxW（硬规则：文字必须带 maxW / maxLines）`);
             else if (Number(l.maxW) > 1) warnings.push(`${at} maxW=${l.maxW} 像是像素值；这里要的是占画布宽的比例`);
@@ -248,7 +264,15 @@ function checkLayerDoc(t) {
             const nl = norm[i];
             if (nl && (nl.type === 'rect' || nl.type === 'image') && (Number(nl.w) || 0) >= 0.9 && (Number(nl.h) || 0) >= 0.9) hasBackdrop = true;
         });
-        if (!hasBackdrop) notes.push('photo 之前没有整幅底色层，画布会露出默认白底');
+        if (!hasBackdrop && (p.w < 0.999 || p.h < 0.999)) notes.push('photo 之前没有整幅底色层，画布会露出默认白底（满版照片不需要底色）');
+
+        // 够不够大胆：几何评分，写完先看这个数再交给用户
+        try {
+            const b = FrameLint.boldness({ layers: norm }, { ctx: mockTextCtx(), photo: { ar: 1 } });
+            if (b && b.grade) {
+                notes.push(`大胆度 ${b.score}/100（${b.grade}）` + (b.hints && b.hints.length ? '：' + b.hints[0] : ''));
+            }
+        } catch (_) { /* 评分失败不影响体检结论 */ }
 
         const pbox = { x: Number(p.x) || 0, y: Number(p.y) || 0, w: Number(p.w) || 0, h: Number(p.h) || 0 };
         for (let i = pi + 1; i < rawLayers.length; i++) {
@@ -259,9 +283,10 @@ function checkLayerDoc(t) {
             const fillA = nl.fillOpacity != null ? clamp01n(nl.fillOpacity) : 1;
             const alpha = fillA * (nl.opacity != null ? clamp01n(nl.opacity) : 1);
             if (alpha < 0.5) continue;
-            const ratio = overlapRatio(layerBox(nl), pbox);
-            if (ratio > 0.5) {
-                warnings.push(`第 ${i + 1} 层（${nl.type}）不透明覆盖照片 ${Math.round(ratio * 100)}%，违反「不遮照片」`);
+            const ratio = overlapRatio(pbox, layerBox(nl));   // 照片被这一层盖住多少
+            // 色块压照片 30% 以内是层次，超过 85% 才是「把照片盖死」
+            if (ratio > 0.85) {
+                warnings.push(`第 ${i + 1} 层（${nl.type}）不透明覆盖照片 ${Math.round(ratio * 100)}%，照片基本被盖死`);
             }
         }
     }

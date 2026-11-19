@@ -92,18 +92,35 @@ ipcMain.handle('ai:chat', (_e, cfg, messages) => {
     const txt = String((messages && messages[0] && messages[0].content) || '');
     lastApiPrompt = txt;
     if (txt.indexOf('模拟空回') >= 0) return { ok: true, content: '抱歉，这次我没想法' };
-    const mk = (name, color, extra) => ({
+    if (txt.indexOf('模拟保守') >= 0) {
+        // 第一次回四款「传统相框」，应触发带原因的重出；重出那次给满版压字
+        if (txt.indexOf('上一批四款平均大胆度') < 0) {
+            const plain = (n) => ({ templateName: n, layers: [
+                { type: 'rect', x: 0, y: 0, w: 1, h: 1, fill: '#f7f5f0' },
+                { type: 'photo', x: 0.08, y: 0.08, w: 0.84, h: 0.62, fit: 'cover' },
+                { type: 'text', x: 0.5, y: 0.82, text: 'QINGFRAME', size: 0.032, color: '#222222', align: 'center', maxW: 0.8, maxLines: 1 }
+            ] });
+            return { ok: true, content: JSON.stringify([plain('保守一'), plain('保守二'), plain('保守三'), plain('保守四')]) };
+        }
+        const bold = (n) => ({ templateName: n, layers: [
+            { type: 'photo', x: 0, y: 0, w: 1, h: 1, fit: 'cover' },
+            { type: 'rect', x: 0, y: 0.7, w: 1, h: 0.3, fill: '#111111' },
+            { type: 'text', x: 0, y: 0.86, text: '重出', size: 0.12, color: '#f5efe0', align: 'left', maxW: 0.96, maxLines: 1 }
+        ] });
+        return { ok: true, content: JSON.stringify([bold('重出一'), bold('重出二'), bold('重出三'), bold('重出四')]) };
+    }
+    const mk = (name, color, extra, slot) => ({
         templateName: name, layers: [
             { type: 'rect', x: 0, y: 0, w: 1, h: 1, fill: '#f7f5f0' },
-            { type: 'photo', x: 0.08, y: 0.08, w: 0.84, h: 0.62, fit: 'cover' },
-            Object.assign({ type: 'text', x: 0.5, y: 0.93, text: 'QINGFRAME', size: 0.03, color, align: 'center', maxW: 0.8, maxLines: 1 }, extra || {})
+            Object.assign({ type: 'photo', x: 0, y: 0, w: 1, h: 1, fit: 'cover' }, slot || {}),
+            Object.assign({ type: 'text', x: 0, y: 0.9, text: 'QINGFRAME', size: 0.12, color, align: 'left', maxW: 0.96, maxLines: 1 }, extra || {})
         ]
     });
     const plans = [
         mk('接口款一', '#1b1b1b'),
-        mk('接口款二', '#fbfbfb'),                                            // 白字白底 → 自动改色
-        { templateName: '接口款三', layers: [{ type: 'photo', x: 0.3, y: 0.3, w: 0.4, h: 0.28 }] }, // 窄槽位 → 自动放宽
-        mk('接口款四', '#3a3a3a', { y: 0.45 })                                // 压住照片 → 自动挪走
+        mk('接口款二', '#fbfbfb', { y: 0.1 }, { x: 0, y: 0.5, w: 1, h: 0.5 }),    // 白字落在纸底 → 自动改色
+        { templateName: '接口款三', layers: [{ type: 'photo', x: 0.3, y: 0.42, w: 0.4, h: 0.10 }] }, // 细缝槽位 → 自动放宽
+        mk('接口款四', '#3a3a3a', { y: 0.45, size: 0.045 })                     // 小字压照片 → 抬高可读性
     ];
     return { ok: true, content: '好的，这是 4 款：\n```json\n' + JSON.stringify(plans) + '\n```' };
 });
@@ -178,9 +195,9 @@ app.whenReady().then(async () => {
     const agentFams = agentFamBlock ? agentFamBlock[1].split('\n').filter((l) => /^\d\./.test(l)) : [];
     const agentFamNames = agentFams.map((l) => l.replace(/^\d\.\s*/, '').split('：')[0]);
     check(/本轮四款的构图语法与顺序/.test(lastAgentPrompt) && /反默认/.test(lastAgentPrompt)
-        && /至少三款要有明确破格动作/.test(lastAgentPrompt) && /不要写负坐标/.test(lastAgentPrompt),
-        '生成提示带上构图语法 / 反默认 / 破格配额 / 出血边界',
-        JSON.stringify({ fam: /构图语法与顺序/.test(lastAgentPrompt), quota: /至少三款/.test(lastAgentPrompt) }));
+        && /至少两款有 size ≥0\.14 的展示字/.test(lastAgentPrompt) && /不要写负坐标/.test(lastAgentPrompt),
+        '生成提示带上构图语法 / 反默认 / 展示字硬指标 / 出血边界',
+        JSON.stringify({ fam: /构图语法与顺序/.test(lastAgentPrompt), quota: /≥0\.14/.test(lastAgentPrompt) }));
     check((lastAgentPrompt.match(/本轮四款的构图语法与顺序/g) || []).length === 1,
         '一条提示里只出现一组四款构图（不再抽两次打架）',
         String((lastAgentPrompt.match(/本轮四款的构图语法与顺序/g) || []).length));
@@ -190,6 +207,8 @@ app.whenReady().then(async () => {
     check(quietN === 1, '每批固定 3 破格 + 1 安静（不再一半一半）', '安静款 ' + quietN + ' / ' + agentFamNames.join(' '));
     check(agentFams.every((l) => /\d/.test((l.split('：')[1] || ''))),
         '每族都带硬指标（照片占比 / 字号 / 色块比例）', agentFams.map((l) => l.slice(0, 26)).join(' | '));
+    check(agentFams.every((l) => /photo 槽位写成 [xy]?=?0?/.test(l)),
+        '每族给出可抄的 photo 坐标原型（不再只写「贴边」）', agentFams.map((l) => l.slice(0, 30)).join(' | '));
 
     // 2.5) 示例照片下拉：列出已导入照片，切换后画廊用新照片重渲染
     const sample = await exec(`(() => {
@@ -722,9 +741,9 @@ app.whenReady().then(async () => {
     const apiFamBlock = /本轮四款的构图语法与顺序[^\n]*\n([\s\S]*?)\n本批硬指标/.exec(lastApiPrompt);
     const apiFams = apiFamBlock ? apiFamBlock[1].split('\n').filter((l) => /^\d\./.test(l)) : [];
     check(/本轮四款的构图语法与顺序/.test(lastApiPrompt) && /反默认/.test(lastApiPrompt)
-        && /至少三款要有明确破格动作/.test(lastApiPrompt) && apiFams.length === 4,
-        'API 提示同样带四族构图 / 反默认 / 破格配额',
-        JSON.stringify({ fam: apiFams.length, quota: /至少三款/.test(lastApiPrompt) }));
+        && /至少两款有 size ≥0\.14 的展示字/.test(lastApiPrompt) && apiFams.length === 4,
+        'API 提示同样带四族构图 / 反默认 / 展示字硬指标',
+        JSON.stringify({ fam: apiFams.length, quota: /≥0\.14/.test(lastApiPrompt) }));
     check((lastApiPrompt.match(/本轮四款的构图语法与顺序/g) || []).length === 1,
         'API 一条提示只出现一组四款构图',
         String((lastApiPrompt.match(/本轮四款的构图语法与顺序/g) || []).length));
@@ -741,7 +760,19 @@ app.whenReady().then(async () => {
         return { color: txt && txt.color, slot: slot && [slot.w, slot.h] };
     })()`);
     check(fixedDoc.color && fixedDoc.color !== '#fbfbfb', '白字白底被改成可读颜色', String(fixedDoc.color));
-    check(fixedDoc.slot && fixedDoc.slot[0] > 0.4 && fixedDoc.slot[1] > 0.28, '窄槽位被放宽', JSON.stringify(fixedDoc.slot));
+    check(fixedDoc.slot && fixedDoc.slot[1] > 0.10 && fixedDoc.slot[0] >= 0.4, '细缝槽位被放宽', JSON.stringify(fixedDoc.slot));
+
+    // 14b) 一批全是「传统相框」→ 自动带原因重出一次，卡片标出大胆度
+    const beforeBold = aiCalls;
+    await exec(`document.getElementById('framePrompt').value = '模拟保守'; document.getElementById('btnGenerate').click(); true`);
+    await sleep(4200);
+    const boldRun = await exec(`({ names: [...document.querySelectorAll('.frame-swatch-name')].map(x=>x.textContent),
+        status: document.getElementById('frameStatus').textContent,
+        bold: [...document.querySelectorAll('.frame-swatch-bold')].map(x=>x.textContent) })`);
+    check(aiCalls - beforeBold === 2, '整批太保守自动重出一次', String(aiCalls - beforeBold));
+    check(boldRun.names.length === 4 && boldRun.names[0] === '重出一', '重出后展示新一批', boldRun.names.join(','));
+    check(boldRun.bold.length === 4 && /破格/.test(boldRun.bold[0]), '卡片标出大胆度', JSON.stringify(boldRun.bold));
+    check(/平均大胆度只有 \d+ 分/.test(lastApiPrompt), '重出提示带上一批的评分与原因', lastApiPrompt.slice(-180));
 
     // 15) API 回垃圾文本 → 明确报错，不是静默空白
     await exec(`document.getElementById('framePrompt').value = '模拟空回'; document.getElementById('btnGenerate').click(); true`);

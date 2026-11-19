@@ -8,6 +8,7 @@
  * lint(doc, opts)      → { issues:[{code,level,layer,msg}], size }
  * autofix(doc, opts)   → { doc, fixes:[code], issues:[剩余] }
  * checkAndFix(doc, ..) → 上面两个的组合，面板直接用这个
+ * boldness(doc, opts)  → { score:0~100, grade, hints }，判断「够不够大胆」，只读不修
  *
  * opts: { bg, photo:{ar, lumaMean}, ctx, W, H }，ctx 只在 Node 测试里需要传。
  */
@@ -131,6 +132,82 @@
         return b;
     }
 
+    // ── 大胆度 ──
+    // 保守款有稳定的几何特征：照片四边等宽内缩、没有展示字、没有任何层压过照片。
+    // 破格款也有：至少一边贴画布、大字号压图、色块/文字占住照片的一部分。
+    // 把它算成 0~100，才能回答「这版到底够不够狠」，而不是各人说各人的感觉。
+    function boldness(doc, opts) {
+        const o = opts || {};
+        const layers = layersOf(doc);
+        const size = (o.W && o.H) ? { W: o.W, H: o.H } : sizeFor(doc, o.photo && o.photo.ar);
+        const W = size.W, H = size.H;
+        const ctx = o.ctx || makeCtx();
+        const pi = layers.findIndex((l) => l && l.type === 'photo');
+        if (pi < 0) return { score: 0, grade: '无槽位', parts: {}, hints: ['没有照片槽位'], size };
+        const pb = boundsOf(ctx, layers[pi], W, H);
+        if (!pb || !area(pb)) return { score: 0, grade: '无槽位', parts: {}, hints: ['照片槽位尺寸为零'], size };
+
+        const px = Math.max(1, Math.min(W, H)) * 0.004;   // 贴边容差 ≈ 千分之四
+        const edges = (pb.x <= px ? 1 : 0) + (pb.y <= px ? 1 : 0)
+            + (pb.x + pb.w >= W - px ? 1 : 0) + (pb.y + pb.h >= H - px ? 1 : 0);
+        const share = area(pb) / (W * H);
+
+        let maxSize = 0, onPhoto = 0, textEdge = 0, deco = 0, decoArea = 0, blockOn = 0;
+        layers.forEach((l, i) => {
+            if (!l) return;
+            if (l.type === 'text') {
+                maxSize = Math.max(maxSize, Number(l.size) || 0);
+                const b = boundsOf(ctx, l, W, H);
+                if (!b) return;
+                const tb = textBox(l, b);
+                if (area(tb) && overlapArea(tb, pb) / area(tb) > 0.5) onPhoto++;
+                if (tb.x <= px || tb.y <= px || tb.x + tb.w >= W - px || tb.y + tb.h >= H - px) textEdge++;
+                return;
+            }
+            if (l.type === 'photo') return;
+            if (i <= pi) return;              // 照片下面的背景不算装饰
+            deco++;
+            const b = boundsOf(ctx, l, W, H);
+            if (area(b)) decoArea += area(b) / (W * H);
+            if (!l.fill) return;
+            const op = (l.fillOpacity == null ? 1 : Number(l.fillOpacity)) * (l.opacity == null ? 1 : Number(l.opacity));
+            if (op < 0.5) return;
+            if (!area(b)) return;
+            blockOn = Math.max(blockOn, overlapArea(b, pb) / area(pb));
+        });
+
+        const off = Math.abs((pb.x + pb.w / 2) / W - 0.5);
+        const p = {};
+        p.edge = Math.min(21, edges * 7);
+        p.share = share >= 0.88 ? 20 : share >= 0.70 ? 8 : share >= 0.45 ? 2 : (edges ? 12 : 6);
+        p.display = maxSize >= 0.16 ? 26 : maxSize >= 0.13 ? 20 : maxSize >= 0.10 ? 14 : maxSize >= 0.08 ? 7 : 0;
+        p.onPhoto = Math.min(18, onPhoto * 9);
+        p.block = blockOn >= 0.30 ? 16 : blockOn >= 0.10 ? 11 : blockOn >= 0.04 ? 5 : 0;
+        p.deco = decoArea >= 0.60 ? 12 : decoArea >= 0.30 ? 9 : decoArea >= 0.12 ? 5 : 0;
+        p.textEdge = textEdge ? 6 : 0;
+        p.offset = off >= 0.12 ? 5 : off >= 0.06 ? 2 : 0;
+
+        let score = 0;
+        for (const k in p) score += p[k];
+        // 视觉重量：照片 + 照片上的色块合起来盖住多少版面。低于 45% 就是「空」，
+        // 不是极简——极简的压场来自一个大到不可能忽略的元素，而不是没有元素。
+        const mass = Math.min(1, share + decoArea);
+        if (mass < 0.45) score -= 8;
+        score = Math.round(clamp(score, 0, 100));
+        const grade = score >= 70 ? '破格' : score >= 45 ? '大胆' : score >= 25 ? '常规' : '保守';
+
+        const hints = [];
+        if (!edges) hints.push('照片没有任何一边贴住画布，四边都在内缩');
+        if (!edges && share >= 0.45 && share < 0.88) hints.push('照片停在「不大不小」的中间尺寸（占 ' + Math.round(share * 100) + '%）');
+        if (maxSize < 0.08) hints.push('最大字号只有 ' + (maxSize * 100).toFixed(0) + '%，没有展示字（≥10%）');
+        if (!onPhoto) hints.push('照片上一个字都没有，文字全在留白里');
+        if (blockOn < 0.04) hints.push('没有色块/图形压过照片');
+        if (decoArea < 0.12) hints.push('装饰层只覆盖 ' + Math.round(decoArea * 100) + '% 版面，缺少压场的大色块');
+        if (mass < 0.45) hints.push('照片和色块只盖住 ' + Math.round(mass * 100) + '% 版面，剩下的是空白不是留白');
+
+        return { score, grade, parts: p, size, edges, share, maxSize, onPhoto, blockOn, deco, decoArea, mass, canvasAr: W / H, offset: off, hints };
+    }
+
     // ── 体检 ──
     function lint(doc, opts) {
         const o = Object.assign({ bg: '#ffffff' }, opts || {});
@@ -150,18 +227,33 @@
         const slot = slotIdx >= 0 ? layers[slotIdx] : null;
         const slotBox = slot ? boundsOf(ctx, slot, W, H) : null;
 
+        // 画布比例由槽位反推，「照片占一条」天然会得到长卷——这是构图，不是错误。
+        // 只有极端到照片已经无法辨认时才判错；正常范围只提醒。
+        const canvasAr = W / H;
+        if (canvasAr > 4.0 || canvasAr < 0.25) {
+            push('canvas-extreme', 'error', -1, '画布比例 ' + canvasAr.toFixed(2) + ':1 太极端，照片会被裁到无法辨认；把槽位的 w/h 调回接近照片比例');
+        } else if (canvasAr > 2.0 || canvasAr < 0.42) {
+            push('canvas-extreme', 'warn', -1, '画布比例 ' + canvasAr.toFixed(2) + ':1，确认是有意的长卷/竖轴');
+        }
+
         if (slotBox) {
             const shortPx = Math.min(slotBox.w, slotBox.h);
             const shortShare = shortPx / Math.min(W, H);
-            const shareArea = area(slotBox) / (W * H);
-            if (shortShare < 0.34) push('slot-narrow', 'error', slotIdx, '照片槽位太窄（短边只占画面 ' + Math.round(shortShare * 100) + '%）');
-            else if (shortShare < 0.45) push('slot-narrow', 'warn', slotIdx, '照片槽位偏窄（短边 ' + Math.round(shortShare * 100) + '%）');
-            if (shareArea < 0.22) push('photo-small', 'warn', slotIdx, '照片只占画面 ' + Math.round(shareArea * 100) + '%，像贴纸');
+            const shareArea = area(slotBox) / (W * H);            // 用「照片占画面多少」判断可读性，而不是短边比例：
+            // 画布尺寸本身由槽位反推，短边占比会被算成恒定值，量不出「一条缝」。
+            // 只有小到导出后看不清、或细成一根线，才算结构错误；「占一侧的条带」是设计。
+            if (shareArea < 0.08 || shortShare < 0.10) {
+                push('slot-narrow', 'error', slotIdx, '照片只占画面 ' + Math.round(shareArea * 100) + '%、短边 ' + Math.round(shortShare * 100) + '%，导出后看不清');
+            } else if (shareArea < 0.15) {
+                push('slot-narrow', 'warn', slotIdx, '照片只占画面 ' + Math.round(shareArea * 100) + '%，确认是有意的图版构图');
+            } else if (shareArea < 0.22) {
+                push('photo-small', 'warn', slotIdx, '照片只占画面 ' + Math.round(shareArea * 100) + '%，像贴纸');
+            }
             if (o.photo && o.photo.ar > 0) {
                 const slotAr = slotBox.w / Math.max(1, slotBox.h);
                 const fit = String(slot.fit || 'cover').toLowerCase();
                 const mismatch = Math.max(slotAr / o.photo.ar, o.photo.ar / slotAr);
-                if (mismatch > 1.8) push('slot-crop', 'warn', slotIdx, '槽位比例与照片差太多（' + slotAr.toFixed(2) + ' vs ' + o.photo.ar.toFixed(2) + '），' + (fit === 'contain' ? '会留白边' : '会裁掉不少画面'));
+                if (mismatch > 2.8) push('slot-crop', 'warn', slotIdx, '槽位比例与照片差太多（' + slotAr.toFixed(2) + ' vs ' + o.photo.ar.toFixed(2) + '），' + (fit === 'contain' ? '会留白边' : '会裁掉不少画面'));
             }
         }
 
@@ -188,7 +280,7 @@
             const sizePx = (Number(l.size) || 0.04) * H;
             if (sizePx < 10) push('text-tiny', 'error', i, '字号只有 ' + Math.round(sizePx) + 'px，导出后看不清');
             else if (sizePx < 16) push('text-small', 'warn', i, '字号偏小（' + Math.round(sizePx) + 'px）');
-            if (sizePx > H * 0.15) push('text-huge', 'warn', i, '字号过大，会压住照片');
+            if (sizePx > H * 0.22) push('text-huge', 'warn', i, '字号过大，会压住照片');
             if (b.x < -1 || b.y < -1 || b.x + b.w > W + 1 || b.y + b.h > H + 1) push('text-out', 'error', i, '文字超出画面');
 
             if (slotBox) {
@@ -203,6 +295,16 @@
 
             for (const p of prevTexts) {
                 if (area(b) && overlapArea(b, p) / Math.min(area(b), area(p) || 1) > 0.5) push('text-collision', 'warn', i, '两段文字叠在一起');
+            }
+            // 文字被后画的不透明层压住：模型常把「标签纸条」排在文字后面，标题只剩半截
+            for (let j = i + 1; j < layers.length; j++) {
+                const nl = layers[j];
+                if (!nl || (nl.type !== 'rect' && nl.type !== 'circle' && nl.type !== 'image')) continue;
+                const op = (nl.fillOpacity == null ? 1 : Number(nl.fillOpacity)) * (nl.opacity == null ? 1 : Number(nl.opacity));
+                if (op < 0.6) continue;
+                const nb = boundsOf(ctx, nl, W, H);
+                if (!area(nb) || !area(b)) continue;
+                if (overlapArea(b, nb) / area(b) > 0.4) push('text-covered', 'error', i, '文字被后面的不透明层压住');
             }
             prevTexts.push(b);
         });
@@ -278,21 +380,29 @@
         const slotIdx = () => layers.findIndex((l) => l && l.type === 'photo');
         const slotBoxNow = () => { const i = slotIdx(); return i >= 0 ? boundsOf(ctx, layers[i], W, H) : null; };
 
-        // 3) 槽位过窄：按短边 52% 放大，保中心，夹在画布内
+        // 3) 槽位小到看不清 / 细成一根线：放大到能看（面积 12%），并保住原本贴住的那几条边。
+        //    「照片只占一侧」是设计，不是错误——阈值必须低到这里才不会把构图改回相框。
         for (let round = 0; round < 2; round++) {
             const b = slotBoxNow();
             if (!b) break;
             const shortPx = Math.min(b.w, b.h);
-            if (shortPx / Math.min(W, H) >= 0.45) break;
+            const shortShare = shortPx / Math.min(W, H);
+            const areaShare = area(b) / (W * H);
+            if (areaShare >= 0.08 && shortShare >= 0.10) break;
             const slot = layers[slotIdx()];
-            const k = Math.min(2.2, (0.52 * Math.min(W, H)) / Math.max(1, shortPx));
-            const nw = Math.min(1, (Number(slot.w) || 0.8) * k);
-            const nh = Math.min(1, (Number(slot.h) || 0.8) * k);
-            const cx = (Number(slot.x) || 0) + (Number(slot.w) || 0) / 2;
-            const cy = (Number(slot.y) || 0) + (Number(slot.h) || 0) / 2;
+            const kArea = Math.sqrt(0.12 / Math.max(0.001, areaShare));
+            const kShort = shortShare < 0.12 ? (0.12 * Math.min(W, H)) / Math.max(1, shortPx) : 1;
+            const k = Math.min(2.8, Math.max(kArea, kShort));
+            const x0 = Number(slot.x) || 0, y0 = Number(slot.y) || 0;
+            const w0 = Number(slot.w) || 0.8, h0 = Number(slot.h) || 0.8;
+            const nw = Math.min(1, w0 * k);
+            const nh = Math.min(1, h0 * k);
+            const eps = 0.004;
+            const leftEdge = x0 <= eps, rightEdge = x0 + w0 >= 1 - eps;
+            const topEdge = y0 <= eps, bottomEdge = y0 + h0 >= 1 - eps;
             slot.w = nw; slot.h = nh;
-            slot.x = clamp(cx - nw / 2, 0, 1 - nw);
-            slot.y = clamp(cy - nh / 2, 0, 1 - nh);
+            slot.x = leftEdge ? 0 : rightEdge ? 1 - nw : clamp(x0 + w0 / 2 - nw / 2, 0, 1 - nw);
+            slot.y = topEdge ? 0 : bottomEdge ? 1 - nh : clamp(y0 + h0 / 2 - nh / 2, 0, 1 - nh);
             fixes.push('slot-narrow');
         }
 
@@ -319,6 +429,31 @@
             }
         }
 
+        // 4b) 文字被后面的不透明层压住：把那层挪到文字下面（标签纸本来就该垫在字底下）
+        for (let round = 0; round < 3; round++) {
+            let moved = false;
+            for (let i = 0; i < layers.length && !moved; i++) {
+                const l = layers[i];
+                if (!l || l.type !== 'text') continue;
+                const tb = boundsOf(ctx, l, W, H);
+                if (!area(tb)) continue;
+                for (let j = i + 1; j < layers.length; j++) {
+                    const nl = layers[j];
+                    if (!nl || (nl.type !== 'rect' && nl.type !== 'circle' && nl.type !== 'image')) continue;
+                    const op = (nl.fillOpacity == null ? 1 : Number(nl.fillOpacity)) * (nl.opacity == null ? 1 : Number(nl.opacity));
+                    if (op < 0.6) continue;
+                    const nb = boundsOf(ctx, nl, W, H);
+                    if (!area(nb) || overlapArea(tb, nb) / area(tb) <= 0.4) continue;
+                    layers.splice(j, 1);
+                    layers.splice(i, 0, nl);
+                    fixes.push('text-covered');
+                    moved = true;
+                    break;
+                }
+            }
+            if (!moved) break;
+        }
+
         // 5) 文字：拉回画面 / 抬字号 / 补对比度 / 压照片就挪到留白带
         const slotFinal = slotBoxNow();
         layers.forEach((l, i) => {
@@ -337,12 +472,12 @@
             if (sizePx < 16) {
                 l.size = Math.round((16 / H) * 10000) / 10000;
                 fixes.push('text-tiny');
-            } else if (sizePx > H * 0.15) {
-                l.size = 0.13;
+            } else if (sizePx > H * 0.24) {
+                l.size = 0.22;
                 fixes.push('text-huge');
             }
 
-            // 只有「看不清」才动手：能挪到留白带就挪，挪不动就换色（照片上再补一层阴影）。
+            // 只有「看不清」才动手。压图文字先保设计：换色 + 加阴影，仍不够才挪到留白带。
             // 有意压在照片上的浅色标题不去碰它——对比度够就说明是设计，不是错误。
             const bb = boundsOf(ctx, l, W, H);
             if (!bb) return;
@@ -350,7 +485,8 @@
             const worst0 = worstBg(layers, ctx, i, bb, fg0, W, H, o);
             if (worst0.ratio >= 3) return;
             const overPhoto = !!slotFinal && area(bb) > 0 && overlapArea(bb, slotFinal) / area(bb) > 0.5;
-            if (overPhoto) {
+            if (overPhoto && (Number(l.size) || 0.04) < 0.06) {
+                // 小字压图看不清就挪走；展示字（≥6%）一律留在照片上——那是构图，不是错误
                 const need = bb.h + 10;
                 const above = slotFinal.y;
                 const below = H - (slotFinal.y + slotFinal.h);
@@ -362,12 +498,12 @@
                     const nb = boundsOf(ctx, l, W, H);
                     const nw = nb ? worstBg(layers, ctx, i, nb, fg0, W, H, o) : null;
                     if (nw && nw.ratio >= 3) return;
-                    if (nw) { l.color = pickTextColor(nw.bg.color); l.shadow = Object.assign({ color: '#000000', blur: 10, offsetX: 0, offsetY: 1, opacity: 0.35 }, l.shadow || {}); fixes.push('low-contrast'); return; }
+                    if (nw) { l.color = pickTextColor(nw.bg.color); fixes.push('low-contrast'); return; }
                 }
             }
             l.color = pickTextColor(worst0.bg.color);
             if (overPhoto) {
-                l.shadow = Object.assign({ color: '#000000', blur: 10, offsetX: 0, offsetY: 1, opacity: 0.35 }, l.shadow || {});
+                l.shadow = Object.assign({ color: '#000000', blur: 12, offsetX: 0, offsetY: 1, opacity: 0.45 }, l.shadow || {});
             }
             fixes.push('low-contrast');
         });
@@ -384,8 +520,10 @@
         // 去重，保持「修了什么」一眼能读
         const uniq = [];
         for (const f of fixes) if (!uniq.includes(f)) uniq.push(f);
-        const after = lint(out, Object.assign({}, o, { W, H, ctx }));
-        return { doc: out, fixes: uniq, issues: after.issues };
+        // 槽位被改过（放大/缩窄）后画布尺寸要重算，否则会用旧口径复查，误判「画布比例极端」
+        const sizeAfter = sizeFor(out, o.photo && o.photo.ar);
+        const after = lint(out, Object.assign({}, o, { W: sizeAfter.W, H: sizeAfter.H, ctx }));
+        return { doc: out, fixes: uniq, issues: after.issues, size: sizeAfter };
     }
 
     function checkAndFix(doc, opts) {
@@ -403,7 +541,8 @@
 
     const LABEL = {
         'multi-photo': '多写的照片槽位', 'no-photo': '补照片槽位', 'slot-narrow': '放宽照片槽位',
-        'photo-covered': '被装饰层盖住的照片', 'text-out': '越界文字', 'text-tiny': '过小字号',
+        'photo-covered': '被装饰层盖住的照片', 'text-covered': '被压住的文字', 'canvas-extreme': '极端画布比例',
+        'text-out': '越界文字', 'text-tiny': '过小字号',
         'text-huge': '过大字号', 'text-off-photo': '压住主体的文字', 'low-contrast': '对比度',
         'degenerate': '空图层', 'off-canvas': '画面外图层'
     };
@@ -418,5 +557,5 @@
         return (issues || []).map((x) => '· ' + x.msg).join('\n');
     }
 
-    return { lint, autofix, checkAndFix, contrast, parseColor, sizeFor, summaryOf, describe, LABEL };
+    return { lint, autofix, checkAndFix, boldness, contrast, parseColor, sizeFor, summaryOf, describe, LABEL };
 });

@@ -95,13 +95,13 @@ fs.writeFileSync(f6, JSON.stringify({
         { type: 'rect', x: 0.04, y: 0.04, w: 1.2, h: 0.92, fill: '#f6efe0' },
         { type: 'photo', x: 0.08, y: 0.08, w: 0.84, h: 0.7 },
         { type: 'photo', x: 0.02, y: 0.02, w: 0.3, h: 0.3 },
-        { type: 'text', x: 0.5, y: 0.9, text: '溢出画布的标题', size: 0.2, color: '#111' },
+        { type: 'text', x: 0.5, y: 0.9, text: '溢出画布的标题', size: 0.26, color: '#111' },
         { type: 'blur', x: 0.1, y: 0.1 }
     ]
 }, null, 2), 'utf8');
 r = run(['check', f6]);
 check(r.code !== 0 && /2 个 photo/.test(r.out), 'check 抓多个 photo 槽位', r.out.trim().split('\n').slice(-4).join(' / '));
-check(/size=0\.2 超过 0\.13/.test(r.out) && /缺 maxW/.test(r.out) && /缺 maxLines/.test(r.out),
+check(/size=0\.26 超过 0\.20/.test(r.out) && /缺 maxW/.test(r.out) && /缺 maxLines/.test(r.out),
     'check 抓文字超限与缺 maxW / maxLines');
 check(/type="blur" 不认识/.test(r.out) && /超出画布/.test(r.out), 'check 抓未知图元与越界');
 
@@ -133,6 +133,21 @@ fs.writeFileSync(f8, JSON.stringify({
 r = run(['check', f8]);
 check(r.code === 0 && /贴边|出血/.test(r.out) && !/✗/.test(r.out),
     '海报级展示字与照片出血可过体检', r.out.trim().split('\n').slice(-4).join(' / '));
+
+// 10c) 大胆度：写的人自己能看到「够不够狠」，不用等用户说
+check(/大胆度 \d+\/100（大胆|破格）/.test(r.out), 'check 输出大胆度评分', (r.out.match(/大胆度[^\n]*/) || [''])[0]);
+const f9 = path.join(TMP, 'timid.json');
+fs.writeFileSync(f9, JSON.stringify({
+    templateName: '保守相框',
+    layers: [
+        { type: 'rect', x: 0, y: 0, w: 1, h: 1, fill: '#f7f5f0' },
+        { type: 'photo', x: 0.08, y: 0.08, w: 0.84, h: 0.66, fit: 'cover' },
+        { type: 'text', x: 0.5, y: 0.9, text: 'CAPTION', size: 0.03, color: '#222', align: 'center', maxW: 0.8, maxLines: 1 }
+    ]
+}, null, 2), 'utf8');
+const r2 = run(['check', f9]);
+check(/大胆度 \d+\/100（保守|常规）/.test(r2.out) && /没有任何一边贴住画布/.test(r2.out),
+    '保守款被点出「四边内缩」', (r2.out.match(/大胆度[^\n]*/) || [''])[0]);
 
 // 11) 整批体检：目录里一好一坏，汇总 1/2
 const batch = path.join(TMP, 'batch');

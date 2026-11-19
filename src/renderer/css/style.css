@@ -2531,6 +2531,13 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
     cursor: help;
 }
 .frame-swatch-lint.warn { border-color: var(--warn-border, rgba(190,130,20,.45)); color: var(--warn-text, #96631a); }
+.frame-swatch-bold {
+    position: absolute; left: 6px; bottom: 6px; z-index: 2;
+    padding: 1px 6px; border-radius: 2px; font-size: 10px; line-height: 16px;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-3);
+    cursor: help; letter-spacing: .02em;
+}
+.frame-swatch-bold.strong { border-color: rgba(190,130,20,.5); color: var(--brand-gold-text); }
 .frame-swatch-name { flex: 1 1 auto; min-width: 0; font-size: var(--fs-12); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .frame-swatch-tweak {
     flex: 0 0 auto; border: none; background: transparent; color: var(--text-3);

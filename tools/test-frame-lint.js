@@ -59,15 +59,33 @@ const lcFix = F.checkAndFix(lowC, { ctx, photo, bg: '#f7f5f0' });
 check(lcFix.fixes.includes('low-contrast'), '自动修正对比度', lcFix.fixes.join(','));
 check(F.parseColor(lcFix.doc.layers[2].color) && F.contrast(F.parseColor(lcFix.doc.layers[2].color), F.parseColor('#f7f5f0')) >= 3, '修正后对比度达标', lcFix.doc.layers[2].color);
 
-// 3) 槽位窄成一条缝 → slot-narrow，自动放宽
+// 3) 槽位窄成一条缝 → slot-narrow，自动放宽（但「占一侧的条带」不许动）
 const narrow = baseDoc();
-narrow.layers[1].w = 0.42; narrow.layers[1].h = 0.30;
+narrow.layers[1].w = 0.42; narrow.layers[1].h = 0.10;
 const nr = F.lint(narrow, { ctx, photo, bg: '#f7f5f0' });
-check(nr.issues.some((i) => i.code === 'slot-narrow' && i.level === 'error'), '窄槽位判 error');
+check(nr.issues.some((i) => i.code === 'slot-narrow' && i.level === 'error'), '窄成缝的槽位判 error');
 const nrFix = F.checkAndFix(narrow, { ctx, photo, bg: '#f7f5f0' });
 check(nrFix.fixes.includes('slot-narrow'), '自动放宽槽位');
 const slotAfter = nrFix.doc.layers.find((l) => l.type === 'photo');
-check(slotAfter.w > 0.42 && slotAfter.h > 0.30, '槽位真的变大了', slotAfter.w + '×' + slotAfter.h);
+check(slotAfter.h > 0.10, '槽位真的变大了', slotAfter.w + '×' + slotAfter.h);
+
+// 3b) 条带构图（短边 30%）是设计，不是错误：体检只能提醒，不能改
+const band = baseDoc();
+band.layers[1].x = 0; band.layers[1].y = 0; band.layers[1].w = 1; band.layers[1].h = 0.30;
+const bandLint = F.lint(band, { ctx, photo, bg: '#f7f5f0' });
+check(!bandLint.issues.some((i) => i.code === 'slot-narrow' && i.level === 'error'),
+    '照片占一条（30%）不判 error', JSON.stringify(bandLint.issues.map((i) => i.code)));
+const bandFix = F.checkAndFix(band, { ctx, photo, bg: '#f7f5f0' });
+const bandSlot = bandFix.doc.layers.find((l) => l.type === 'photo');
+check(bandSlot.w === 1 && bandSlot.h === 0.30 && bandSlot.x === 0 && bandSlot.y === 0,
+    '条带构图原样保留', bandSlot.x + ',' + bandSlot.y + ' ' + bandSlot.w + '×' + bandSlot.h);
+
+// 3c) 贴边的窄条被放宽后，仍贴原来那条边
+const side = baseDoc();
+side.layers[1].x = 0; side.layers[1].y = 0.2; side.layers[1].w = 0.09; side.layers[1].h = 0.6;
+const sideFix = F.checkAndFix(side, { ctx, photo, bg: '#f7f5f0' });
+const sideSlot = sideFix.doc.layers.find((l) => l.type === 'photo');
+check(sideSlot.x === 0 && sideSlot.w > 0.09, '放宽窄条时保住贴边', sideSlot.x + ' / ' + sideSlot.w);
 
 // 4) 文字压在照片主体上 → text-on-photo warn，自动挪到留白带
 const onPhoto = baseDoc();
@@ -138,6 +156,32 @@ check(cl.issues.some((i) => i.code === 'text-collision'), '叠字被点出');
 // 11) summary 文案
 check(/自动修正/.test(lcFix.summary), 'summary 带修正说明', lcFix.summary);
 check(F.describe(cl.issues).includes('·'), 'describe 输出列表');
+
+// 11) 大胆度：保守款与破格款要拉开差距，且能说清差在哪
+const plain = F.boldness(baseDoc(), { ctx, photo });
+check(plain.score < 25 && plain.grade === '保守', '四边内缩的小字款判保守', plain.score + ' / ' + plain.grade);
+check(plain.hints.some((h) => /四边都在内缩/.test(h)) && plain.hints.some((h) => /没有展示字/.test(h)),
+    '保守款给出具体原因', JSON.stringify(plain.hints));
+
+const boldLayers = [{ type: 'photo', x: 0, y: 0, w: 1, h: 1, fit: 'cover' }];
+for (let i = 0; i < 12; i++) {
+    boldLayers.push({ type: 'line', x1: 0, y1: i / 12, x2: 1, y2: i / 12, color: '#111111', width: 1 });
+}
+boldLayers.push({ type: 'rect', x: 0, y: 0.72, w: 1, h: 0.28, fill: '#111111' });
+boldLayers.push({ type: 'text', x: 0, y: 0.86, text: '银杏', size: 0.13, color: '#f2e4c4', maxW: 0.96, maxLines: 1 });
+const boldDoc = { templateName: '破格', layers: boldLayers };
+const boldScore = F.boldness(boldDoc, { ctx, photo });
+check(boldScore.score >= 70 && boldScore.grade === '破格', '满版压字款判破格', boldScore.score + ' / ' + boldScore.grade);
+check(boldScore.edges === 4 && boldScore.share > 0.95, '满版款四边贴边', JSON.stringify({ e: boldScore.edges, s: boldScore.share }));
+check(boldScore.score - plain.score >= 50, '两款大胆度差距明显', plain.score + ' → ' + boldScore.score);
+
+const stripDoc = { templateName: '条带', layers: [
+    { type: 'photo', x: 0, y: 0.35, w: 1, h: 0.30, fit: 'cover' },
+    { type: 'text', x: 0.06, y: 0.82, text: 'NOTES', size: 0.09, color: '#111111', maxW: 0.8, maxLines: 1 }
+] };
+const bandScore = F.boldness(stripDoc, { ctx, photo });
+check(bandScore.edges >= 2 && !bandScore.hints.some((h) => /四边都在内缩/.test(h)),
+    '条带款被认作贴边构图', bandScore.score + ' / 贴边' + bandScore.edges);
 
 // 12) 脏数据不炸
 check(F.lint({}, { ctx }) !== null, '空 doc 不炸');

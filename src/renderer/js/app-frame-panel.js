@@ -406,6 +406,15 @@
             badge.title = [entry.lint.summary, window.FrameLint ? window.FrameLint.describe(issues) : ''].filter(Boolean).join('\n');
             imgBox.appendChild(badge);
         }
+        if (entry.bold) {
+            const b = document.createElement('span');
+            b.className = 'frame-swatch-bold' + (entry.bold.score >= 45 ? ' strong' : '');
+            b.textContent = entry.bold.grade + ' ' + entry.bold.score;
+            b.title = (entry.bold.hints && entry.bold.hints.length)
+                ? '大胆度 ' + entry.bold.score + '/100\n' + entry.bold.hints.join('\n')
+                : '大胆度 ' + entry.bold.score + '/100';
+            imgBox.appendChild(b);
+        }
 
         const foot = document.createElement('div'); foot.className = 'frame-swatch-foot';
         const name = document.createElement('span'); name.className = 'frame-swatch-name'; name.textContent = entry.preset.templateName || '方案';
@@ -489,15 +498,17 @@
     // 每族都带硬指标：只说「更大胆」，模型会退回「居中照片 + 四边等宽留白 + 底部一行字」；
     // 给出照片占比、展示字下限、色块占比这些数字，构图才真的会变。
     // 每轮抽 3 个破格族 + 1 个安静族——安静族也必须有一个压场的大元素，不许交白卷。
+    // 每族给「坐标原型」而不是形容词：模型对「贴边」的理解是 0.02 边距，
+    // 只有把 photo 槽位写成 x=0/w=1 这样的具体数字，它才会真的顶到画布边。
     const CREATIVE_FAMILIES = [
-        { name: '满版压字', bold: true, recipe: '照片满版贴边（x=0,y=0,w=1,h=1）或至少两边贴边；一枚 size 0.10~0.13 的展示字压在照片上，用实色块或重阴影托底；标题块不超过画面 30%' },
-        { name: '偏置分栏', bold: true, recipe: '照片一边贴画布边，占 55%~75% 宽或高；另一侧必须有一个 ≥0.10 的展示编号/短句，或一块 ≥25% 版面的实色块；信息沿边纵向排' },
-        { name: '档案票据', bold: false, recipe: '至少 12 条结构线/刻度/网格线，页眉页脚齐全；照片是贴上去的图版（≤70% 宽），带 1.5%~3% 的错位投影' },
-        { name: '网点印刷', bold: true, recipe: '照片贴边；≥24 个重复圆点组成占画面 ≥20% 的矩阵；2~3 色套印，一块实色块错位 0.01~0.02；不用细金线' },
-        { name: '字体海报', bold: true, recipe: '展示字 size 0.11~0.13 做主视觉，可与照片重叠或贴边；照片 ≤60% 宽；文字与照片至少一边重叠' },
-        { name: '极简光学', bold: false, recipe: '留白 ≥50%，但必须有一个 ≥0.10 的展示字或一块 ≥35% 的单色块压场；只留一条发丝线，别用装饰填空' },
-        { name: '取景器', bold: false, recipe: '四角括号压在照片上，加三分线/中心十字/边缘刻度/曝光参数；至少一条线横穿照片，参数文字 0.014~0.02' },
-        { name: '纸片拼贴', bold: true, recipe: '≥3 张错位纸片（带投影）+ 一条胶带 + 一块色片压住照片角（≤20%）；短句像手写标注' }
+        { name: '满版压字', bold: true, slot: 'x=0,y=0,w=1,h=1（四边满版）', recipe: '照片四边满版；一枚 size 0.14~0.18 的展示字直接压在照片上，配 ≥0.6 宽的实色条或重阴影；标题块 ≤30% 画面' },
+        { name: '偏置分栏', bold: true, slot: 'x=0,y=0,w=0.62,h=1（左侧满高）或 x=0.38,y=0,w=0.62,h=1（右侧满高）', recipe: '照片一边满高贴边、占 55%~75% 宽；另一侧一条 ≥0.13 展示编号/短句 + 一块 ≥25% 版面的实色块；信息沿边竖排' },
+        { name: '档案票据', bold: false, slot: 'x=0.08,y=0.10,w=0.84,h=0.62（贴顶的图版）', recipe: '≥14 条结构线/刻度/网格；页眉页脚齐全；照片带 1.5%~3% 错位投影；至少 6 条线跨过照片边' },
+        { name: '网点印刷', bold: true, slot: 'x=0,y=0,w=1,h=0.86（顶满宽）或 x=0,y=0,w=1,h=1', recipe: '照片贴边；≥28 个重复圆点组成 ≥22% 版面的矩阵，允许圆点压在照片上；2~3 色套印，一块实色块错位 0.01~0.02' },
+        { name: '字体海报', bold: true, slot: 'x=0.42,y=0,w=0.58,h=0.78（右上）或 x=0,y=0.28,w=0.66,h=0.72', recipe: '展示字 0.14~0.18 是主视觉，与照片重叠 ≥40%；照片 ≤60% 宽；文字贴边或竖排' },
+        { name: '极简光学', bold: false, slot: 'x=0.06,y=0,w=0.88,h=0.66（贴顶）', recipe: '留白 ≥45%，但必须有一枚 ≥0.15 展示字或一块 ≥30% 单色块压场；一条发丝线，不许多余装饰' },
+        { name: '取景器', bold: false, slot: 'x=0,y=0,w=1,h=1（满版）或 x=0,y=0.2,w=1,h=0.8', recipe: '四角括号+三分线+中心十字+边缘刻度+曝光参数，≥3 条线横穿照片；画面满版，不留相框边' },
+        { name: '纸片拼贴', bold: true, slot: 'x=0.04,y=0.04,w=0.78,h=0.66（偏左上）', recipe: '≥3 张错位纸片（带投影）+ 胶带条 + 一块色片压住照片角 15%~25%；短句像手写标注' }
     ];
     function shuffled(arr) {
         const a = arr.slice();
@@ -524,8 +535,13 @@
         }
         return [
             '本轮四款的构图语法与顺序（不许换位、不许重复，每款先满足本族硬指标再谈装饰）：',
-            families.map((f, i) => (i + 1) + '. ' + f.name + '：' + f.recipe).join('\n'),
-            '本批硬指标：至少三款要有明确破格动作（照片贴边/满版、展示字 ≥0.08、或色块压住照片 ≥10%），至少一款第一眼不像相框（文字或色块是主体，照片只占一条/一角）。做不到就重做那一款。'
+            families.map((f, i) => (i + 1) + '. ' + f.name + '：photo 槽位写成 ' + f.slot + '；' + f.recipe).join('\n'),
+            '本批硬指标（逐款核对，做不到就重做那一款）：',
+            '① 四款里至少两款的 photo 有 ≥2 条边贴住画布（x=0 / y=0 / x+w=1 / y+h=1），或照片面积 ≥85%，或 ≤40%；',
+            '② 至少两款有 size ≥0.14 的展示字，且这枚字与照片重叠 ≥50%；',
+            '③ 至少一款整幅没有「等宽留白相框边」——照片必须贴边或满版；',
+            '④ 四款的 photo 槽位写法必须四种不同，不许都用 0.08/0.08/0.84；',
+            '⑤ 每款画布宽高比落在 0.6~1.8（写完用「照片比例 × 槽位高 ÷ 槽位宽」算一遍，超了就改槽位方向）。'
         ].join('\n');
     }
     function creativeMethodLines() {
@@ -534,26 +550,27 @@
             '四款必须是四种不同构图语法；同一骨架只换配色或一句文案，不算四款。如果用户明确要求四款同风格/同骨架，先服从用户。',
             '可用构图语法：' + CREATIVE_FAMILIES.map((f) => f.name).join(' / ') + '；本轮只用下面指定给这一款的语法。',
             '反默认：不要四款都做成「照片居中 + 四边等宽留白 + 照片描边 + 底部一行字」，出现两款以上就重做；也不要直接复刻邮票齿孔、拍立得白边、报纸头版、胶片齿条、票根、杂志封面——这些内置预设已经有了。',
-            '破格动作：照片贴边/满版、文字压图/贴边、超大展示字、2~3 个粗色块或重复圆点/刻度/裁切标记、半透明叠色。',
+            '破格动作（至少两款各用一个）：照片满版或贴边、展示字 ≥0.14 压图、色块/圆点矩阵占 ≥20% 且压到照片、文字贴边或竖排。',
             '注意：照片槽位不能超出画布（x/y 在 0..1，w/h 最多到画布边），「出血」只能是贴边或满版，不要写负坐标或大于 1 的宽高。',
             '配色从照片主色/辅色或一个明确概念来；至少两款离开「暖白底 + 黑 + 金」，可用对比色大色块或双色套印。每条线、每个圆点都要有结构作用，别用装饰填空。',
-            '落完图层逐款自检：展示字够大吗？照片贴边了吗？色块压到照片了吗？如果只是换了配色，重做。'
+            '落完图层逐款自检，三问答不出数字就重做：photo 有几条边贴住画布？最大字号是多少？有没有东西压在照片上？'
         ];
     }
     function layerSchemaLines() {
         return [
             '每个方案是一个「图层边框」对象，格式：',
             '{"templateName":"方案名","layers":[ ...图层... ]}',
-            'layers 从底到顶绘制，每层是以下之一（坐标为 0..1 比例，相对画布宽高）。下面示例只示意字段与写法，坐标不要照抄：',
-            ' {"type":"photo","x":0.08,"y":0.08,"w":0.84,"h":0.7,"radius":0.01,"fit":"cover"}   满版或贴边时这样写：{"type":"photo","x":0,"y":0,"w":1,"h":1,"radius":0,"fit":"cover"}',
-            ' {"type":"rect","x":0.05,"y":0.05,"w":0.9,"h":0.9,"radius":0.02,"fill":"#ffffff","fillOpacity":0.9,"stroke":"#dcba79","strokeWidth":2}',
+            'layers 从底到顶绘制，每层是以下之一（坐标为 0..1 比例，相对画布宽高）。示例只示意字段，坐标按本族硬指标来，不要退回 0.08 边距：',
+            ' {"type":"photo","x":0,"y":0,"w":1,"h":1,"radius":0,"fit":"cover"}（满版）  或  {"type":"photo","x":0,"y":0,"w":0.62,"h":1,"radius":0,"fit":"cover"}（左侧满高）',
+            ' {"type":"rect","x":0,"y":0.72,"w":1,"h":0.28,"fill":"#111111","fillOpacity":1}（贴边色带）  或  {"type":"rect","x":0.55,"y":0.06,"w":0.4,"h":0.5,"fill":"#c8452d","fillOpacity":0.92}（压图色块）',
             ' {"type":"circle","cx":0.5,"cy":0.2,"r":0.08,"fill":"#129e78"}',
-            ' {"type":"line","x1":0.1,"y1":0.5,"x2":0.9,"y2":0.5,"color":"#dcba79","width":2,"dash":[4,4]}',
-            ' {"type":"text","x":0.5,"y":0.92,"text":"文字","size":0.035,"color":"#f2e4c4","align":"center","weight":600,"letterSpacing":0.1,"maxW":0.8,"maxLines":1}   展示字示例：{"type":"text","x":0.06,"y":0.88,"text":"秋日","size":0.12,"color":"#f5efe0","align":"left","weight":800,"maxW":0.8,"maxLines":1}',
-            '必须包含且只包含一个 photo 槽位：它就是照片的位置和大小，画布比例由它决定。photo 槽位短边不小于画面的 45%。',
-            'photo 之前的图层画在照片下面（底色/卡纸/背景），photo 之后的图层画在照片上面（文字/线条/装饰）；不要把照片整张盖住。',
-            '文字务必带 maxW（0..1，建议 0.6~0.9）和 maxLines：正文 size 0.02~0.055，海报展示字 0.09~0.13（maxLines:1），不要超过 0.13。',
-            '允许文字压在照片上，但要用实色条块垫底或阴影保证可读；任何不透明层不要盖住照片一半以上。',
+            ' {"type":"line","x1":0,"y1":0.5,"x2":1,"y2":0.5,"color":"#dcba79","width":2,"dash":[4,4]}（跨整幅）',
+            ' {"type":"text","x":0,"y":0.9,"text":"秋日","size":0.16,"color":"#f5efe0","align":"left","weight":800,"maxW":0.96,"maxLines":1,"shadow":{"color":"#000000","blur":12,"opacity":0.45}}',
+            '必须包含且只包含一个 photo 槽位：它就是照片的位置和大小。画布比例由槽位反推——画布宽高比 = 照片宽高比 × 槽位高 ÷ 槽位宽，必须落在 0.6~1.8 之间。',
+            '  横照片（宽>高）不要写 w=0.62,h=1 的左右分栏（会拉出 2:1 长卷、照片裁掉大半），改成 w=1,h=0.7 的上下分栏；竖照片反过来。「照片只占下半」会得到更高的画布，这是正常的。',
+            'photo 之前的图层画在照片下面（底色/卡纸/背景），photo 之后的图层画在照片上面（文字/线条/装饰）；不要用一整块不透明层把照片全盖住，也不要把色块/标签排在文字后面盖住文字。',
+            '文字务必带 maxW（0..1，展示字用 0.9~1.0）和 maxLines：正文 size 0.02~0.055，展示字 0.13~0.18（maxLines:1），不要超过 0.20。展示字控制在 2~4 个字，字越多会被引擎缩得越小。',
+            '允许文字压在照片上，用实色条块垫底或阴影保证可读；色块可以压住照片一角（≤30%）做层次。',
             '可加 shadow:{color,blur,offsetX,offsetY,opacity}。颜色用十六进制。'
         ];
     }
@@ -587,7 +604,7 @@
         if (notes) {
             parts.push('', '上一轮生成的方案体检不合格：');
             parts.push(String(notes).slice(0, 400));
-            parts.push('这一轮逐条避开：压图文字必须有实色底/色块垫底/阴影保证对比（浅底深字 / 深底浅字），照片槽位短边不小于画面的 45%，别用不透明层盖住照片。');
+            parts.push('这一轮逐条避开：压图文字必须有实色底/色块垫底/阴影保证对比（浅底深字 / 深底浅字）；照片别停在四边内缩的中间尺寸（要么贴边，要么做成 ≤40% 的小图版）；别用不透明层整张盖住照片。');
         }
         if (base) {
             const doc = { templateName: base.templateName || '参考方案', layers: layersOfDoc(base) || [] };
@@ -681,10 +698,29 @@
             return;
         }
         if (!picks.length) picks = checked;   // 重出仍不合格：降级给出，卡片上标出来
+
+        // 够不够大胆：几何算分。整批平均低于 42 说明又滑回「传统相框」，
+        // 带原因重出一次（只重出一次，且「继续改」不重出，免得覆盖用户选中的骨架）。
+        const briefForBold = brief ? { ar: brief.ar, lumaMean: brief.luma.mean } : null;
+        const bolds = picks.map((g) => {
+            if (!window.FrameLint || !window.FrameLint.boldness) return null;
+            return window.FrameLint.boldness(g.preset, { photo: briefForBold });
+        });
+        const scored = bolds.filter(Boolean);
+        const avg = scored.length ? Math.round(scored.reduce((n, b) => n + b.score, 0) / scored.length) : -1;
+        if (!opts.base && !opts.boldRetry && avg >= 0 && avg < 42) {
+            const hints = [];
+            scored.forEach((b) => (b.hints || []).forEach((h) => { if (hints.indexOf(h) < 0) hints.push(h); }));
+            const why = '上一批四款平均大胆度只有 ' + avg + ' 分（' + scored.map((b) => b.grade).join('/') + '），太像传统相框：'
+                + hints.slice(0, 4).join('；') + '。这次四款都要按各自的硬指标做，照片必须贴边或满版，至少两款有 ≥0.14 的展示字压图，画布比例落在 0.6~1.8。';
+            progress(true, '这批不够大胆（平均 ' + avg + ' 分），正在重出…');
+            setTimeout(() => generate({ prompt: text, base: null, avoid: (lastRequest && lastRequest.avoid) || [], retry: why, boldRetry: true }), 80);
+            return;
+        }
         const at = Date.now();
         gallery = picks.map((g, i) => ({
             key: 'cur:' + my + ':' + i, preset: g.preset, dataUrl: null, isLayer: true,
-            source: 'current', roundPrompt: text, roundAt: at, lint: g.lint
+            source: 'current', roundPrompt: text, roundAt: at, lint: g.lint, bold: bolds[i] || null
         }));
         previousNames = picks.map((g) => g.preset.templateName || '');
         view = 'current';
