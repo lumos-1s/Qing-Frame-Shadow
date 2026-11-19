@@ -963,6 +963,36 @@ handleIpc('ai:models', async (_e, cfg) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
     return aiProvider.models(aiCfg(cfg));
 });
+// 纸刊成品导入：写到 userData，不弹保存框；再让渲染层走 collect-images 进正常导入链
+handleIpc('zine:import', async (_e, dataUrl, filename) => {
+    if (!isTrustedFrame(_e)) return { ok: false, error: '来源不受信' };
+    const m = /^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i.exec(String(dataUrl || ''));
+    if (!m) return { ok: false, error: '不是可识别的图片数据' };
+    const buf = Buffer.from(m[2], 'base64');
+    if (!buf.length || buf.length > 64 * 1024 * 1024) return { ok: false, error: '图片过大或为空' };
+    const dir = path.join(app.getPath('userData'), 'zine-imports');
+    try {
+        fs.mkdirSync(dir, { recursive: true });
+        const base = String(filename || 'zine').replace(/[^\w\u4e00-\u9fa5-]/g, '_').slice(0, 80) || 'zine';
+        const fp = freeFilePath(dir, base + '.png');
+        fs.writeFileSync(fp, ensurePngSrgb(buf));
+        allowImagePath(fp);
+        return { ok: true, path: fp };
+    } catch (e) {
+        return { ok: false, error: e && e.message ? e.message : String(e) };
+    }
+});
+// 纸刊图像生成：Key 只在主进程，参考图由渲染层以 data URL 传入，不写盘
+handleIpc('ai:image', async (_e, cfg, params) => {
+    if (!isTrustedFrame(_e)) return BLOCKED;
+    const c = aiCfg(cfg);
+    // 图像模型名可单独配置，没填就退回文本模型名（多数中转两者同名）
+    const wanted = (cfg && cfg.imageModel) || (typeof params === 'object' && params.model) || c.model;
+    c.model = String(wanted || '').trim().slice(0, 200);
+    const p = params && typeof params === 'object' ? params : {};
+    p.source = typeof p.source === 'string' ? p.source.slice(0, 24 * 1024 * 1024) : '';
+    return aiProvider.image(c, p);
+});
 app.on('before-quit', () => localAgent.closeAll());
 // 保留一次性命令入口（没有 ACP 适配器时的降级）
 handleIpc('agent:run', (_e, id, promptText) => {

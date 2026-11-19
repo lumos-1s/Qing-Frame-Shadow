@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('qingframe', {
     // API 通道：免装本机 CLI，key 只在主进程里用
     aiChat: (cfg, messages) => ipcRenderer.invoke('ai:chat', cfg, messages),
     aiModels: (cfg) => ipcRenderer.invoke('ai:models', cfg),
+    aiImage: (cfg, params) => ipcRenderer.invoke('ai:image', cfg, params),
+    zineImport: (dataUrl, filename) => ipcRenderer.invoke('zine:import', dataUrl, filename),
     onAgentEvent: (cb) => {
         const h = (_e, payload) => cb(payload);
         ipcRenderer.on('agent-event', h);

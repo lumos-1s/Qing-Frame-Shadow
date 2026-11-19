@@ -1352,9 +1352,11 @@
         if (box) box.hidden = ch !== 'api';
         const cfg = P ? P.load() : { baseUrl: '', apiKey: '', model: '' };
         const base = $('frameApiBase'), key = $('frameApiKey'), model = $('frameApiModel');
+        const imgModel = $('frameApiImageModel');
         if (base && base.value !== cfg.baseUrl) base.value = cfg.baseUrl;
         if (key && !key.value) key.value = cfg.apiKey;
         if (model && model.value !== cfg.model) model.value = cfg.model;
+        if (imgModel && imgModel.value !== (cfg.imageModel || '')) imgModel.value = cfg.imageModel || '';
         const hint = $('frameChannelHint');
         if (hint) {
             if (ch !== 'api') hint.textContent = '用本机已装的助手，不花 Key';
@@ -1372,7 +1374,8 @@
         return {
             baseUrl: ($('frameApiBase') && $('frameApiBase').value) || '',
             apiKey: ($('frameApiKey') && $('frameApiKey').value) || '',
-            model: ($('frameApiModel') && $('frameApiModel').value) || ''
+            model: ($('frameApiModel') && $('frameApiModel').value) || '',
+            imageModel: ($('frameApiImageModel') && $('frameApiImageModel').value) || ''
         };
     }
     function bindChannelUI() {
@@ -1381,7 +1384,7 @@
         syncChannelUI();
         const sel = $('frameChannel');
         if (sel) sel.addEventListener('change', () => { P.setChannel(sel.value); syncChannelUI(); });
-        for (const id of ['frameApiBase', 'frameApiKey', 'frameApiModel']) {
+        for (const id of ['frameApiBase', 'frameApiKey', 'frameApiModel', 'frameApiImageModel']) {
             const el = $(id); if (!el) continue;
             el.addEventListener('change', () => { P.save(apiFormCfg()); syncChannelUI(); });
         }

@@ -3722,6 +3722,9 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
         bindBtn('btnFramePanel', () => {
             if (window.QfsFramePanel) { window.QfsFramePanel.init(this); window.QfsFramePanel.open(); }
         });
+        bindBtn('btnZineOpen', () => {
+            if (window.QfsZinePanel) { window.QfsZinePanel.init(); window.QfsZinePanel.show(); }
+        });
         bindBtn('settingsClose', () => this.closeSettings());
         const settingsTabs = Array.from(document.querySelectorAll('#settingsModal .settings-tab'));
         settingsTabs.forEach((b) => {

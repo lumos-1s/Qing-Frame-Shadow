@@ -3873,3 +3873,37 @@ input.pw-zoom-range:hover::-webkit-slider-thumb { background: #f2ddab; }
     }
     #inspTabs .tab.tab-more { min-width: 44px; }
 }
+/* ── 拾景纸刊：AI 造型标题栏入口 + 纸刊弹层 ── */
+.zine-entry { margin-right: auto; margin-left: calc(10px * var(--font-scale)); }
+.zine-card-modal { width: calc(760px * var(--font-scale)); max-width: 94vw; max-height: 90vh; display: flex; flex-direction: column; }
+.zine-body { display: flex; flex-direction: column; gap: var(--sp-2); padding: calc(16px * var(--font-scale)); overflow: auto; min-height: 0; }
+.zine-intro { margin: 0; font-size: var(--fs-12); color: var(--text-3); line-height: 1.6; }
+.zine-compose { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: flex-end; }
+.zine-field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 180px; }
+.zine-field > span { font-size: var(--fs-11); color: var(--text-3); }
+.zine-field input, .zine-field select {
+    font: inherit; font-size: var(--fs-13); padding: calc(7px * var(--font-scale)) calc(10px * var(--font-scale));
+    background: var(--surface-2, var(--surface)); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-s);
+    width: 100%;
+}
+.zine-field input:focus, .zine-field select:focus { outline: none; border-color: var(--brand-gold); }
+.zine-row { display: flex; gap: var(--sp-2); flex: 1 1 340px; }
+.zine-make { flex: 0 0 auto; }
+.zine-status { font-size: var(--fs-12); color: var(--text-3); min-height: 1.2em; }
+.zine-status.bad { color: var(--bad, #c0392b); }
+.zine-brief {
+    font-size: var(--fs-11); color: var(--text-3); line-height: 1.5; white-space: pre-line;
+    padding: calc(8px * var(--font-scale)) calc(10px * var(--font-scale));
+    background: var(--surface-2, var(--surface)); border: 1px solid var(--border); border-radius: var(--r-s);
+}
+.zine-results { display: flex; flex-wrap: wrap; gap: var(--sp-3); overflow: auto; min-height: 0; }
+.zine-empty { flex: 1 1 100%; padding: 40px 12px; text-align: center; font-size: var(--fs-13); color: var(--text-3); border: 1px dashed var(--border); border-radius: var(--r-m); }
+.zine-card {
+    flex: 0 1 300px; display: flex; flex-direction: column; gap: var(--sp-2);
+    border: 1px solid var(--border); border-radius: var(--r-m); background: var(--surface-2, var(--surface)); overflow: hidden;
+}
+.zine-card > img { width: 100%; height: 380px; object-fit: contain; background: var(--canvas-bg, #1b1b1b); display: block; }
+.zine-card-meta { padding: calc(10px * var(--font-scale)); display: flex; flex-direction: column; gap: 6px; }
+.zine-card-name { font-size: var(--fs-13); color: var(--text); font-weight: 500; }
+.zine-card-why { font-size: var(--fs-11); color: var(--text-3); line-height: 1.55; }
+.zine-card-acts { display: flex; gap: var(--sp-2); margin-top: 4px; }

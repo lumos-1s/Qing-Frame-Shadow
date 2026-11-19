@@ -2250,11 +2250,66 @@
     </div>
 
 
+    <!-- ═══ 拾景纸刊：把自己的照片变成一张纸上作品 ═══ -->
+    <div id="zineModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="zineModalTitle">
+        <div class="modal-card zine-card-modal">
+            <div class="modal-header">
+                <span class="modal-title" id="zineModalTitle">拾景纸刊</span>
+                <button id="zineClose" class="modal-close" title="关闭" aria-label="关闭">&times;</button>
+            </div>
+            <div class="zine-body">
+                <p class="zine-intro">照片提供事实，创作决定如何留下它。选一条路径，让模型读一遍现场，再把它重新装订成一页。</p>
+                <div class="zine-compose">
+                    <label class="zine-field"><span>创作路径</span>
+                        <select id="zinePath" aria-label="创作路径">
+                            <option value="collage">实景拼贴 · 保留照片作为锚点</option>
+                            <option value="distill">影像蒸馏 · 不留照片，重新创作</option>
+                        </select>
+                    </label>
+                    <label class="zine-field"><span>主体（可选）</span>
+                        <input type="text" id="zineSubject" placeholder="如：银杏下的背影" aria-label="画面主体" />
+                    </label>
+                    <label class="zine-field"><span>情绪（可选）</span>
+                        <input type="text" id="zineMood" placeholder="如：秋末的等待" aria-label="情绪方向" />
+                    </label>
+                    <label class="zine-field"><span>题字（可选）</span>
+                        <input type="text" id="zineText" placeholder="留空则由模型根据画面题一句" aria-label="题字" />
+                    </label>
+                    <div class="zine-row">
+                        <label class="zine-field"><span>题字语言</span>
+                            <select id="zineLang" aria-label="题字语言">
+                                <option value="en">英文（默认）</option>
+                                <option value="zh">中文</option>
+                                <option value="bi">中英对照</option>
+                            </select>
+                        </label>
+                        <label class="zine-field"><span>画布</span>
+                            <select id="zineRatio" aria-label="画布比例">
+                                <option value="">按照片方向</option>
+                                <option value="3:5">竖版 3:5</option>
+                                <option value="5:3">横版 5:3</option>
+                                <option value="4:5">竖版 4:5</option>
+                            </select>
+                        </label>
+                    </div>
+                    <button type="button" class="mini-btn primary zine-make" id="btnZineMake">生成纸刊</button>
+                </div>
+                <div class="frame-progress" id="zineProgress" hidden>
+                    <span class="frame-progress-dot"></span><span id="zineProgressText">正在编译画面描述…</span>
+                </div>
+                <div class="zine-status" id="zineStatus" role="status"></div>
+                <div class="zine-brief" id="zineBrief" hidden></div>
+                <div class="zine-results" id="zineResults"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- ═══ AI 造型：一句话生成多方案画廊，点选即用 ═══ -->
     <div id="frameModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="frameModalTitle">
         <div class="modal-card frame-card">
             <div class="modal-header">
                 <span class="modal-title" id="frameModalTitle">AI 造型</span>
+                <button type="button" id="btnZineOpen" class="mini-btn zine-entry" title="把自己的照片做成一张纸上作品">拾景纸刊</button>
                 <button id="frameModalClose" class="modal-close" title="关闭" aria-label="关闭">&times;</button>
             </div>
             <div class="frame-body frame-studio">
@@ -2343,10 +2398,13 @@
                             <input type="text" id="frameApiBase" class="frame-api-input" placeholder="接口地址，如 https://api.openai.com/v1（留空走内置默认）" autocomplete="off" spellcheck="false" />
                             <input type="password" id="frameApiKey" class="frame-api-input" placeholder="API Key（只存在本机）" autocomplete="off" spellcheck="false" />
                             <div class="frame-adv-row">
-                                <input type="text" id="frameApiModel" class="frame-api-input" placeholder="模型，如 gpt-4o-mini" autocomplete="off" spellcheck="false" />
+                                <input type="text" id="frameApiModel" class="frame-api-input" placeholder="文字模型，如 gpt-4o-mini" autocomplete="off" spellcheck="false" />
                                 <button type="button" class="mini-btn" id="btnFrameApiTest">测试连接</button>
                             </div>
-                            <div class="frame-api-note" id="frameApiNote">任何 OpenAI 兼容接口都行：官方 / 中转 / 自建网关。填完先用「测试连接」验一次。打包版还可以用环境变量 QFS_AI_PROXY 指到内置中转。</div>
+                            <div class="frame-adv-row">
+                                <input type="text" id="frameApiImageModel" class="frame-api-input" placeholder="图像模型（纸刊用），如 gemini-2.5-flash-image；留空用文字模型名" autocomplete="off" spellcheck="false" />
+                            </div>
+                            <div class="frame-api-note" id="frameApiNote">任何 OpenAI 兼容接口都行：官方 / 中转 / 自建网关。纸刊需要图像模型（/images/generations 或 /images/edits），留空则沿用上面的文字模型名。打包版还可以用环境变量 QFS_AI_PROXY 指到内置中转。</div>
                         </div>
                         <div class="frame-adv-row">
                             <select id="frameAgentSelect" class="frame-agent-select" aria-label="选择本机编程助手"><option value="">检测中…</option></select>
@@ -2677,6 +2735,8 @@
     <script src="js/app-frame-lint.js"></script>
     <script src="js/app-frame-plans.js"></script>
     <script src="js/app-ai-provider.js"></script>
+    <script src="js/app-zine-compiler.js"></script>
+    <script src="js/app-zine-panel.js"></script>
     <script src="js/app-frame-panel.js"></script>
 </body>
 </html>

@@ -15,7 +15,7 @@
 
     const CFG_KEY = 'qfs_ai_api_v1';
     const CH_KEY = 'qfs_ai_channel';
-    const DEFAULTS = { baseUrl: '', apiKey: '', model: '' };
+    const DEFAULTS = { baseUrl: '', apiKey: '', model: '', imageModel: '' };
 
     function read(k, d) { try { return localStorage.getItem(k) || d; } catch (_) { return d; } }
     function write(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (_) {} }
@@ -28,7 +28,8 @@
             return {
                 baseUrl: String((v && v.baseUrl) || ''),
                 apiKey: String((v && v.apiKey) || ''),
-                model: String((v && v.model) || '')
+                model: String((v && v.model) || ''),
+                imageModel: String((v && v.imageModel) || '')
             };
         } catch (_) { return Object.assign({}, DEFAULTS); }
     }
@@ -37,7 +38,8 @@
         const out = {
             baseUrl: String(c.baseUrl || '').trim().slice(0, 500),
             apiKey: String(c.apiKey || '').trim().slice(0, 400),
-            model: String(c.model || '').trim().slice(0, 200)
+            model: String(c.model || '').trim().slice(0, 200),
+            imageModel: String(c.imageModel || '').trim().slice(0, 200)
         };
         write(CFG_KEY, JSON.stringify(out));
         return out;
@@ -74,6 +76,18 @@
         try { return await api.aiModels(Object.assign(load(), cfg || {})); }
         catch (e) { return { ok: false, error: '调用失败：' + (e && e.message ? e.message : String(e)) }; }
     }
+    // 图像生成：prompt 必填，source 可选（实景拼贴带参考图，影像蒸馏不带）
+    async function image(params) {
+        const api = bridge();
+        if (typeof api.aiImage !== 'function') return { ok: false, error: '图像通道只在桌面版可用' };
+        const cfg = load();
+        if (!cfg.apiKey) return { ok: false, error: '还没填 API Key' };
+        if (!cfg.imageModel && !cfg.model) return { ok: false, error: '还没填图像模型名' };
+        const p = params && typeof params === 'object' ? params : {};
+        try { return await api.aiImage(cfg, p); }
+        catch (e) { return { ok: false, error: '调用失败：' + (e && e.message ? e.message : String(e)) }; }
+    }
+    function imageReady() { const c = load(); return !!(c.apiKey && (c.imageModel || c.model)); }
     // 连接测试：一句话、极短回复，只验「地址/Key/模型」三件事对不对
     async function test(cfg) {
         const c = Object.assign(load(), cfg || {});
@@ -84,5 +98,5 @@
         return { ok: true, text: String(r.content || '').trim().slice(0, 40), model: r.model || c.model };
     }
 
-    return { CFG_KEY, load, save, channel, setChannel, ready, mask, chat, models, test };
+    return { CFG_KEY, load, save, channel, setChannel, ready, mask, chat, models, image, imageReady, test };
 });

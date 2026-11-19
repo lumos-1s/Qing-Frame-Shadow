@@ -125,6 +125,18 @@ ipcMain.handle('ai:chat', (_e, cfg, messages) => {
     return { ok: true, content: '好的，这是 4 款：\n```json\n' + JSON.stringify(plans) + '\n```' };
 });
 ipcMain.handle('ai:models', () => ({ ok: true, models: ['mock-1'] }));
+// 纸刊：mock 图像服务，记录 prompt/source，返回一张真 PNG
+let zineCalls = 0;
+let lastZinePrompt = '';
+let lastZineSource = '';
+const ZINE_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+ipcMain.handle('ai:image', (_e, cfg, params) => {
+    zineCalls++;
+    if (!cfg || !cfg.apiKey) return { ok: false, error: '缺配置（模拟）' };
+    lastZinePrompt = String((params && params.prompt) || '');
+    lastZineSource = String((params && params.source) || '');
+    return { ok: true, image: ZINE_PNG, path: lastZineSource ? 'edits' : 'generations' };
+});
 
 ipcMain.handle('agent:prompt', (_e, _key, text) => {
     const t = String(text || '');
@@ -781,6 +793,56 @@ app.whenReady().then(async () => {
         hidden: document.getElementById('frameError').hidden })`);
     check(garbage.hidden === false && /可解析/.test(garbage.msg), '模型回垃圾时给出可读原因', JSON.stringify(garbage));
     await exec(`window.QfsAiProvider.setChannel('local'); true`);
+
+    // 16) 拾景纸刊：入口、两种路径、图像模型配置、弹层开关、无通道时给可读原因
+    const zineDom = await exec(`({
+        entry: !!document.getElementById('btnZineOpen'),
+        modal: !!document.getElementById('zineModal'),
+        paths: [...(document.getElementById('zinePath')?.options || [])].map(o => o.value),
+        imageModel: !!document.getElementById('frameApiImageModel'),
+        compiler: !!window.QfsZine,
+        panel: !!window.QfsZinePanel
+    })`);
+    check(zineDom.entry && zineDom.modal && zineDom.compiler && zineDom.panel,
+        '纸刊入口 / 弹层 / 编译器 / 面板都已挂载', JSON.stringify(zineDom));
+    check(zineDom.paths.join(',') === 'collage,distill' && zineDom.imageModel,
+        '两条创作路径与图像模型配置都在', JSON.stringify(zineDom.paths));
+
+    await exec(`document.getElementById('btnZineOpen').click(); true`);
+    await sleep(250);
+    const zineOpen = await exec(`({ shown: document.getElementById('zineModal').style.display === 'flex',
+        brief: !!document.getElementById('zineBrief'), results: !!document.getElementById('zineResults') })`);
+    check(zineOpen.shown && zineOpen.brief && zineOpen.results, '点入口能打开纸刊弹层', JSON.stringify(zineOpen));
+
+    // 图像模型没配时点生成 → 明确提示，不发请求
+    await exec(`window.QfsAiProvider.save({ baseUrl:'', apiKey:'', model:'', imageModel:'' }); window.QfsZinePanel.init(); document.getElementById('btnZineMake').click(); true`);
+    await sleep(250);
+    const zineNoKey = await exec(`document.getElementById('zineStatus').textContent`);
+    check(/Key|配好/.test(zineNoKey), '没配图像通道时给出可读原因', zineNoKey);
+
+    // 配好通道 → 真跑一次：prompt 被编译、源图带上、结果进画廊
+    const beforeZine = zineCalls;
+    await exec(`(() => {
+        window.QfsAiProvider.save({ baseUrl:'https://mock/v1', apiKey:'sk-zine', model:'text', imageModel:'image-1' });
+        window.QfsAiProvider.setChannel('api');
+        document.getElementById('zinePath').value = 'collage';
+        document.getElementById('zineSubject').value = '银杏下的背影';
+        document.getElementById('btnZineMake').click();
+        return true;
+    })()`);
+    await sleep(900);
+    const zineDone = await exec(`({
+        cards: document.querySelectorAll('#zineResults .zine-card').length,
+        img: !!document.querySelector('#zineResults .zine-card img'),
+        hasUse: !!document.querySelector('#zineResults .zine-card-acts button'),
+        status: document.getElementById('zineStatus').textContent
+    })`);
+    check(zineCalls - beforeZine === 1, '纸刊只调一次图像接口', String(zineCalls - beforeZine));
+    check(/paper-zine poster/.test(lastZinePrompt) && /银杏下的背影/.test(lastZinePrompt),
+        '编译后的提示词真的送到了图像接口', lastZinePrompt.slice(0, 60));
+    check(/^data:image\//.test(lastZineSource), '实景拼贴把源照片一并送去', lastZineSource.slice(0, 24));
+    check(zineDone.cards === 1 && zineDone.img && zineDone.hasUse, '成品进画廊且能导入', JSON.stringify(zineDone));
+    await exec(`document.getElementById('zineClose').click(); true`);
 
     console.log(failures.length ? `\n未通过 ${failures.length} 项：${failures.join(', ')}` : '\nALL PASS');
     win.destroy();
