@@ -478,6 +478,73 @@ app.whenReady().then(async () => {
     const esc = await exec(`({ n: App.selectedEls.length, guides:(App._aiGuides||[]).length })`);
     check(esc.n === 0 && esc.guides === 0, 'Esc 取消选中并清掉参考线', JSON.stringify(esc));
 
+    // Esc 的「取消修改」语义：拖动到一半按 Esc 要回到按下前，而不是把半截位移留在模板里。
+    const cancelDrag = await exec(`(() => {
+        const t = App.template.aiLayers || [];
+        const l = t.find(x => x.type === 'text');
+        const cv = App.dom.canvas, r = cv.getBoundingClientRect();
+        const c = window.AiLayers.layerCenter(l, cv.width, cv.height);
+        const sx = r.left + c.x / cv.width * r.width, sy = r.top + c.y / cv.height * r.height;
+        App.selectedEls = [{ kind: 'aiLayer', obj: l, index: t.indexOf(l) }];
+        const undo0 = App.undoStack.length;
+        document.getElementById('previewCanvas').dispatchEvent(new MouseEvent('mousedown', {
+            bubbles: true, button: 0, clientX: sx, clientY: sy, screenX: sx, screenY: sy }));
+        window.dispatchEvent(new MouseEvent('mousemove', {
+            bubbles: true, altKey: true, clientX: sx + 70, clientY: sy + 40, screenX: sx + 70, screenY: sy + 40 }));
+        const moved = { x: l.x, y: l.y, drag: !!App._dragEl };
+        const undoDrag = App.undoStack.length;
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const res = { x0: l.x, y0: l.y, moved, drag: !!App._dragEl, sel: App.selectedEls.length,
+            undo0, undoDrag, undo1: App.undoStack.length, guides: (App._aiGuides || []).length };
+        window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        return res;
+    })()`);
+    check(cancelDrag.moved.drag && Math.abs(cancelDrag.moved.x - cancelDrag.x0) > 0.002
+        && cancelDrag.drag === false && cancelDrag.sel === 0 && cancelDrag.guides === 0
+        && cancelDrag.undo1 === cancelDrag.undo0,
+        '拖动中按 Esc 回到按下前并丢弃本次撤销步',
+        JSON.stringify(cancelDrag));
+
+    // 输入框还有焦点时点画布元素：以前 mousedown 的 preventDefault 会把焦点留在输入框，
+    // setupShortcuts 把随后的 Esc 当成「正在打字」直接 return，选择框永远取消不掉。
+    const focusEsc = await exec(`(() => {
+        const t = App.template.aiLayers || [];
+        const l = t.find(x => x.type === 'text');
+        const cv = App.dom.canvas, r = cv.getBoundingClientRect();
+        const c = window.AiLayers.layerCenter(l, cv.width, cv.height);
+        const sx = r.left + c.x / cv.width * r.width, sy = r.top + c.y / cv.height * r.height;
+        App.selectedEls = [];
+        const inp = document.createElement('input');
+        inp.type = 'text'; inp.id = 'tmpEscFocus';
+        inp.style.cssText = 'position:fixed;left:8px;bottom:8px;width:60px;z-index:99999';
+        document.body.appendChild(inp); inp.focus();
+        const before = document.activeElement === inp;
+        document.getElementById('previewCanvas').dispatchEvent(new MouseEvent('mousedown', {
+            bubbles: true, button: 0, clientX: sx, clientY: sy, screenX: sx, screenY: sy }));
+        const blurred = document.activeElement !== inp;
+        const selected = App.selectedEls.length;
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const res = { before, blurred, selected, after: App.selectedEls.length };
+        window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        inp.remove();
+        return res;
+    })()`);
+    check(focusEsc.before && focusEsc.blurred && focusEsc.selected > 0 && focusEsc.after === 0,
+        '输入框聚焦时点画布元素后 Esc 仍能取消', JSON.stringify(focusEsc));
+
+    // 点画布外的留白也要能退出编辑（原来的 document click 分支只有注释，没有行为）。
+    const outside = await exec(`(() => {
+        const t = App.template.aiLayers || [];
+        const l = t.find(x => x.type === 'text');
+        App.selectedEls = [{ kind: 'aiLayer', obj: l, index: t.indexOf(l) }];
+        if (App.refreshElList) App.refreshElList();
+        const stage = document.querySelector('.stage');
+        stage.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+        stage.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return { n: App.selectedEls.length };
+    })()`);
+    check(outside.n === 0, '点画布外取消选中', JSON.stringify(outside));
+
     // 3.6) 多选照片 → 批量套用
     await exec(`(() => { App.selectedIdx = [0, 1]; App.currentIdx = 0;
         document.getElementById('frameModalClose').click();

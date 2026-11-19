@@ -204,11 +204,7 @@ window.App = Object.assign(window.App || {}, {
             else if (e.key === 'ArrowRight' && this.images && this.images.length > 1) { e.preventDefault(); this.selectImage((this.currentIdx + 1) % this.images.length); }
             else if (e.key === 'Escape' && !typing && this.selectedEls && this.selectedEls.length) {
                 e.preventDefault();
-                this.selectedEls = [];
-                this._aiGuides = null; this._aiSnap = null;
-                if (this.refreshElList) this.refreshElList();
-                if (this.scheduleRender) this.scheduleRender(true);
-                this.setStatus('已取消选中元素');
+                this.clearElementSelection();
             }
         });
     },

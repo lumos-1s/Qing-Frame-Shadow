@@ -3,6 +3,17 @@
 // Logo 编辑时的放大上限（绘制宽度，单位与 el.size / 缩放输入框一致）
 const LOGO_MAX_SIZE = 500;
 
+// 拖动/缩放/旋转前要记住的几何字段。只抄几何，不抄 dataUrl / src 这类大字符串：
+// 每次按下都整份克隆 Logo 的 base64 会明显拖慢 mousedown。
+const EL_GEOMETRY_KEYS = [
+    'x', 'y', 'rel', 'rx', 'ry', 'offsetX', 'offsetY', 'align',
+    'rotation', 'size', 'scale',
+    'fontSize', 'letterSpacing', 'strokeWidth',
+    'shadowBlur', 'shadowOffsetX', 'shadowOffsetY',
+    'cx', 'cy', 'r', 'x1', 'y1', 'x2', 'y2',
+    'w', 'h', 'radius', 'width', 'maxW', 'maxLines'
+];
+
 window.App = Object.assign(window.App || {}, {
     screenToCanvas(e) {
         const canvas = this.dom.canvas;
@@ -46,6 +57,57 @@ window.App = Object.assign(window.App || {}, {
         if (!cands.length) return null;
         cands.sort((a, b) => (b.z || 0) - (a.z || 0));
         return cands[0];
+    },
+
+    // 统一的「取消选中」出口：Esc、点画布外、AI 面板切换都用它，
+    // 避免只在某个分支清 selectedEls 而参考线/选择框/右侧列表残留。
+    clearElementSelection(opts) {
+        const had = !!(this.selectedEls && this.selectedEls.length);
+        this.selectedEls = [];
+        this._aiGuides = null;
+        this._aiSnap = null;
+        if (this._hideRotateHint) this._hideRotateHint();
+        if (this.refreshElList) this.refreshElList();
+        if (this.scheduleRender) this.scheduleRender(true);
+        if (had && !(opts && opts.silent)) this.setStatus('已取消选中元素');
+        return had;
+    },
+
+    // 记录/还原元素的几何字段：Esc 取消拖动时要回到按下前，而 AI 图层、
+    // 锚定文字解锁都会新增/删除字段，单纯赋值 x/y 还原不干净。
+    snapshotElementGeometry(el) {
+        const out = {};
+        if (!el || typeof el !== 'object') return out;
+        EL_GEOMETRY_KEYS.forEach(k => {
+            if (Object.prototype.hasOwnProperty.call(el, k)) out[k] = el[k];
+        });
+        return out;
+    },
+
+    restoreElementGeometry(el, snap) {
+        if (!el || typeof el !== 'object' || !snap) return false;
+        EL_GEOMETRY_KEYS.forEach(k => {
+            if (Object.prototype.hasOwnProperty.call(snap, k)) el[k] = snap[k];
+            else delete el[k];
+        });
+        return true;
+    },
+
+    // 手势第一次真正产生改动时才压撤销。记下 pushUndo 会清空的重做栈，
+    // Esc 取消时原样还回去，避免「取消一次拖动」把用户原有的重做记录吃掉。
+    pushGestureUndo(holder) {
+        if (!holder || holder.undoPushed) return;
+        holder.redo0 = (this.redoStack || []).slice();
+        holder.undoPushed = true;
+        this.pushUndo();
+    },
+
+    dropGestureUndo(holder) {
+        if (!holder || !holder.undoPushed) return;
+        if (this.undoStack && this.undoStack.length) this.undoStack.pop();
+        this.redoStack = holder.redo0 || [];
+        if (this.updateHistoryButtons) this.updateHistoryButtons();
+        holder.undoPushed = false;
     },
 
     // 测量文字用的离屏 ctx：AI 图层的 textLayout 需要 measureText，
@@ -616,6 +678,7 @@ window.App = Object.assign(window.App || {}, {
             base: Number(sel.obj.rotation) || 0,
             a0: Math.atan2(py - m.cy, px - m.cx),
             moved: false,
+            orig: this.snapshotElementGeometry(sel.obj),
         };
         return this._rotEl;
     },
@@ -630,9 +693,57 @@ window.App = Object.assign(window.App || {}, {
         let deg = r.base + (a - r.a0) * 180 / Math.PI;
         deg = ((deg % 360) + 360) % 360;
         if (shift) deg = (Math.round(deg / 15) * 15) % 360;
-        r.ref.rotation = Math.round(deg * 10) / 10;
-        r.moved = true;
+        const next = Math.round(deg * 10) / 10;
+        if (!r.moved) {
+            // 角度没变（常见于 Shift 吸附回原位）就不留撤销步
+            if (next === r.base) return;
+            r.moved = true;
+            this.pushGestureUndo(r);
+        }
+        r.ref.rotation = next;
         this.scheduleRender();
+    },
+
+    // Esc 的「取消」语义：拖动/缩放/旋转到一半时按下，回到按下前的几何，
+    // 并丢掉这次手势刚压入的撤销步；松手后不会再把半截修改提交出去。
+    cancelElementGesture() {
+        const drag = this._dragEl;
+        const resize = this._resizeEl;
+        const rot = this._rotEl;
+        if (!drag && !resize && !rot) return false;
+        let changed = false;
+        if (drag) {
+            this._dragEl = null;
+            if (drag.moved) changed = this.restoreElementGeometry(drag.ref, drag.orig) || changed;
+            this.dropGestureUndo(drag);
+        }
+        if (resize) {
+            this._resizeEl = null;
+            if (resize.moved) changed = this.restoreElementGeometry(resize.ref, resize.orig) || changed;
+            this.dropGestureUndo(resize);
+        }
+        if (rot) {
+            this._rotEl = null;
+            if (rot.moved) changed = this.restoreElementGeometry(rot.ref, rot.orig) || changed;
+            this.dropGestureUndo(rot);
+        }
+        this._skipAiLayer = null;
+        this._skipUserEl = null;
+        this._backingCap = 0;
+        this._aiGuides = null; this._aiSnap = null; this._aiSnapOff = false;
+        this._dropDragBase();
+        this._logoSnapV = null; this._logoSnapH = null;
+        this._logoSnapEdgeV = null; this._logoSnapEdgeH = null;
+        this._logoSnapPhotoV = null; this._logoSnapPhotoH = null;
+        this._hideRotateHint();
+        if (this.dom && this.dom.canvas) this.dom.canvas.style.cursor = '';
+        if (changed) {
+            this.saveCurrentTemplate();
+            this.setStatus('已取消本次修改');
+        }
+        this.refreshElList();
+        this.scheduleRender(true);
+        return true;
     },
 
     // 四角缩放手柄：drawSelectionBox 把四个角的物理像素坐标存在 _resizeHandles。
@@ -667,7 +778,8 @@ window.App = Object.assign(window.App || {}, {
             this._dropDragBase();
             this._hideRotateHint();
             this._resizeEl = { ref: sel.obj, isAi: true, cx, cy,
-                d0: Math.max(4, Math.hypot(pt.x - cx, pt.y - cy)), moved: false };
+                d0: Math.max(4, Math.hypot(pt.x - cx, pt.y - cy)), moved: false,
+                orig: this.snapshotElementGeometry(sel.obj) };
             return this._resizeEl;
         }
         if (sel.kind !== 'text') return null;
@@ -692,6 +804,7 @@ window.App = Object.assign(window.App || {}, {
             sx0: Number(sel.obj.shadowOffsetX) || 0,
             sy0: Number(sel.obj.shadowOffsetY) || 0,
             moved: false,
+            orig: this.snapshotElementGeometry(sel.obj),
         };
         return this._resizeEl;
     },
@@ -702,7 +815,7 @@ window.App = Object.assign(window.App || {}, {
         if (r.isAi) {
             const d = Math.hypot(pt.x - r.cx, pt.y - r.cy);
             if (!r.moved && Math.abs(d - r.d0) < 2) return false;
-            if (!r.moved) { r.moved = true; this.pushUndo(); }
+            if (!r.moved) { r.moved = true; this.pushGestureUndo(r); }
             const cv = this.dom.canvas;
             const ratio = Math.max(0.05, Math.min(20, d / r.d0));
             window.AiLayers.scaleLayer(r.ref, ratio, cv.width, cv.height);
@@ -720,7 +833,7 @@ window.App = Object.assign(window.App || {}, {
         if (!r.moved && Math.abs(d - r.d0) < 2) return false;
         if (!r.moved) {
             r.moved = true;
-            this.pushUndo();
+            this.pushGestureUndo(r);
             // 锚定文字没有可写的中心；先按当前几何中心解锁，再缩放
             if (r.ref.align !== 'free') this.promoteTextToFree(r.ref);
         }

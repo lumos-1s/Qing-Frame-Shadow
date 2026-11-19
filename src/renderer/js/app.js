@@ -1172,6 +1172,14 @@ window.App = {
             const pk = this.tplPuzzle();
             if ((!this.image && !pk) || e.button !== 0) return;
             this._hideRotateHint();
+            // 画布按下时主动把焦点从右侧输入框收回。下面命中元素会 preventDefault()，
+            // 浏览器因此不会自动移动焦点；如果停在文本输入框里，Esc/Delete 会被
+            // setupShortcuts 当成「正在输入」直接 return —— 表现就是「点了画布元素，
+            // 却怎么都取消不掉」。这里 blur 也会顺带提交输入框的当前值。
+            const ae = document.activeElement;
+            if (ae && ae !== document.body
+                && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)
+                && typeof ae.blur === 'function') ae.blur();
             // 文字放置模式：单击只用于「定位」，不选中/不拖动/不平移；
             // 真正落字在 dblclick 里，双击位置才是用户要放字的位置。
             // 这一支必须先于拼图/元素命中，否则点在有元素的位置会被当成选中。
@@ -1251,7 +1259,8 @@ window.App = {
                 // 拖动期间画布尺寸若变化（切预览质量 / 窗口缩放），位移要按比例换算回这套口径，
                 // 否则 AI 图层会把「大画布像素」当成「小画布像素」直接飞出画面。
                 this._dragEl = { kind: el.kind, ref: el.obj, sx: e.screenX, sy: e.screenY, x: el.x0, y: el.y0,
-                    cw0: canvas.width, ch0: canvas.height, moved: false };
+                    cw0: canvas.width, ch0: canvas.height, moved: false,
+                    orig: this.snapshotElementGeometry(el.obj) };
                 // 拖动期间**不要**动 displayMax。它同时决定后备像素和 CSS 显示尺寸，
                 // 一改就是「按下瞬间整幅画面缩小」，且 x0 的口径跟着失效、元素会瞬移。
                 // 流畅度靠两件事：renderPreview 的「静态背景 + 单元素重绘」快通道，
@@ -1388,7 +1397,7 @@ window.App = {
                 if (Math.abs(dx) + Math.abs(dy) > 2) {
                     if (!this._dragEl.moved) {
                         this._dragEl.moved = true;
-                        this.pushUndo();
+                        this.pushGestureUndo(this._dragEl);
                         // 锚定文字（预设里那些贴底/贴顶的字）本来没有坐标可改。
                         // 真正开始拖的一刻才解锁：单纯点一下只是选中，模板不被改动。
                         // 解锁取的是当前几何框中心，所以这一帧画面不动。
@@ -1496,6 +1505,10 @@ window.App = {
                 const moved = this._dragEl.moved;
                 const aiLayer = this._dragEl.kind === 'aiLayer';
                 this._dragEl = null;
+                // 从画布内拖到画布外再松手时，浏览器会在 stage 上补一个 click；
+                // 那不是「点空白退出编辑」，别让刚放下的元素立刻失去选中。
+                // 下一次真正的 mousedown 会把这枚标记清掉。
+                if (moved) this._suppressClickClear = true;
                 this._skipAiLayer = null;
                 this._backingCap = 0;   // 松手恢复全分辨率（下面的 scheduleRender 会按新尺寸重绘）
                 this._aiGuides = null; this._aiSnap = null; this._aiSnapOff = false;
@@ -1620,17 +1633,23 @@ window.App = {
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') this.closeCtx();
             if (e.key !== 'Escape') return;
-            // 文字工具：Esc 先退编辑，再退「点哪放哪」，最后清掉拖角状态
+            // 文字工具：Esc 先退编辑，再退「点哪放哪」，最后取消正在进行的拖动/缩放/旋转
             if (this._textEditor) { this.cancelTextEditor(); return; }
             if (this._textPlaceMode) { this.cancelAddText(); return; }
-            if (this._resizeEl) { this._resizeEl = null; canvas.style.cursor = ''; }
+            if (this.cancelElementGesture) this.cancelElementGesture();
         });
+        document.addEventListener('mousedown', () => { this._suppressClickClear = false; });
         document.addEventListener('click', e => {
-            if (e.target === canvas) return;
-            if (e.target.closest('#inspector') || e.target.closest('.tabs')) return;
-            if (this.selectedEls.length && this._dragElMoved !== true) {
-                // 画布外点击取消选中
-            }
+            const t = e.target;
+            if (!t || t === canvas || typeof t.closest !== 'function') return;
+            if (this._suppressClickClear) { this._suppressClickClear = false; return; }
+            if (t.closest('#inspector') || t.closest('.tabs')) return;
+            // 按钮/输入控件自己的点击逻辑可能刚把某个元素选中（例如 AI 面板的
+            // 「在画布上编辑」），不能在冒泡到 document 时又把它清掉。
+            if (t.closest('button, a, input, select, textarea, label, [role="button"]')) return;
+            // 点画布外（预览留白、顶栏、侧栏空白等）= 结束这次画布编辑。
+            // 以前这里只有一行注释没有实现，用户点到没元素的留白后选择框还挂着。
+            if (this.selectedEls.length) this.clearElementSelection({ silent: true });
         });
     },
 
