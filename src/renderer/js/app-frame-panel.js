@@ -486,57 +486,73 @@
     // 图层协议只有一份：本机助手（写文件）和 API 通道（直接回 JSON）共用，避免两边漂移
     //
     // 四款必须落在四种不同「构图语法」上，而不是同一套相框换四次颜色。
-    // 池子里「破格款」和「安静款」各四个；每轮各抽两个、交替排列，
-    // 任一批都同时有破格款和安静款，换一批也不会回到同一组。
+    // 每族都带硬指标：只说「更大胆」，模型会退回「居中照片 + 四边等宽留白 + 底部一行字」；
+    // 给出照片占比、展示字下限、色块占比这些数字，构图才真的会变。
+    // 每轮抽 3 个破格族 + 1 个安静族——安静族也必须有一个压场的大元素，不许交白卷。
     const CREATIVE_FAMILIES = [
-        '满版压字：照片铺满或出血，超大标题/编号压在照片上，用实色条块垫底或阴影保证可读',
-        '偏置分栏：照片占 55%~75% 宽或高，锚定一角/一侧，另一侧用整块留白、色块和纵向信息形成不等距版式',
-        '档案票据：像档案卡/索引页，细线网格、页眉页脚、编号、日期、打孔圆点、标签块，照片是贴上去的图版',
-        '网点印刷：两到三色印刷语言，重复圆点矩阵、错位实色块、粗描边、裁切/套准标记，不用细金线',
-        '字体海报：照片只是海报里的一个图版，巨大编号/单字/短句做主视觉，信息沿边或跨版排',
-        '极简光学：大面积留白/单色，照片偏置，只用一条发丝线、一个极小标记、一个短句，靠比例和空白',
-        '取景器：相机取景语言，四角括号、三分线、中心十字、边缘刻度、曝光参数，线可以压在照片上',
-        '纸片拼贴：错位矩形纸片、投影、胶带条、手写式短句、裁切线，允许小色块压住照片角（不超过 25%）做层次'
+        { name: '满版压字', bold: true, recipe: '照片满版贴边（x=0,y=0,w=1,h=1）或至少两边贴边；一枚 size 0.10~0.13 的展示字压在照片上，用实色块或重阴影托底；标题块不超过画面 30%' },
+        { name: '偏置分栏', bold: true, recipe: '照片一边贴画布边，占 55%~75% 宽或高；另一侧必须有一个 ≥0.10 的展示编号/短句，或一块 ≥25% 版面的实色块；信息沿边纵向排' },
+        { name: '档案票据', bold: false, recipe: '至少 12 条结构线/刻度/网格线，页眉页脚齐全；照片是贴上去的图版（≤70% 宽），带 1.5%~3% 的错位投影' },
+        { name: '网点印刷', bold: true, recipe: '照片贴边；≥24 个重复圆点组成占画面 ≥20% 的矩阵；2~3 色套印，一块实色块错位 0.01~0.02；不用细金线' },
+        { name: '字体海报', bold: true, recipe: '展示字 size 0.11~0.13 做主视觉，可与照片重叠或贴边；照片 ≤60% 宽；文字与照片至少一边重叠' },
+        { name: '极简光学', bold: false, recipe: '留白 ≥50%，但必须有一个 ≥0.10 的展示字或一块 ≥35% 的单色块压场；只留一条发丝线，别用装饰填空' },
+        { name: '取景器', bold: false, recipe: '四角括号压在照片上，加三分线/中心十字/边缘刻度/曝光参数；至少一条线横穿照片，参数文字 0.014~0.02' },
+        { name: '纸片拼贴', bold: true, recipe: '≥3 张错位纸片（带投影）+ 一条胶带 + 一块色片压住照片角（≤20%）；短句像手写标注' }
     ];
-    const BOLD_FAMILIES = [0, 3, 4, 7];
-    const QUIET_FAMILIES = [1, 2, 5, 6];
-    function pickTwo(pool) {
-        const a = pool.slice();
+    function shuffled(arr) {
+        const a = arr.slice();
         for (let i = a.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             const t = a[i]; a[i] = a[j]; a[j] = t;
         }
-        return a.slice(0, 2);
+        return a;
     }
+    // 3 破格 + 1 安静：整批先站住「大胆」，安静款负责喘气，但不能空。
     function pickFamilies() {
-        const bold = pickTwo(BOLD_FAMILIES);
-        const quiet = pickTwo(QUIET_FAMILIES);
-        return [bold[0], quiet[0], bold[1], quiet[1]].map((i) => CREATIVE_FAMILIES[i]);
+        const bold = shuffled(CREATIVE_FAMILIES.filter((f) => f.bold)).slice(0, 3);
+        const quiet = shuffled(CREATIVE_FAMILIES.filter((f) => !f.bold))[0];
+        return [bold[0], quiet, bold[1], bold[2]];
+    }
+    function familyAssignment(families, keepBase) {
+        if (!Array.isArray(families) || !families.length) return '';
+        if (keepBase) {
+            return [
+                '这 4 个变体各借一种构图语法，但保留参考版的照片槽位与整体骨架：',
+                families.map((f, i) => (i + 1) + '. ' + f.name + '：借它的文字角色、母题与装饰语言，照片槽位不动。').join('\n'),
+                '变体之间至少在文字角色、母题、装饰语言三项里改两项；只换配色或字号不算。'
+            ].join('\n');
+        }
+        return [
+            '本轮四款的构图语法与顺序（不许换位、不许重复，每款先满足本族硬指标再谈装饰）：',
+            families.map((f, i) => (i + 1) + '. ' + f.name + '：' + f.recipe).join('\n'),
+            '本批硬指标：至少三款要有明确破格动作（照片贴边/满版、展示字 ≥0.08、或色块压住照片 ≥10%），至少一款第一眼不像相框（文字或色块是主体，照片只占一条/一角）。做不到就重做那一款。'
+        ].join('\n');
     }
     function creativeMethodLines() {
         return [
             '设计方法：先为每款写一句「构图句」（照片怎么放、文字扮演什么、母题是什么），再落图层。',
             '四款必须是四种不同构图语法；同一骨架只换配色或一句文案，不算四款。如果用户明确要求四款同风格/同骨架，先服从用户。',
-            '可用构图语法：' + CREATIVE_FAMILIES.join('；') + '。',
-            '反默认：除非用户点名，不要做「居中照片 + 四边等宽留白 + 底部一行字」，也不要直接复刻邮票齿孔、拍立得白边、报纸头版、胶片齿条、票根、杂志封面——这些内置预设已经有了。',
-            '创新杠杆：不对称留白、照片出血/贴边/偏置、文字压图/贴边/竖排、超大展示字（0.07~0.12）、2~3 个粗色块或重复圆点/刻度/裁切标记、半透明叠色。至少两款各用一个，至少一款第一眼不像相框。',
-            '照片位置/占比四款要不同（居中、偏左、铺满、只占下半等），不能都从 x=0.08,y=0.08,w=0.84,h=0.7 起手。',
-            '配色从照片主色/辅色或一个明确概念来，不必都用暖灰金；每条线、每个圆点都要有结构作用，别用装饰填空。'
+            '可用构图语法：' + CREATIVE_FAMILIES.map((f) => f.name).join(' / ') + '；本轮只用下面指定给这一款的语法。',
+            '反默认：不要四款都做成「照片居中 + 四边等宽留白 + 照片描边 + 底部一行字」，出现两款以上就重做；也不要直接复刻邮票齿孔、拍立得白边、报纸头版、胶片齿条、票根、杂志封面——这些内置预设已经有了。',
+            '破格动作：照片贴边/满版、文字压图/贴边、超大展示字、2~3 个粗色块或重复圆点/刻度/裁切标记、半透明叠色。',
+            '注意：照片槽位不能超出画布（x/y 在 0..1，w/h 最多到画布边），「出血」只能是贴边或满版，不要写负坐标或大于 1 的宽高。',
+            '配色从照片主色/辅色或一个明确概念来；至少两款离开「暖白底 + 黑 + 金」，可用对比色大色块或双色套印。每条线、每个圆点都要有结构作用，别用装饰填空。',
+            '落完图层逐款自检：展示字够大吗？照片贴边了吗？色块压到照片了吗？如果只是换了配色，重做。'
         ];
     }
     function layerSchemaLines() {
         return [
             '每个方案是一个「图层边框」对象，格式：',
             '{"templateName":"方案名","layers":[ ...图层... ]}',
-            'layers 从底到顶绘制，每层是以下之一（坐标为 0..1 比例，相对画布宽高）：',
-            ' {"type":"photo","x":0.08,"y":0.08,"w":0.84,"h":0.7,"radius":0.01,"fit":"cover"}',
+            'layers 从底到顶绘制，每层是以下之一（坐标为 0..1 比例，相对画布宽高）。下面示例只示意字段与写法，坐标不要照抄：',
+            ' {"type":"photo","x":0.08,"y":0.08,"w":0.84,"h":0.7,"radius":0.01,"fit":"cover"}   满版或贴边时这样写：{"type":"photo","x":0,"y":0,"w":1,"h":1,"radius":0,"fit":"cover"}',
             ' {"type":"rect","x":0.05,"y":0.05,"w":0.9,"h":0.9,"radius":0.02,"fill":"#ffffff","fillOpacity":0.9,"stroke":"#dcba79","strokeWidth":2}',
             ' {"type":"circle","cx":0.5,"cy":0.2,"r":0.08,"fill":"#129e78"}',
             ' {"type":"line","x1":0.1,"y1":0.5,"x2":0.9,"y2":0.5,"color":"#dcba79","width":2,"dash":[4,4]}',
-            ' {"type":"text","x":0.5,"y":0.92,"text":"文字","size":0.035,"color":"#f2e4c4","align":"center","weight":600,"letterSpacing":0.1,"maxW":0.8,"maxLines":1}',
+            ' {"type":"text","x":0.5,"y":0.92,"text":"文字","size":0.035,"color":"#f2e4c4","align":"center","weight":600,"letterSpacing":0.1,"maxW":0.8,"maxLines":1}   展示字示例：{"type":"text","x":0.06,"y":0.88,"text":"秋日","size":0.12,"color":"#f5efe0","align":"left","weight":800,"maxW":0.8,"maxLines":1}',
             '必须包含且只包含一个 photo 槽位：它就是照片的位置和大小，画布比例由它决定。photo 槽位短边不小于画面的 45%。',
             'photo 之前的图层画在照片下面（底色/卡纸/背景），photo 之后的图层画在照片上面（文字/线条/装饰）；不要把照片整张盖住。',
-            '文字务必带 maxW（0..1，建议 0.6~0.9）和 maxLines：正文 size 0.02~0.055，海报展示字 0.07~0.12（maxLines:1），不要超过 0.13。',
+            '文字务必带 maxW（0..1，建议 0.6~0.9）和 maxLines：正文 size 0.02~0.055，海报展示字 0.09~0.13（maxLines:1），不要超过 0.13。',
             '允许文字压在照片上，但要用实色条块垫底或阴影保证可读；任何不透明层不要盖住照片一半以上。',
             '可加 shadow:{color,blur,offsetX,offsetY,opacity}。颜色用十六进制。'
         ];
@@ -544,27 +560,24 @@
     function designRules() {
         return [
             '你是清框影边框设计师。',
-            '请生成 4 个各不相同的边框方案，在本目录写 4 个 JSON：a1.json / a2.json / a3.json / a4.json。'
+            '请生成 4 个各不相同的边框方案，在本目录写 4 个 JSON：a1.json / a2.json / a3.json / a4.json（a1~a4 依次对应本轮第 1~4 款的构图语法）。'
         ].concat(layerSchemaLines(), creativeMethodLines(), [
             '名字要体现构图或概念（如「偏置档案」「满版压字」），不要「方案一」。',
             '写好 4 个文件后只回复「完成」，不要输出 JSON 正文。'
         ]).join('\n');
     }
     function designRulesApi() {
-        const picked = pickFamilies();
         return [
             '你是清框影边框设计师。只输出一个 JSON 数组，数组里有 4 个「图层边框」对象；不要输出解释，不要用 Markdown 代码块包裹。'
         ].concat(layerSchemaLines(), creativeMethodLines(), [
-            '本轮四款分别优先用这四种构图语法：' + picked.join('；') + '。',
-            '文字必须能读：浅底深字、深底浅字；压图文字必须有实色底/色块垫底/阴影。',
-            '至少两款各用一个创新杠杆，至少一款第一眼不像相框；不要把四款都做成居中相框。'
+            '数组第 1~4 个对象依次对应本轮第 1~4 款的构图语法。',
+            '文字必须能读：浅底深字、深底浅字；压图文字必须有实色底/色块垫底/阴影。'
         ]).join('\n');
     }
-    function buildFullPrompt(promptText, base, avoid, photo, notes, rules) {
+    function buildFullPrompt(promptText, base, avoid, photo, notes, rules, families) {
         const parts = [rules || designRules(), '', '====', '用户这次的要求：' + promptText];
-        if (!base) {
-            parts.push('', '本轮四款分别优先用这四种构图语法（各用一种，不要重复）：' + pickFamilies().join('；') + '。');
-        }
+        const fam = familyAssignment(families, !!base);
+        if (fam) parts.push('', fam);
         if (photo && photo.text) {
             parts.push('', '照片速写（根据这张照片的真实像素统计，不是猜的）：');
             parts.push(photo.text);
@@ -629,11 +642,11 @@
         if (window.FramePlans && window.FramePlans.plansFromText) return window.FramePlans.plansFromText(raw);
         return [];
     }
-    async function apiGenerate(text, base, avoid, photo, notes) {
+    async function apiGenerate(text, base, avoid, photo, notes, families) {
         const P = window.QfsAiProvider;
         if (!P) throw new Error('API 通道未加载');
         const rules = designRulesApi();
-        const full = buildFullPrompt(text, base, avoid, photo, notes, rules);
+        const full = buildFullPrompt(text, base, avoid, photo, notes, rules, families);
         const r = await P.chat([{ role: 'user', content: full }], { temperature: 0.9 });
         if (!r || !r.ok) throw new Error((r && r.error) || '模型调用失败');
         const plans = parsePlansFromText(r.content);
@@ -713,6 +726,9 @@
         const my = ++runSeq;
         lastRequest = { prompt: text, base: base ? clone(base) : null, avoid: (opts.avoid || previousNames).slice(0, 8) };
         currentPrompt = text;
+        // 每轮只抽一次构图语法：之前 API 通道抽一次、buildFullPrompt 又抽一次，
+        // 一条提示里出现两组互相冲突的「本轮四款」，模型只能二选一，四族就散了。
+        const families = Array.isArray(opts.families) && opts.families.length ? opts.families : pickFamilies();
         setGeneratingUI(true);
         progress(true, base ? '正在基于这一款改 4 个变体…' : '正在洗 4 款样片…');
         agentStream = '';
@@ -722,7 +738,7 @@
             // API 通道：不碰本机助手会话与文件，直接让模型回 4 个 JSON
             if (channel === 'api') {
                 progress(true, base ? '正在基于这一款改 4 个变体…' : '正在让模型出 4 款…');
-                const plans = await apiGenerate(text, base, lastRequest.avoid, photo, opts.retry);
+                const plans = await apiGenerate(text, base, lastRequest.avoid, photo, opts.retry, families);
                 if (my !== runSeq) return;
                 await adoptPlans(plans, my, text, opts);
                 return;
@@ -757,7 +773,7 @@
             }
             if (my !== runSeq) return;
             progress(true, base ? '正在改 4 个变体…' : '正在洗 4 款样片…');
-            const fullPrompt = buildFullPrompt(text, base, lastRequest.avoid, photo, opts.retry);
+            const fullPrompt = buildFullPrompt(text, base, lastRequest.avoid, photo, opts.retry, undefined, families);
             const p = api().agentPrompt ? api().agentPrompt(agentKey, fullPrompt) : Promise.resolve(null);
             activePrompt = p;
             let r;

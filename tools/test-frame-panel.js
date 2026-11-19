@@ -174,15 +174,22 @@ app.whenReady().then(async () => {
     check(cards.imgs === 4, '每张方案都渲染出缩略图', String(cards.imgs));
     check(cards.names.join(',') === '细线胶片,圆章留白,双线极简,墨绿边框',
         '展示的是 AI 全新设计的图层边框（非现成预设）', cards.names.join(','));
-    check(/本轮四款分别优先用这四种构图语法/.test(lastAgentPrompt)
-        && /反默认/.test(lastAgentPrompt) && /满版压字/.test(lastAgentPrompt)
-        && /0\.07~0\.12/.test(lastAgentPrompt),
-        '生成提示带上四族构图 / 反默认 / 展示字上限',
-        JSON.stringify({ picked: /本轮四款/.test(lastAgentPrompt), antiDefault: /反默认/.test(lastAgentPrompt), displayType: /0\.07~0\.12/.test(lastAgentPrompt) }));
-    const famLine = /本轮四款分别优先用这四种构图语法[^：]*：([^。]+)。/.exec(lastAgentPrompt);
-    const fams = famLine ? famLine[1].split('；') : [];
-    check(fams.length === 4 && new Set(fams).size === 4,
-        '本轮四款构图语法互不重复', fams.join(' / '));
+    const agentFamBlock = /本轮四款的构图语法与顺序[^\n]*\n([\s\S]*?)\n本批硬指标/.exec(lastAgentPrompt);
+    const agentFams = agentFamBlock ? agentFamBlock[1].split('\n').filter((l) => /^\d\./.test(l)) : [];
+    const agentFamNames = agentFams.map((l) => l.replace(/^\d\.\s*/, '').split('：')[0]);
+    check(/本轮四款的构图语法与顺序/.test(lastAgentPrompt) && /反默认/.test(lastAgentPrompt)
+        && /至少三款要有明确破格动作/.test(lastAgentPrompt) && /不要写负坐标/.test(lastAgentPrompt),
+        '生成提示带上构图语法 / 反默认 / 破格配额 / 出血边界',
+        JSON.stringify({ fam: /构图语法与顺序/.test(lastAgentPrompt), quota: /至少三款/.test(lastAgentPrompt) }));
+    check((lastAgentPrompt.match(/本轮四款的构图语法与顺序/g) || []).length === 1,
+        '一条提示里只出现一组四款构图（不再抽两次打架）',
+        String((lastAgentPrompt.match(/本轮四款的构图语法与顺序/g) || []).length));
+    check(agentFams.length === 4 && new Set(agentFamNames).size === 4,
+        '本轮四款构图语法互不重复', agentFamNames.join(' / '));
+    const quietN = agentFamNames.filter((n) => ['档案票据', '极简光学', '取景器'].includes(n)).length;
+    check(quietN === 1, '每批固定 3 破格 + 1 安静（不再一半一半）', '安静款 ' + quietN + ' / ' + agentFamNames.join(' '));
+    check(agentFams.every((l) => /\d/.test((l.split('：')[1] || ''))),
+        '每族都带硬指标（照片占比 / 字号 / 色块比例）', agentFams.map((l) => l.slice(0, 26)).join(' | '));
 
     // 2.5) 示例照片下拉：列出已导入照片，切换后画廊用新照片重渲染
     const sample = await exec(`(() => {
@@ -712,10 +719,15 @@ app.whenReady().then(async () => {
         channel: window.QfsAiProvider.channel() })`);
     check(aiCalls - beforeAi === 1, 'API 通道真的被调用一次', String(aiCalls - beforeAi));
     check(apiRun.names.join(',') === '接口款一,接口款二,接口款三,接口款四', 'API 通道出 4 款（围栏 JSON 也能解析）', apiRun.names.join(','));
-    check(/本轮四款分别优先用这四种构图语法/.test(lastApiPrompt) && /反默认/.test(lastApiPrompt)
-        && /满版压字/.test(lastApiPrompt),
-        'API 提示同样带四族构图 / 反默认',
-        JSON.stringify({ picked: /本轮四款/.test(lastApiPrompt), antiDefault: /反默认/.test(lastApiPrompt) }));
+    const apiFamBlock = /本轮四款的构图语法与顺序[^\n]*\n([\s\S]*?)\n本批硬指标/.exec(lastApiPrompt);
+    const apiFams = apiFamBlock ? apiFamBlock[1].split('\n').filter((l) => /^\d\./.test(l)) : [];
+    check(/本轮四款的构图语法与顺序/.test(lastApiPrompt) && /反默认/.test(lastApiPrompt)
+        && /至少三款要有明确破格动作/.test(lastApiPrompt) && apiFams.length === 4,
+        'API 提示同样带四族构图 / 反默认 / 破格配额',
+        JSON.stringify({ fam: apiFams.length, quota: /至少三款/.test(lastApiPrompt) }));
+    check((lastApiPrompt.match(/本轮四款的构图语法与顺序/g) || []).length === 1,
+        'API 一条提示只出现一组四款构图',
+        String((lastApiPrompt.match(/本轮四款的构图语法与顺序/g) || []).length));
     check(apiRun.imgs === 4, 'API 方案都渲染出缩略图', String(apiRun.imgs));
     check(/自动修正/.test(apiRun.status), '状态栏报告自动修正处数', apiRun.status);
     check(apiRun.badges.length >= 2, '不合格方案挂上体检标记', JSON.stringify(apiRun.badges));
