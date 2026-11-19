@@ -246,15 +246,15 @@
     function toAdvice(brief) {
         if (!brief) return '';
         const tips = [];
-        if (brief.luma.tone === '偏暗') tips.push('暗调照片：用浅色/暖白卡纸或高对比亮字，别用深底深字');
-        else if (brief.luma.tone === '偏亮') tips.push('亮调照片：卡纸选中性深色或米灰，文字用深色，避免整片发白');
-        else tips.push('中间调照片：可以用主色做描边、辅色做点缀');
-        if (brief.luma.contrast === '弱') tips.push('画面反差小，边框要加一条细线或描边把照片框住');
-        if (brief.centroid.x < 0.4) tips.push('主体偏左：文字排到右侧留白，别压在主体上');
-        else if (brief.centroid.x > 0.6) tips.push('主体偏右：文字排到左侧留白，别压在主体上');
-        if (brief.sat.label === '低') tips.push('照片本身素，边框可以带一点主色/辅色提气');
-        else if (brief.sat.label === '高') tips.push('照片已经很艳，边框降低饱和度，别抢戏');
-        if (brief.ar < 0.8) tips.push('竖幅照片：适合上下分栏的版式，别把文字挤在两侧');
+        if (brief.luma.tone === '偏暗') tips.push('暗调照片：用和主体分离的明度关系，浅字/亮卡纸或高对比压字，别用深底深字');
+        else if (brief.luma.tone === '偏亮') tips.push('亮调照片：卡纸可选深色或纸灰建立反差，文字用深色，避免整片发白');
+        else tips.push('中间调照片：可以用主色/辅色做描边、色块或叠印');
+        if (brief.luma.contrast === '弱') tips.push('画面反差小：用粗细对比或实色条块建立层次，不必非加细线');
+        if (brief.centroid.x < 0.4) tips.push('主体偏左：信息优先走右侧或下缘；如果要把字压在左侧，用实色底/阴影避开主体');
+        else if (brief.centroid.x > 0.6) tips.push('主体偏右：信息优先走左侧或下缘；如果要把字压在右侧，用实色底/阴影避开主体');
+        if (brief.sat.label === '低') tips.push('照片本身素，边框可以带一点主色/辅色提气，也可以走黑白+一个荧光点色');
+        else if (brief.sat.label === '高') tips.push('照片已经很艳，边框降低用色数量，别抢戏');
+        if (brief.ar < 0.8) tips.push('竖幅照片：可以上下分栏，也可以让照片占一侧、信息走另一侧，别把文字硬塞进窄边');
         return tips.join('；') + '。';
     }
 

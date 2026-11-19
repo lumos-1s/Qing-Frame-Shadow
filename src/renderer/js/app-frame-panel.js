@@ -484,6 +484,46 @@
     // 生成规则是「会话级约定」，不能把用户第一句话写进 AGENTS.md：
     // 每次请求单独把规则 + 本轮要求/参考版一起发给助手。
     // 图层协议只有一份：本机助手（写文件）和 API 通道（直接回 JSON）共用，避免两边漂移
+    //
+    // 四款必须落在四种不同「构图语法」上，而不是同一套相框换四次颜色。
+    // 池子里「破格款」和「安静款」各四个；每轮各抽两个、交替排列，
+    // 任一批都同时有破格款和安静款，换一批也不会回到同一组。
+    const CREATIVE_FAMILIES = [
+        '满版压字：照片铺满或出血，超大标题/编号压在照片上，用实色条块垫底或阴影保证可读',
+        '偏置分栏：照片占 55%~75% 宽或高，锚定一角/一侧，另一侧用整块留白、色块和纵向信息形成不等距版式',
+        '档案票据：像档案卡/索引页，细线网格、页眉页脚、编号、日期、打孔圆点、标签块，照片是贴上去的图版',
+        '网点印刷：两到三色印刷语言，重复圆点矩阵、错位实色块、粗描边、裁切/套准标记，不用细金线',
+        '字体海报：照片只是海报里的一个图版，巨大编号/单字/短句做主视觉，信息沿边或跨版排',
+        '极简光学：大面积留白/单色，照片偏置，只用一条发丝线、一个极小标记、一个短句，靠比例和空白',
+        '取景器：相机取景语言，四角括号、三分线、中心十字、边缘刻度、曝光参数，线可以压在照片上',
+        '纸片拼贴：错位矩形纸片、投影、胶带条、手写式短句、裁切线，允许小色块压住照片角（不超过 25%）做层次'
+    ];
+    const BOLD_FAMILIES = [0, 3, 4, 7];
+    const QUIET_FAMILIES = [1, 2, 5, 6];
+    function pickTwo(pool) {
+        const a = pool.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const t = a[i]; a[i] = a[j]; a[j] = t;
+        }
+        return a.slice(0, 2);
+    }
+    function pickFamilies() {
+        const bold = pickTwo(BOLD_FAMILIES);
+        const quiet = pickTwo(QUIET_FAMILIES);
+        return [bold[0], quiet[0], bold[1], quiet[1]].map((i) => CREATIVE_FAMILIES[i]);
+    }
+    function creativeMethodLines() {
+        return [
+            '设计方法：先为每款写一句「构图句」（照片怎么放、文字扮演什么、母题是什么），再落图层。',
+            '四款必须是四种不同构图语法；同一骨架只换配色或一句文案，不算四款。如果用户明确要求四款同风格/同骨架，先服从用户。',
+            '可用构图语法：' + CREATIVE_FAMILIES.join('；') + '。',
+            '反默认：除非用户点名，不要做「居中照片 + 四边等宽留白 + 底部一行字」，也不要直接复刻邮票齿孔、拍立得白边、报纸头版、胶片齿条、票根、杂志封面——这些内置预设已经有了。',
+            '创新杠杆：不对称留白、照片出血/贴边/偏置、文字压图/贴边/竖排、超大展示字（0.07~0.12）、2~3 个粗色块或重复圆点/刻度/裁切标记、半透明叠色。至少两款各用一个，至少一款第一眼不像相框。',
+            '照片位置/占比四款要不同（居中、偏左、铺满、只占下半等），不能都从 x=0.08,y=0.08,w=0.84,h=0.7 起手。',
+            '配色从照片主色/辅色或一个明确概念来，不必都用暖灰金；每条线、每个圆点都要有结构作用，别用装饰填空。'
+        ];
+    }
     function layerSchemaLines() {
         return [
             '每个方案是一个「图层边框」对象，格式：',
@@ -494,9 +534,10 @@
             ' {"type":"circle","cx":0.5,"cy":0.2,"r":0.08,"fill":"#129e78"}',
             ' {"type":"line","x1":0.1,"y1":0.5,"x2":0.9,"y2":0.5,"color":"#dcba79","width":2,"dash":[4,4]}',
             ' {"type":"text","x":0.5,"y":0.92,"text":"文字","size":0.035,"color":"#f2e4c4","align":"center","weight":600,"letterSpacing":0.1,"maxW":0.8,"maxLines":1}',
-            '必须包含且只包含一个 photo 槽位：它就是照片的位置和大小，画布比例由它决定。',
+            '必须包含且只包含一个 photo 槽位：它就是照片的位置和大小，画布比例由它决定。photo 槽位短边不小于画面的 45%。',
             'photo 之前的图层画在照片下面（底色/卡纸/背景），photo 之后的图层画在照片上面（文字/线条/装饰）；不要把照片整张盖住。',
-            '文字务必带 maxW（0..1，建议 0.6~0.9）和 maxLines，size 不要超过 0.06，避免溢出画面。',
+            '文字务必带 maxW（0..1，建议 0.6~0.9）和 maxLines：正文 size 0.02~0.055，海报展示字 0.07~0.12（maxLines:1），不要超过 0.13。',
+            '允许文字压在照片上，但要用实色条块垫底或阴影保证可读；任何不透明层不要盖住照片一半以上。',
             '可加 shadow:{color,blur,offsetX,offsetY,opacity}。颜色用十六进制。'
         ];
     }
@@ -504,21 +545,26 @@
         return [
             '你是清框影边框设计师。',
             '请生成 4 个各不相同的边框方案，在本目录写 4 个 JSON：a1.json / a2.json / a3.json / a4.json。'
-        ].concat(layerSchemaLines(), [
-            '要求：4 款在风格/配色/留白/排版上明显不同，且都用图层组合出真实的新设计（不要只写一行文字）。',
+        ].concat(layerSchemaLines(), creativeMethodLines(), [
+            '名字要体现构图或概念（如「偏置档案」「满版压字」），不要「方案一」。',
             '写好 4 个文件后只回复「完成」，不要输出 JSON 正文。'
         ]).join('\n');
     }
     function designRulesApi() {
+        const picked = pickFamilies();
         return [
             '你是清框影边框设计师。只输出一个 JSON 数组，数组里有 4 个「图层边框」对象；不要输出解释，不要用 Markdown 代码块包裹。'
-        ].concat(layerSchemaLines(), [
-            '要求：4 款在风格/配色/留白/排版上明显不同，都用图层组合出真实设计（不要只写一行文字）。',
-            '文字必须能读：浅底深字、深底浅字；文字别压在照片主体上；照片槽位短边不小于画面的 45%。'
+        ].concat(layerSchemaLines(), creativeMethodLines(), [
+            '本轮四款分别优先用这四种构图语法：' + picked.join('；') + '。',
+            '文字必须能读：浅底深字、深底浅字；压图文字必须有实色底/色块垫底/阴影。',
+            '至少两款各用一个创新杠杆，至少一款第一眼不像相框；不要把四款都做成居中相框。'
         ]).join('\n');
     }
     function buildFullPrompt(promptText, base, avoid, photo, notes, rules) {
         const parts = [rules || designRules(), '', '====', '用户这次的要求：' + promptText];
+        if (!base) {
+            parts.push('', '本轮四款分别优先用这四种构图语法（各用一种，不要重复）：' + pickFamilies().join('；') + '。');
+        }
         if (photo && photo.text) {
             parts.push('', '照片速写（根据这张照片的真实像素统计，不是猜的）：');
             parts.push(photo.text);
@@ -528,13 +574,13 @@
         if (notes) {
             parts.push('', '上一轮生成的方案体检不合格：');
             parts.push(String(notes).slice(0, 400));
-            parts.push('这一轮逐条避开：文字不要压在照片主体上，文字与底色的对比要够（浅底深字 / 深底浅字），照片槽位短边不小于画面的 45%，别用不透明层盖住照片。');
+            parts.push('这一轮逐条避开：压图文字必须有实色底/色块垫底/阴影保证对比（浅底深字 / 深底浅字），照片槽位短边不小于画面的 45%，别用不透明层盖住照片。');
         }
         if (base) {
             const doc = { templateName: base.templateName || '参考方案', layers: layersOfDoc(base) || [] };
             parts.push('', '参考这一版（上一轮已生成的方案）。请保留它的骨架与照片槽位关系，按新要求做 4 个明显不同的变体：');
             parts.push(JSON.stringify(doc));
-            parts.push('不要把参考版原样复制，也不要只改一行文字；4 个变体之间也要有明显差异。');
+            parts.push('不要把参考版原样复制，也不要只改一行文字；4 个变体在照片位置、文字角色、母题上至少两项不同，不要只换配色或字号。');
         }
         if (Array.isArray(avoid) && avoid.length) {
             parts.push('', '避免与这些已生成过的方案重名或视觉雷同：' + avoid.slice(0, 8).join('、'));

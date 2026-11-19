@@ -61,7 +61,7 @@ check(r.code !== 0 && /templateName/.test(r.out), 'check 抓缺失 templateName'
 // 6) CLI 自描述：不带参数打印完整手册（含图层协议关键段，且不含 frontmatter）
 r = run([]);
 check(r.code === 0 && /图层/.test(r.out) && /photo/.test(r.out) && /硬规则/.test(r.out) && /maxW/.test(r.out)
-    && !/^---/.test(r.out.trim()), 'CLI 无参数打印完整手册（去 frontmatter）',
+    && /构图语法/.test(r.out) && !/^---/.test(r.out.trim()), 'CLI 无参数打印完整手册（去 frontmatter）',
     JSON.stringify({ code: r.code, hasLayers: /图层/.test(r.out), hasPhoto: /photo/.test(r.out), hasRules: /硬规则/.test(r.out) }));
 
 // 7) 入口 skill 结构：skills/qingframe/SKILL.md 有标准 frontmatter
@@ -73,6 +73,9 @@ check(/^---\r?\n/.test(sk) && /name:\s*qingframe/.test(sk) && /description:/.tes
 check(/check frames\//.test(sk) && /preview frames\//.test(sk) && !/不要跑[^\n]*check/.test(sk),
     '入口 skill 把 check / preview 写进工作流（不再劝退自检）',
     JSON.stringify({ check: /check frames\//.test(sk), preview: /preview frames\//.test(sk) }));
+check(/四种不同构图语法|构图先行/.test(sk) && /不要默认/.test(sk),
+    '入口 skill 要求四种构图语法并反默认相框',
+    JSON.stringify({ families: /四种不同构图语法|构图先行/.test(sk), antiDefault: /不要默认/.test(sk) }));
 
 // 8) 图层模式：init --blank 出的骨架必须过体检（出生即合法）
 const f5 = path.join(TMP, 'blank.json');
@@ -98,7 +101,7 @@ fs.writeFileSync(f6, JSON.stringify({
 }, null, 2), 'utf8');
 r = run(['check', f6]);
 check(r.code !== 0 && /2 个 photo/.test(r.out), 'check 抓多个 photo 槽位', r.out.trim().split('\n').slice(-4).join(' / '));
-check(/size=0\.2 超过 0\.06/.test(r.out) && /缺 maxW/.test(r.out) && /缺 maxLines/.test(r.out),
+check(/size=0\.2 超过 0\.13/.test(r.out) && /缺 maxW/.test(r.out) && /缺 maxLines/.test(r.out),
     'check 抓文字超限与缺 maxW / maxLines');
 check(/type="blur" 不认识/.test(r.out) && /超出画布/.test(r.out), 'check 抓未知图元与越界');
 
@@ -115,6 +118,21 @@ fs.writeFileSync(f7, JSON.stringify({
 r = run(['check', f7]);
 check(/未知字段 width/.test(r.out) && /未知字段 fontSize/.test(r.out) && /应写成 w/.test(r.out),
     'check 提醒错名字段并给出正确写法', r.out.trim().split('\n').filter((s) => /未知字段/.test(s)).join(' / '));
+
+// 10b) 海报级展示字（0.12）与照片出血应被允许；贴边只作提示，不当问题
+const f8 = path.join(TMP, 'poster.json');
+fs.writeFileSync(f8, JSON.stringify({
+    templateName: '偏置海报',
+    layers: [
+        { type: 'rect', x: 0, y: 0, w: 1, h: 1, fill: '#101010' },
+        { type: 'photo', x: 0, y: 0, w: 0.72, h: 1, fit: 'cover' },
+        { type: 'rect', x: 0.72, y: 0, w: 0.28, h: 1, fill: '#f2e4c4' },
+        { type: 'text', x: 0.75, y: 0.18, text: '2026', size: 0.12, color: '#1a1a1a', align: 'left', maxW: 0.22, maxLines: 1 }
+    ]
+}, null, 2), 'utf8');
+r = run(['check', f8]);
+check(r.code === 0 && /贴边|出血/.test(r.out) && !/✗/.test(r.out),
+    '海报级展示字与照片出血可过体检', r.out.trim().split('\n').slice(-4).join(' / '));
 
 // 11) 整批体检：目录里一好一坏，汇总 1/2
 const batch = path.join(TMP, 'batch');

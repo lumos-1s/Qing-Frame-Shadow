@@ -60,6 +60,8 @@ ipcMain.handle('agent:close', () => ({ ok: true }));
 ipcMain.handle('agent:cancel', () => ({ ok: true }));
 // 关键：agent:prompt 模拟 agent 写 4 个方案 JSON，并按用例切换「慢速 / 失败一次 / 变体」。
 let failOnce = false;
+let lastAgentPrompt = '';
+let lastApiPrompt = '';
 function writeDesigns(names, text) {
     const designs = [
         { name: names[0], layers: [
@@ -88,6 +90,7 @@ ipcMain.handle('ai:chat', (_e, cfg, messages) => {
     aiCalls++;
     if (!cfg || !cfg.apiKey || !cfg.model) return { ok: false, error: '缺配置（模拟）' };
     const txt = String((messages && messages[0] && messages[0].content) || '');
+    lastApiPrompt = txt;
     if (txt.indexOf('模拟空回') >= 0) return { ok: true, content: '抱歉，这次我没想法' };
     const mk = (name, color, extra) => ({
         templateName: name, layers: [
@@ -108,6 +111,7 @@ ipcMain.handle('ai:models', () => ({ ok: true, models: ['mock-1'] }));
 
 ipcMain.handle('agent:prompt', (_e, _key, text) => {
     const t = String(text || '');
+    lastAgentPrompt = t;
     if (t.indexOf('慢速') >= 0) {
         return new Promise((resolve) => setTimeout(() => {
             writeDesigns(['慢速一', '慢速二', '慢速三', '慢速四']);
@@ -170,6 +174,15 @@ app.whenReady().then(async () => {
     check(cards.imgs === 4, '每张方案都渲染出缩略图', String(cards.imgs));
     check(cards.names.join(',') === '细线胶片,圆章留白,双线极简,墨绿边框',
         '展示的是 AI 全新设计的图层边框（非现成预设）', cards.names.join(','));
+    check(/本轮四款分别优先用这四种构图语法/.test(lastAgentPrompt)
+        && /反默认/.test(lastAgentPrompt) && /满版压字/.test(lastAgentPrompt)
+        && /0\.07~0\.12/.test(lastAgentPrompt),
+        '生成提示带上四族构图 / 反默认 / 展示字上限',
+        JSON.stringify({ picked: /本轮四款/.test(lastAgentPrompt), antiDefault: /反默认/.test(lastAgentPrompt), displayType: /0\.07~0\.12/.test(lastAgentPrompt) }));
+    const famLine = /本轮四款分别优先用这四种构图语法[^：]*：([^。]+)。/.exec(lastAgentPrompt);
+    const fams = famLine ? famLine[1].split('；') : [];
+    check(fams.length === 4 && new Set(fams).size === 4,
+        '本轮四款构图语法互不重复', fams.join(' / '));
 
     // 2.5) 示例照片下拉：列出已导入照片，切换后画廊用新照片重渲染
     const sample = await exec(`(() => {
@@ -632,6 +645,10 @@ app.whenReady().then(async () => {
         channel: window.QfsAiProvider.channel() })`);
     check(aiCalls - beforeAi === 1, 'API 通道真的被调用一次', String(aiCalls - beforeAi));
     check(apiRun.names.join(',') === '接口款一,接口款二,接口款三,接口款四', 'API 通道出 4 款（围栏 JSON 也能解析）', apiRun.names.join(','));
+    check(/本轮四款分别优先用这四种构图语法/.test(lastApiPrompt) && /反默认/.test(lastApiPrompt)
+        && /满版压字/.test(lastApiPrompt),
+        'API 提示同样带四族构图 / 反默认',
+        JSON.stringify({ picked: /本轮四款/.test(lastApiPrompt), antiDefault: /反默认/.test(lastApiPrompt) }));
     check(apiRun.imgs === 4, 'API 方案都渲染出缩略图', String(apiRun.imgs));
     check(/自动修正/.test(apiRun.status), '状态栏报告自动修正处数', apiRun.status);
     check(apiRun.badges.length >= 2, '不合格方案挂上体检标记', JSON.stringify(apiRun.badges));

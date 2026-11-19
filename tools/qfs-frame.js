@@ -43,7 +43,7 @@ function parseArgs(argv) {
 
 // ── blank：给「图层 JSON」用的最小可过体检底稿 ──
 // 从零写 JSON 最容易漏 maxW / 多写一个 photo，先给一份能通过 check 的骨架，
-// agent 只改颜色、留白、文字，不必先猜字段。
+// agent 可以改构图、颜色、留白、文字，不必先猜字段。
 function blankDoc(name) {
     return {
         _about: '清框影边框描述文件（图层模式）。改完跑 check 体检、preview 看效果；可被 App 直接加载。',
@@ -197,8 +197,8 @@ function checkLayerDoc(t) {
             if (!String(l.text == null ? '' : l.text).trim()) errors.push(`${at} 文字为空`);
             if (l.size == null) warnings.push(`${at} 缺 size，引擎会按 0.04 画`);
             else if (!isNum(l.size)) errors.push(`${at} size 不是数：${JSON.stringify(l.size)}`);
-            else if (Number(l.size) > 1) errors.push(`${at} size=${l.size} 像是像素值；图层模式请用相对画布高的比例（≤0.06）`);
-            else if (Number(l.size) > 0.06) errors.push(`${at} size=${l.size} 超过 0.06 上限（硬规则），引擎会夹到 20% 画布高`);
+            else if (Number(l.size) > 1) errors.push(`${at} size=${l.size} 像是像素值；图层模式请用相对画布高的比例（≤0.13）`);
+            else if (Number(l.size) > 0.13) errors.push(`${at} size=${l.size} 超过 0.13 上限（硬规则），引擎会夹到 20% 画布高`);
             else if (Number(l.size) < 0.012) warnings.push(`${at} size=${l.size} 偏小，缩略图下会看不清`);
             if (l.maxW == null) errors.push(`${at} 缺 maxW（硬规则：文字必须带 maxW / maxLines）`);
             else if (Number(l.maxW) > 1) warnings.push(`${at} maxW=${l.maxW} 像是像素值；这里要的是占画布宽的比例`);
@@ -235,7 +235,7 @@ function checkLayerDoc(t) {
         const edge = Math.min(Number(p.x) || 0, Number(p.y) || 0,
             1 - (Number(p.x) + Number(p.w)), 1 - (Number(p.y) + Number(p.h)));
         if (edge < 0.04 - 1e-6) {
-            warnings.push(`photo 槽位离画布边只有 ${(Math.max(0, edge) * 100).toFixed(1)}%，构图建议留 4%–10%`);
+            notes.push(`photo 槽位贴边/出血（距边 ${(Math.max(0, edge) * 100).toFixed(1)}%）：如果是故意构图就保留，注意别把主信息挤在同一侧`);
         }
         notes.push(`照片槽位：x=${p.x} y=${p.y} w=${p.w} h=${p.h}（宽高比 ${(p.w / p.h).toFixed(2)}）`);
 

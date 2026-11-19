@@ -91,7 +91,7 @@ check(B.toPromptText(null, {}) === '', '无速写返回空串');
 
 // 9) 建议：暗调照片应该建议浅色卡纸
 const advice = B.toAdvice(dark);
-check(/暗调/.test(advice) && /浅色|暖白/.test(advice), '暗调给出浅色卡纸建议', advice);
+check(/暗调/.test(advice) && /明度|浅字|亮卡纸/.test(advice), '暗调给出明度分离建议', advice);
 check(/。$/.test(advice), '建议以句号结尾');
 const rightHeavy = B.toAdvice(c);
 check(/偏右|左侧/.test(rightHeavy), '重心偏右建议文字放左', rightHeavy);
