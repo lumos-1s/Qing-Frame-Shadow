@@ -1716,6 +1716,28 @@
                 amp: Math.max(4, H * (0.026 + rand() * 0.014) * k),
                 rot: (rand() - 0.5) * 0.014 * k, paper: paper, ink: ink
             });
+            // 撕口上压两片碎纸：不是装饰，是从这张照片上撕下来又落回纸面的一角。
+            // 跨在撕口线上，照片和纸才咬得住；孤零零贴在下半，就只是三块水渍。
+            const chips = 2;
+            const tearY = box.y + box.h;
+            for (let i = 0; i < chips; i++) {
+                const cw = W * (0.07 + rand() * 0.075) * (0.9 + k * 0.2);
+                const ch = H * (0.020 + rand() * 0.013);
+                const cx = W * (i ? 0.62 + rand() * 0.26 : 0.08 + rand() * 0.13);
+                const cy = tearY + (rand() - 0.35) * ch * 0.9;
+                const { pts } = tornPath(cw, ch, ['top', 'bottom'], seed + 31 + i * 9, ch * 0.36);
+                ctx.save();
+                ctx.globalAlpha = 0.92;
+                ctx.translate(cx - cw / 2, cy - ch / 2);
+                ctx.rotate((rand() - 0.5) * 0.16);
+                ctx.fillStyle = i ? pal[0] : accent;
+                polyPath(ctx, pts);
+                ctx.fill();
+                ctx.strokeStyle = rgba(parseHex(ink), 0.22);
+                ctx.lineWidth = Math.max(0.8, W * 0.0012);
+                ctx.stroke();
+                ctx.restore();
+            }
             thread(ctx, [
                 [W * 0.72, H * 0.42],
                 [W * 0.80, H * 0.58],
@@ -1959,8 +1981,9 @@
 
         // 记忆层：整张照片被压成很淡的墨阶，像隔着一层纸回想
         flatReconstruct(ctx, img, W * 0.05, H * 0.07, W * 0.90, H * 0.52, pal, {
-            levels: 5, contrast: 1.15, dither: 1.2, tint: accentOf(pal), tone: tone, seed: seed,
-            alpha: 0.30, feather: Math.min(W, H) * 0.10
+            levels: 6, contrast: 1.2, dither: 1.2, tint: accentOf(pal), tone: tone, seed: seed,
+            // 记忆层要能看出「是从那张照片想起来的」：太淡就成了一张空白纸。
+            alpha: 0.42, feather: Math.min(W, H) * 0.14
         });
 
         // 两张被撕下来的色纸条，构成大关系
