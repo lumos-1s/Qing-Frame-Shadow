@@ -349,7 +349,6 @@ async function main() {
             onBtn: document.querySelector('#pwMode [data-wall-mode="finite"]').classList.contains('is-on'),
             infiniteBtn: document.querySelector('#pwMode [data-wall-mode="infinite"]').classList.contains('is-on'),
             stored: localStorage.getItem('qfs_wall_mode'),
-            sub: document.getElementById('pwSub').textContent,
             sel0, selEdge,
             expectTop: {
                 x: b.BW <= g.clientWidth ? Math.round((g.clientWidth - b.BW) / 2) : 0,
@@ -385,9 +384,6 @@ async function main() {
         `shown=${finite.railShown} thumb=${finite.railHeight}`);
     check(finite.onBtn && !finite.infiniteBtn && finite.stored === 'finite',
         '切换按钮状态 + 选择被记住（localStorage）', `stored=${finite.stored}`);
-    // 副标题要让人看出「到头就停，不会绕回开头」。文案会改（"有首有尾"→"有限边界"），
-    // 断言语义而不是某一句原文，否则改个措辞就把用例打红。
-    check(/有限边界|有首有尾|不循环|拖到头即止/.test(finite.sub), '副标题写明"不循环"', finite.sub);
 
     // 切回无限：必须恢复 4 份拷贝、回绕、进度条隐藏，并且不再重建（避免来回切抖动）
     const backToInfinite = await exec(`(async () => {
@@ -408,8 +404,7 @@ async function main() {
             stored: localStorage.getItem('qfs_wall_mode'),
             restored,
             perBlock: document.querySelectorAll('.pw-block').length
-                ? document.querySelectorAll('.pw-block')[0].querySelectorAll('.pw-tile').length : 0,
-            sub: document.getElementById('pwSub').textContent
+                ? document.querySelectorAll('.pw-block')[0].querySelectorAll('.pw-tile').length : 0
         };
     })()`);
     check(backToInfinite.tiles === backToInfinite.perBlock * 4 && backToInfinite.blocks === 4,
@@ -419,7 +414,6 @@ async function main() {
         '切回无限墙：重新取模回绕、进度条隐藏', `wrapped=${backToInfinite.wrapped} rail=${backToInfinite.railShown}`);
     check(backToInfinite.stored === 'infinite' && backToInfinite.restored === 'infinite',
         '浏览方式重启后仍按上次选择恢复', `stored=${backToInfinite.stored} restored=${backToInfinite.restored}`);
-    check(backToInfinite.sub.indexOf('按住拖动浏览') > 0, '无限墙副标题恢复原文案', backToInfinite.sub);
 
     // 2.68 自定义封面：userData/wall-covers/<预设名>.webp 覆盖内置封面，删掉即回落
     wallCovers = { '3D卡片': 'C:/Users/lumos/Pictures/我的封面.webp' };

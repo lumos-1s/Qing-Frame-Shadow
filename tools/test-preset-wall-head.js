@@ -1,6 +1,6 @@
-// 预设墙顶部栏：窗口变窄 / 界面缩放放大时，左侧报头（品牌行）不得被右侧控件压住。
-// 这个 bug 最初是人工截图发现的，这里把量测固化成断言，覆盖窄窗两行布局与宽屏一行布局。
-// 墙头现只保留品牌行（标题/副标题已去掉），断言围绕 .pw-head-meta 与右侧控件展开。
+// 预设墙顶部栏：窗口变窄 / 界面缩放放大时，左侧报头（品牌行）不得被右侧控件压住，
+// 且**始终与控件同处一行**——曾经按 1450px 一刀切换成两行，品牌孤零零留在上面、控件另起一行，
+// 看起来像整条顶栏错位了。现在窄窗只压缩装饰与间距，不换行。
 // 用法: node tools/run-electron.js tools/test-preset-wall-head.js
 'use strict';
 
@@ -98,7 +98,7 @@ async function main() {
     })()`);
     await sleep(700);
 
-    const verify = async (label, isNarrow) => {
+    const verify = async (label) => {
         const m = await exec(MEASURE);
         const pairs = [
             ['brand', 'tools'], ['brand', 'acts'], ['brand', 'winbtns'],
@@ -117,23 +117,21 @@ async function main() {
             && m.rail.y >= m.head.bottom - 1 && m.rail.bottom <= m.grid.bottom + 2,
             `${label}：有限墙进度条贴在网格内，不穿进头部`,
             JSON.stringify({ rail: m.rail, headBottom: m.head && m.head.bottom, gridBottom: m.grid && m.grid.bottom }));
-        if (isNarrow) {
-            // 窄窗：控件整组落到第二行，不能和第一行的报头抢高度
-            check(m.right && m.meta && m.right.y >= m.meta.bottom - 2,
-                `${label}：窄窗控件整组落到第二行`,
-                JSON.stringify({ metaBottom: m.meta && m.meta.bottom, rightY: m.right && m.right.y }));
-        } else {
-            // 宽屏/全屏：仍是一行布局，控件与报头块底边对齐
-            check(m.right && m.meta && Math.abs(m.right.bottom - m.meta.bottom) <= 5,
-                `${label}：宽屏仍是一行布局`,
-                JSON.stringify({ metaBottom: m.meta && m.meta.bottom, rightBottom: m.right && m.right.bottom }));
-        }
+        // 一行布局：控件组与报头块底边对齐；换行时控件会整体落到报头下方，底边必然对不上。
+        check(m.right && m.meta && Math.abs(m.right.bottom - m.meta.bottom) <= 5
+            && m.right.y < m.meta.bottom - 2,
+            `${label}：控件与品牌同处一行`,
+            JSON.stringify({ metaBottom: m.meta && m.meta.bottom, rightY: m.right && m.right.y, rightBottom: m.right && m.right.bottom }));
+        // 换行会让顶栏长高（两行 = 报头高 + 行距 + 控件高），单行高度不该超过最高的那组。
+        const oneRowMax = Math.max(m.meta ? m.meta.h : 0, m.right ? m.right.h : 0) + 42;
+        check(m.head && m.head.h <= oneRowMax,
+            `${label}：顶栏没有被撑成两行`, JSON.stringify({ headH: m.head && m.head.h, oneRowMax: oneRowMax }));
     };
 
     for (const w of [1000, 1100, 1200, 1300, 1400, 1600]) {
         win.setContentSize(w, 780);
         await sleep(450);
-        await verify(`${w}px`, w <= 1450);
+        await verify(`${w}px`);
     }
 
     // 界面缩放 140% 时，控件变宽最容易把标题挤掉；只测最小宽度这个极端
@@ -141,7 +139,7 @@ async function main() {
     await sleep(300);
     win.setContentSize(1000, 780);
     await sleep(450);
-    await verify('1000px@140%', true);
+    await verify('1000px@140%');
     await exec(`(() => { if (window.App && App.applyFontScale) App.applyFontScale(1); return true; })()`);
 
     console.log(failures.length

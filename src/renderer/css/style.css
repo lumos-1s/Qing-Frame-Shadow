@@ -3429,8 +3429,9 @@ body.editing #canvasPane { flex: 1 1 auto; }
     color: #e8ecf1;
     overflow: hidden;
 }
-/* 顶部栏是观察台，不是落地页 hero：品牌、标题、副标题左对齐成一列；
-   控件靠右，窗宽不够时整组落到第二行，不挤标题。 */
+/* 顶部栏是观察台，不是落地页 hero：品牌左对齐，控件靠右。
+   品牌行只剩一行字（标题/副标题已去掉），窄窗没必要为它单开一行 ——
+   优先压缩间距和装饰，让品牌与控件始终待在同一行。 */
 .pw-head {
     display: flex; align-items: flex-end; justify-content: space-between;
     flex-wrap: wrap;
@@ -3518,9 +3519,33 @@ body.editing #canvasPane { flex: 1 1 auto; }
 .pw-winbtn.is-max .ico-restore { display: inline-flex; }
 /* mac 有系统红绿灯，这里不重复 */
 body.platform-darwin .pw-winbtns { display: none; }
-/* 窄窗（默认 1000–1400 窗口都在此列）：右侧控件放不下时整组落到第二行，
-   靠右排；标题/副标题保持左对齐，不会被挤成折行或压到控件下面。 */
-@media (max-width: 1450px) {
+/* 窄窗先压缩，不换行：品牌与控件原本就能挤在一行（1000px 宽时只占约 900px），
+   之前按 1450px 一刀切换行，品牌上方孤零零一行、控件另起一行，看着像错位。
+   这里把「装饰与间距」让出来：英文副标、滑块长度、组间留白先收，中文品牌与功能按钮不撤。 */
+@media (max-width: 1320px) {
+    .pw-head {
+        padding-left: calc(20px * var(--font-scale));
+        padding-right: calc(20px * var(--font-scale));
+        column-gap: calc(14px * var(--font-scale));
+    }
+    .pw-brand-tag {
+        margin-left: calc(1px * var(--font-scale));
+        padding-left: calc(7px * var(--font-scale));
+        letter-spacing: .12em;
+    }
+    .pw-head-right { gap: calc(10px * var(--font-scale)); }
+    .pw-head-acts { padding-left: calc(10px * var(--font-scale)); }
+    .pw-winbtns { margin-left: 0; padding-left: calc(10px * var(--font-scale)); }
+    .pw-zoom-range { width: 64px; }
+}
+/* 再窄一档才收英文副标：只留「清框影」，控件一个不少，仍然一行。
+   1120 是「140% 界面缩放 + 最小窗口」的临界值：再窄，副标会把整排顶出去。 */
+@media (max-width: 1120px) {
+    .pw-brand-tag { display: none; }
+}
+/* 兜底：窗口比应用最小宽度（1000px）还窄时（外部调试、异常缩放）才允许换行，
+   且整组控件一起下去，靠右排，不会和品牌文字叠在一起。 */
+@media (max-width: 980px) {
     .pw-head { align-items: flex-start; }
     .pw-head-right { width: 100%; }
 }
