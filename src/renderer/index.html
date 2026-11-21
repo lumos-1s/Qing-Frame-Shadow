@@ -110,6 +110,15 @@
                             </select>
                         </div>
                         <div class="ep-row">
+                            <label>色域</label>
+                            <select id="selColorSpace" class="inline-select" title="导出色域：P3/Adobe RGB 会真的转换像素并嵌入 ICC，不是只改标签">
+                                <option value="srgb" selected>sRGB（通用）</option>
+                                <option value="p3">Display P3（更广）</option>
+                                <option value="adobergb">Adobe RGB（印刷）</option>
+                            </select>
+                        </div>
+                        <div class="ep-note muted" id="exportColorNote">P3 / Adobe RGB 会把现有颜色换算到更宽色域并嵌入 ICC：观感基本不变，但便于后续在宽色域流程里编辑/印刷。WebP 仍按 sRGB。</div>
+                        <div class="ep-row">
                             <label>质量</label>
                             <select id="slExportQuality" class="inline-select" title="JPG/WebP 输出质量(仅 JPG/WebP 生效,PNG 无损)">
                                 <option value="60">质量 60%</option>
@@ -2251,73 +2260,83 @@
 
 
     <!-- ═══ 拾景纸刊：把自己的照片变成一张纸上作品 ═══ -->
-    <div id="zineModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="zineModalTitle">
-        <div class="modal-card zine-card-modal">
-            <div class="modal-header">
-                <span class="modal-title" id="zineModalTitle">拾景纸刊</span>
-                <button id="zineClose" class="modal-close" title="关闭" aria-label="关闭">&times;</button>
-            </div>
+    <!-- 拾景纸刊：与 AI 造型共用同一个弹层，靠顶部标签切换，不再叠罗汉 -->
+    <div id="zineModal" class="studio-view" hidden>
             <div class="zine-body">
-                <p class="zine-intro">照片提供事实，创作决定如何留下它。选一条路径，让模型读一遍现场，再把它重新装订成一页。</p>
-                <div class="zine-compose">
-                    <label class="zine-field"><span>创作路径</span>
-                        <select id="zinePath" aria-label="创作路径">
-                            <option value="collage">实景拼贴 · 保留照片作为锚点</option>
-                            <option value="distill">影像蒸馏 · 不留照片，重新创作</option>
-                        </select>
-                    </label>
-                    <label class="zine-field"><span>主体（可选）</span>
-                        <input type="text" id="zineSubject" placeholder="如：银杏下的背影" aria-label="画面主体" />
-                    </label>
-                    <label class="zine-field"><span>情绪（可选）</span>
-                        <input type="text" id="zineMood" placeholder="如：秋末的等待" aria-label="情绪方向" />
-                    </label>
-                    <label class="zine-field"><span>题字（可选）</span>
-                        <input type="text" id="zineText" placeholder="留空则由模型根据画面题一句" aria-label="题字" />
-                    </label>
-                    <div class="zine-row">
-                        <label class="zine-field"><span>题字语言</span>
-                            <select id="zineLang" aria-label="题字语言">
-                                <option value="en">英文（默认）</option>
-                                <option value="zh">中文</option>
-                                <option value="bi">中英对照</option>
-                            </select>
-                        </label>
-                        <label class="zine-field"><span>画布</span>
-                            <select id="zineRatio" aria-label="画布比例">
-                                <option value="">按照片方向</option>
-                                <option value="3:5">竖版 3:5</option>
-                                <option value="5:3">横版 5:3</option>
-                                <option value="4:5">竖版 4:5</option>
-                            </select>
-                        </label>
+                <div class="zine-pick">
+                    <div class="zine-pick-head">
+                        <span class="zine-pick-title">选一种纸感</span>
+                        <span class="zine-pick-note">用当前照片直接画，标题和短句可留空</span>
                     </div>
+                    <div class="zine-styles" id="zineStyles" role="radiogroup" aria-label="纸刊风格"></div>
+                    <select id="zinePromptPreset" class="zine-preset-native" aria-label="纸刊风格"></select>
+                </div>
+                <p class="zine-style-desc" id="zineStyleDesc"></p>
+                <div class="zine-compose">
+                    <label class="zine-field"><span>标题（可选，印在画面底部）</span>
+                        <input type="text" id="zineSubject" placeholder="如：银杏下的背影" aria-label="画面标题" />
+                    </label>
+                    <label class="zine-field"><span>短句（可选）</span>
+                        <input type="text" id="zineMood" placeholder="如：秋末的等待" aria-label="画面短句" />
+                    </label>
                     <button type="button" class="mini-btn primary zine-make" id="btnZineMake">生成纸刊</button>
                 </div>
+                <div class="zine-controls">
+                    <label class="zine-bold">构图变化
+                        <select id="zineBold" aria-label="构图变化幅度">
+                            <option value="0.25">轻微</option>
+                            <option value="0.6" selected>适中</option>
+                            <option value="1">大胆</option>
+                        </select>
+                    </label>
+                    <button type="button" class="mini-btn" id="btnZineAgain" hidden>换一批</button>
+                    <span class="zine-variant-note">每次出 4 种变化，可逐张导入或下载</span>
+                </div>
                 <div class="frame-progress" id="zineProgress" hidden>
-                    <span class="frame-progress-dot"></span><span id="zineProgressText">正在编译画面描述…</span>
+                    <span class="frame-progress-dot"></span><span id="zineProgressText">正在读取照片主色…</span>
                 </div>
                 <div class="zine-status" id="zineStatus" role="status"></div>
                 <div class="zine-brief" id="zineBrief" hidden></div>
                 <div class="zine-results" id="zineResults"></div>
+                <details class="zine-prompt-more">
+                    <summary>查看这条风格的提示词（可复制到别的工具）</summary>
+                    <textarea id="zinePrompt" class="zine-prompt" rows="4" spellcheck="false" placeholder="选中风格后自动填入"></textarea>
+                    <div class="zine-prompt-more-acts">
+                        <button type="button" class="mini-btn" id="btnZineCopyPrompt">复制提示词</button>
+                        <span class="zine-prompt-note">本机渲染按上面的风格作画，不发送这段文字。</span>
+                    </div>
+                </details>
             </div>
-        </div>
     </div>
 
     <!-- ═══ AI 造型：一句话生成多方案画廊，点选即用 ═══ -->
     <div id="frameModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="frameModalTitle">
         <div class="modal-card frame-card">
             <div class="modal-header">
-                <span class="modal-title" id="frameModalTitle">AI 造型</span>
-                <button type="button" id="btnZineOpen" class="mini-btn zine-entry" title="把自己的照片做成一张纸上作品">拾景纸刊</button>
+                <div class="studio-tabs" role="tablist" aria-label="AI 功能">
+                    <button type="button" class="studio-tab active" id="tabFrameStudio" data-studio="frame" role="tab" aria-selected="true">AI 造型</button>
+                    <button type="button" class="studio-tab" id="btnZineOpen" data-studio="zine" role="tab" aria-selected="false">拾景纸刊</button>
+                </div>
+                <span class="modal-title studio-subtitle" id="frameModalTitle">给照片一副好框</span>
+                <button type="button" class="mini-btn ai-setup-btn" id="btnAiSetup" title="AI 设置：首次使用会引导配置，之后不用再管">AI 设置</button>
                 <button id="frameModalClose" class="modal-close" title="关闭" aria-label="关闭">&times;</button>
             </div>
-            <div class="frame-body frame-studio">
+            <div class="studio-slot" id="studioSlot"></div>
+            <div class="frame-body frame-studio" id="frameView">
                 <div class="frame-compose">
                     <div class="frame-compose-row">
                         <select id="frameSamplePhoto" class="frame-sample-select" aria-label="选择示例照片" title="用哪张已导入的照片来展示效果"></select>
-                        <input type="text" id="framePrompt" class="frame-prompt" placeholder="描述你想要的方向，如：展览海报、照片贴边、超大标题、档案卡" aria-label="描述风格" />
+                        <input type="text" id="framePrompt" class="frame-prompt" placeholder="想要什么感觉？如：展览海报、胶片边框、大字标题" aria-label="描述风格" />
                         <button type="button" class="mini-btn primary" id="btnGenerate">生成 4 款</button>
+                    </div>
+                    <div class="frame-ideas" id="frameIdeas" role="group" aria-label="灵感模板">
+                        <span class="frame-ideas-label">没想好？试试</span>
+                        <button type="button" data-idea="poster">展览海报</button>
+                        <button type="button" data-idea="film">胶片边框</button>
+                        <button type="button" data-idea="minimal">极简留白</button>
+                        <button type="button" data-idea="journal">手账拼贴</button>
+                        <button type="button" data-idea="archive">复古档案</button>
+                        <button type="button" data-idea="magazine">杂志封面</button>
                     </div>
                     <div class="frame-progress" id="frameProgress" hidden>
                         <span class="frame-progress-dot"></span><span id="frameProgressText">正在洗样片…</span>
@@ -2347,7 +2366,7 @@
                             <button type="button" class="mini-btn" id="btnTweakHide">收起</button>
                         </span>
                     </div>
-                    <div class="frame-tweak-hint">更直接的做法：点「在画布上改」关掉面板，在主画布上拖动文字/照片边框移动、拖四角缩放、双击文字改字；拖动时会自动吸附画布/照片/其它图层的对齐线，按住 Alt 临时关闭吸附，Delete 删除选中图层（照片槽位除外），Esc 取消选中。</div>
+                    <div class="frame-tweak-hint">点「在画布上改」后：拖动移动、拖四角缩放、双击文字改字。按住 Alt 临时关闭吸附；Esc 取消选中，Delete 删除图层（照片槽位除外）。</div>
                     <div class="frame-tweak-grid">
                         <label class="frame-tweak-item"><span>留白</span><input type="range" id="frameTweakPad" min="-30" max="50" step="2" value="0" /><output id="frameTweakPadVal">0%</output></label>
                         <label class="frame-tweak-item"><span>底色</span><input type="color" id="frameTweakBg" value="#ffffff" /></label>
@@ -2372,6 +2391,7 @@
                     <div class="frame-error-msg" id="frameErrorMsg"></div>
                     <div class="frame-error-row">
                         <button type="button" class="mini-btn primary" id="btnFrameRetry">重试</button>
+                        <button type="button" class="mini-btn" id="btnFrameErrSetup">检查 AI 设置</button>
                         <button type="button" class="mini-btn" id="btnFrameErrLog">查看日志</button>
                     </div>
                     <pre class="frame-error-log" id="frameErrorLog" hidden></pre>
@@ -2383,31 +2403,38 @@
                         <div class="frame-gallery-empty-sub">没导入照片也能看效果，但用你自己的照片更直观</div>
                     </div>
                 </div>
-                <details class="frame-advanced">
-                    <summary>高级：助手 / 模型 / 文件 / 调参</summary>
+                <details class="frame-advanced" id="frameAdvanced">
+                    <summary>高级：通道 / 助手 / 模型</summary>
                     <div class="frame-advanced-body">
                         <div class="frame-adv-row">
-                            <label class="frame-adv-label" for="frameChannel">模型通道</label>
-                            <select id="frameChannel" class="frame-agent-select" aria-label="模型通道">
-                                <option value="local">本机助手（免 Key）</option>
-                                <option value="api">API 通道（免安装）</option>
+                            <label class="frame-adv-label" for="frameChannel">用哪种方式</label>
+                            <select id="frameChannel" class="frame-agent-select" aria-label="AI 接入方式">
+                                <option value="local">本机助手（不用 Key）</option>
+                                <option value="api">API Key（填一次）</option>
                             </select>
                             <span class="frame-agent-hint" id="frameChannelHint"></span>
                         </div>
                         <div class="frame-api-cfg" id="frameApiCfg" hidden>
-                            <input type="text" id="frameApiBase" class="frame-api-input" placeholder="接口地址，如 https://api.openai.com/v1（留空走内置默认）" autocomplete="off" spellcheck="false" />
-                            <input type="password" id="frameApiKey" class="frame-api-input" placeholder="API Key（只存在本机）" autocomplete="off" spellcheck="false" />
-                            <div class="frame-adv-row">
-                                <input type="text" id="frameApiModel" class="frame-api-input" placeholder="文字模型，如 gpt-4o-mini" autocomplete="off" spellcheck="false" />
-                                <button type="button" class="mini-btn" id="btnFrameApiTest">测试连接</button>
+                            <label class="frame-api-field" for="frameApiBase">
+                                <span class="frame-adv-label">接口地址</span>
+                                <input type="text" id="frameApiBase" class="frame-api-input" placeholder="一般不用改；留空用内置默认" autocomplete="off" spellcheck="false" />
+                            </label>
+                            <label class="frame-api-field" for="frameApiKey">
+                                <span class="frame-adv-label">API Key（只保存在这台电脑）</span>
+                                <input type="password" id="frameApiKey" class="frame-api-input" placeholder="粘贴你的 Key" autocomplete="off" spellcheck="false" />
+                            </label>
+                            <div class="frame-api-field">
+                                <label class="frame-adv-label" for="frameApiModel">模型名</label>
+                                <div class="frame-adv-row">
+                                    <input type="text" id="frameApiModel" class="frame-api-input" placeholder="如 gpt-4o-mini" autocomplete="off" spellcheck="false" />
+                                    <button type="button" class="mini-btn" id="btnFrameApiTest">测试连接</button>
+                                </div>
                             </div>
-                            <div class="frame-adv-row">
-                                <input type="text" id="frameApiImageModel" class="frame-api-input" placeholder="图像模型（纸刊用），如 gemini-2.5-flash-image；留空用文字模型名" autocomplete="off" spellcheck="false" />
-                            </div>
-                            <div class="frame-api-note" id="frameApiNote">任何 OpenAI 兼容接口都行：官方 / 中转 / 自建网关。纸刊需要图像模型（/images/generations 或 /images/edits），留空则沿用上面的文字模型名。打包版还可以用环境变量 QFS_AI_PROXY 指到内置中转。</div>
+                            <div class="frame-api-note" id="frameApiNote">支持 OpenAI 兼容接口：官方、中转或自建网关。填完点「测试连接」，成功后再保存。</div>
                         </div>
-                        <div class="frame-adv-row">
-                            <select id="frameAgentSelect" class="frame-agent-select" aria-label="选择本机编程助手"><option value="">检测中…</option></select>
+                        <div class="frame-adv-row" id="frameAgentRow">
+                            <label class="frame-adv-label" for="frameAgentSelect">本机助手</label>
+                            <select id="frameAgentSelect" class="frame-agent-select" aria-label="选择本机助手"><option value="">检测中…</option></select>
                             <div class="frame-model-wrap">
                                 <button type="button" id="btnFrameModel" class="frame-model-btn" title="选择模型" aria-haspopup="listbox" aria-expanded="false"><span id="frameModelLabel">默认模型</span> <span class="frame-model-caret">▾</span></button>
                                 <div class="frame-model-pop" id="frameModelPop" hidden>
@@ -2415,17 +2442,13 @@
                                     <div class="frame-model-list" id="frameModelList" role="listbox" aria-label="模型列表"></div>
                                 </div>
                             </div>
-                            <button type="button" class="mini-btn" id="btnAgentNew" title="结束当前会话">新会话</button>
+                            <button type="button" class="mini-btn" id="btnAgentNew" title="助手卡住或报错时点一下">重启助手</button>
                             <span class="frame-agent-hint" id="frameAgentHint"></span>
                         </div>
-                        <pre class="frame-agent-out" id="frameAgentOut" aria-live="polite"></pre>
-                        <div class="frame-adv-row">
-                            <button type="button" class="mini-btn" id="btnFrameOpenDir">打开目录</button>
-                            <button type="button" class="mini-btn" id="btnFrameCopyDir">复制路径</button>
-                        </div>
-                        <div class="frame-adv-files"><div class="frame-side-head"><span>边框文件</span><button type="button" class="mini-btn" id="btnFrameRefresh">刷新</button></div><div class="frame-list" id="frameList"></div></div>
-                        <div class="frame-adv-editor"><textarea id="frameText" class="frame-text" spellcheck="false" aria-label="边框 JSON"></textarea><div class="frame-editor-acts"><button type="button" class="mini-btn" id="btnFrameSave">保存</button><button type="button" class="mini-btn" id="btnFrameCheck">体检</button><button type="button" class="mini-btn" id="btnFrameApply">应用到当前</button></div></div>
-                        <div class="frame-dir" id="frameDir"></div>
+                        <details class="frame-dev">
+                            <summary>开发者：助手日志</summary>
+                            <pre class="frame-agent-out" id="frameAgentOut" aria-live="polite"></pre>
+                        </details>
                     </div>
                 </details>
             </div>
@@ -2444,6 +2467,22 @@
                         <button type="button" class="mini-btn primary" id="btnFrameLightboxApply">套用这款</button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ AI 统一设置入口：所有助手/通道/模型配置只在这里出现 ═══ -->
+    <div id="aiSetupModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="aiSetupTitle">
+        <div class="modal-card ai-setup-card">
+            <div class="modal-header">
+                <span class="modal-title" id="aiSetupTitle">AI 设置</span>
+                <button id="btnAiSetupClose" class="modal-close" title="关闭" aria-label="关闭">&times;</button>
+            </div>
+            <p class="ai-setup-intro">用你已经装好的 AI 助手，或填一次 API。配好后，点「生成 4 款」会直接用这份设置；出错会告诉你原因和下一步。</p>
+            <div class="ai-setup-state" id="aiSetupState" role="status" aria-live="polite"></div>
+            <div id="aiSetupSlot"></div>
+            <div class="modal-actions">
+                <button type="button" class="mini-btn primary" id="btnAiSetupDone">保存设置</button>
             </div>
         </div>
     </div>
@@ -2698,6 +2737,7 @@
   <script src="js/style-caps.js"></script>
     <script src="js/style-params.js"></script>
     <script src="js/changelog.js"></script>
+    <script src="../shared/color-space.js"></script>
     <script src="js/app.js"></script>
     <script src="js/app-style-params.js"></script>
     <script src="js/app-render.js"></script>
@@ -2735,7 +2775,9 @@
     <script src="js/app-frame-lint.js"></script>
     <script src="js/app-frame-plans.js"></script>
     <script src="js/app-ai-provider.js"></script>
+    <script src="js/app-zine-prompts.js"></script>
     <script src="js/app-zine-compiler.js"></script>
+    <script src="js/app-zine-render.js"></script>
     <script src="js/app-zine-panel.js"></script>
     <script src="js/app-frame-panel.js"></script>
 </body>

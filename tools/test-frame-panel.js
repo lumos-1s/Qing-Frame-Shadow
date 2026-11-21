@@ -52,6 +52,16 @@ ipcMain.handle('frames:openDir', () => ({ ok: true }));
 ipcMain.handle('frames:watch', () => ({ ok: true }));
 ipcMain.handle('frames:remove', (_e, name) => { try { const p = frameFile(name); if (fs.existsSync(p)) fs.unlinkSync(p); return { ok: true }; } catch (e) { return { ok: false }; } });
 ipcMain.handle('frames:skill', () => ({ ok: true, text: '# 清框影边框设计规范' }));
+// 纸刊成品导入：和真实主进程一样返回 { items, skipped }，专门守住调用方别当数组用
+ipcMain.handle('zine:import', async (_e, dataUrl, filename) => {
+    const p = frameFile('zine-' + String(filename || 'out').replace(/[^\w-]/g, '_') + '.png');
+    fs.writeFileSync(p, Buffer.from(String(dataUrl || '').split(',')[1] || '', 'base64'));
+    return { ok: true, path: p };
+});
+ipcMain.handle('collect-images', async (_e, paths) => ({
+    items: (paths || []).map((p) => ({ name: path.basename(p), path: p, size: fs.statSync(p).size, exif: {} })),
+    skipped: 0
+}));
 ipcMain.handle('agent:detect', () => [{ id: 'opencode', name: 'OpenCode', installed: true, path: 'mock', acp: true, acpPath: 'mock' }]);
 ipcMain.handle('agent:start', () => ({ ok: true, key: 'k1', agent: 'opencode', name: 'OpenCode', modelId: 'model',
     models: [{ value: 'm1', name: '模型一', current: true }] }));
@@ -129,12 +139,15 @@ ipcMain.handle('ai:models', () => ({ ok: true, models: ['mock-1'] }));
 let zineCalls = 0;
 let lastZinePrompt = '';
 let lastZineSource = '';
+let lastZineSize = '';
 const ZINE_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 ipcMain.handle('ai:image', (_e, cfg, params) => {
     zineCalls++;
-    if (!cfg || !cfg.apiKey) return { ok: false, error: '缺配置（模拟）' };
+    const local = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])([:/]|$)/i.test(String((cfg && cfg.baseUrl) || ''));
+    if (!cfg || (!cfg.apiKey && !local)) return { ok: false, error: '缺配置（模拟）' };
     lastZinePrompt = String((params && params.prompt) || '');
     lastZineSource = String((params && params.source) || '');
+    lastZineSize = String((params && params.size) || '');
     return { ok: true, image: ZINE_PNG, path: lastZineSource ? 'edits' : 'generations' };
 });
 
@@ -171,6 +184,8 @@ app.whenReady().then(async () => {
     await sleep(500); win.showInactive();
     await exec(`(() => { localStorage.setItem('qfs_intro_done','1'); localStorage.removeItem('qfs_ai_gallery_v1'); if (App.closeIntro) App.closeIntro(); return true; })()`);
     await sleep(1200);
+    // 回归从本机助手开始，避免上一次失败跑残留的 API 通道影响前段用例
+    await exec(`window.QfsAiProvider.setChannel('local', 'frame'); true`);
 
     // 注入 2 张已导入照片（模拟用户导入），验证画廊示例图可选
     await exec(`(async () => {
@@ -583,6 +598,41 @@ app.whenReady().then(async () => {
     })()`);
     check(outside.n === 0, '点画布外取消选中', JSON.stringify(outside));
 
+    // 模板整体被替换后（AI 面板微调/撤销/换预设），选中必须重绑到新数组，
+    // 不能让方向键/Delete 去改一个已经不在模板里的孤儿对象。
+    const rebind = await exec(`(() => {
+        const t = App.template.aiLayers || [];
+        const l = t.find(x => x.type === 'text');
+        App.selectedEls = [{ kind: 'aiLayer', obj: l, index: t.indexOf(l) }];
+        const beforeX = l.x;
+        App.template.aiLayers = JSON.parse(JSON.stringify(t));
+        App._onTemplateChanged();
+        const sel = App.selectedEls[0] || {};
+        const bound = sel.obj === App.template.aiLayers[sel.index];
+        App.nudgeSelectedPosition(5, 0);
+        const afterX = App.template.aiLayers[sel.index].x;
+        return { n: App.selectedEls.length, bound, beforeX, afterX };
+    })()`);
+    check(rebind.n === 1 && rebind.bound && rebind.afterX > rebind.beforeX,
+        '模板替换后选中自动重绑，微移作用在新图层上', JSON.stringify(rebind));
+
+    // Esc 在文字编辑器里只退出编辑，不该顺带把画布选中也清掉（一次按键曾经触发两级处理）。
+    const escEditor = await exec(`(() => {
+        const t = App.template.aiLayers || [];
+        const l = t.find(x => x.type === 'text');
+        App.selectedEls = [{ kind: 'aiLayer', obj: l, index: t.indexOf(l) }];
+        const initial = l.text;
+        App.openTextEditor(l, { aiLayerSel: App.selectedEls[0], pushedUndo: true });
+        const ta = document.querySelector('.canvas-text-editor');
+        if (!ta) return { had: false };
+        ta.value = '临时改字'; ta.dispatchEvent(new Event('input', { bubbles: true }));
+        ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        return { had: true, editor: !!document.querySelector('.canvas-text-editor'),
+            sel: App.selectedEls.length, text: l.text, initial };
+    })()`);
+    check(escEditor.had && !escEditor.editor && escEditor.sel === 1 && escEditor.text === escEditor.initial,
+        '编辑器里按 Esc 只退编辑、保留选中并还原文字', JSON.stringify(escEditor));
+
     // 3.6) 多选照片 → 批量套用
     await exec(`(() => { App.selectedIdx = [0, 1]; App.currentIdx = 0;
         document.getElementById('frameModalClose').click();
@@ -600,6 +650,18 @@ app.whenReady().then(async () => {
             sameEl: !!(App.image.el && App.image.el.__qfsOrig) }; })()`);
     check(batch.n > 0 && /另外 1 张/.test(batch.status), '批量套用到选中的其它照片', JSON.stringify(batch));
     check(batch.sameEl === true, '批量套用同样不动照片', String(batch.sameEl));
+    // 批量套用改的是多张照片：每张都得有自己的撤销步，切过去 Ctrl+Z 要能撤回。
+    const batchUndo = await exec(`(() => {
+        const back = App.currentIdx;
+        App.selectImage(1);
+        const before = (App.template.aiLayers || []).length;
+        App.undo();
+        const after = (App.template.aiLayers || []).length;
+        App.selectImage(back);
+        return { before, after };
+    })()`);
+    check(batchUndo.before > 0 && batchUndo.after === 0,
+        '批量套用到别的照片后可以单独撤销', JSON.stringify(batchUndo));
     await exec(`(() => { App.selectedIdx = [0]; App.currentIdx = 0;
         document.getElementById('frameBatchApply').checked = false; return true; })()`);
 
@@ -607,10 +669,57 @@ app.whenReady().then(async () => {
     const adv = await exec(`({ hasAdvanced: !!document.querySelector('.frame-advanced'), modelLabel: document.getElementById('frameModelLabel').textContent, agentSel: (document.getElementById('frameAgentSelect')||{}).value,
         memAgent: localStorage.getItem('qfs_ai_agent'), memModel: localStorage.getItem('qfs_ai_model:opencode') })`);
     check(adv.hasAdvanced && adv.agentSel === 'opencode', '高级区保留且助手已就绪', JSON.stringify(adv));
+    const unified = await exec(`({ btn: !!document.getElementById('btnAiSetup'),
+        inView: !!document.querySelector('#frameView #frameAdvanced'),
+        inSetup: !!document.querySelector('#aiSetupSlot #frameAdvanced') })`);
+    check(unified.btn && !unified.inView && unified.inSetup,
+        'AI 配置只在统一设置弹窗，主面板不再堆配置项', JSON.stringify(unified));
     check(adv.memAgent === 'opencode' && adv.memModel === 'm1', '记住助手与按助手分键的模型', JSON.stringify({ agent: adv.memAgent, model: adv.memModel }));
     check(adv.modelLabel === '模型一', '模型标签与会话实际模型一致', adv.modelLabel);
+    const setupUI = await exec(`(() => {
+        const P = window.QfsAiProvider;
+        const prevCfg = P.load(); const prevCh = P.channel('frame');
+        const sel = document.getElementById('frameChannel');
+        sel.value = 'api'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+        const apiView = { agentHidden: document.getElementById('frameAgentRow').hidden,
+            apiShown: !document.getElementById('frameApiCfg').hidden,
+            state: document.getElementById('aiSetupState').textContent };
+        sel.value = 'local'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+        const localView = { agentHidden: document.getElementById('frameAgentRow').hidden,
+            apiHidden: document.getElementById('frameApiCfg').hidden,
+            state: document.getElementById('aiSetupState').textContent };
+        sel.value = prevCh; sel.dispatchEvent(new Event('change', { bubbles: true }));
+        P.save(prevCfg);
+        return { apiView, localView,
+            imgModel: !!document.getElementById('frameApiImageModel'),
+            localBtn: !!document.getElementById('btnFrameApiLocal') };
+    })()`);
+    check(!setupUI.imgModel && !setupUI.localBtn
+        && setupUI.apiView.agentHidden && setupUI.apiView.apiShown
+        && !setupUI.localView.agentHidden && setupUI.localView.apiHidden
+        && /就绪/.test(setupUI.localView.state),
+        '设置里只显示当前方式相关字段，已移除图像模型/本机服务等死配置', JSON.stringify(setupUI));
 
-    // 5) 高级区粘贴 layers JSON → 也按模板应用（不再套成默认预设）
+    // 灵感模板：点一下就有完整方向，不用自己学提示词
+    const idea = await exec(`(() => {
+        document.querySelector('#frameIdeas [data-idea="film"]').click();
+        const out = { value: document.getElementById('framePrompt').value,
+            status: document.getElementById('frameStatus').textContent };
+        document.getElementById('framePrompt').value = '';
+        return out;
+    })()`);
+    check(/胶片/.test(idea.value) && /已填入/.test(idea.status),
+        '点灵感模板会填入完整描述', JSON.stringify(idea));
+
+    // 文件列表 / JSON 编辑器已从普通界面移除；助手日志收进默认折叠的开发者区
+    const devUI = await exec(`(() => { const log = document.getElementById('frameAgentOut');
+        return { files: !!document.getElementById('frameList'), json: !!document.getElementById('frameText'),
+            openDir: !!document.getElementById('btnFrameOpenDir'), log: !!log,
+            collapsed: !!(log && log.closest('details') && !log.closest('details').open) }; })()`);
+    check(!devUI.files && !devUI.json && !devUI.openDir && devUI.log && devUI.collapsed,
+        '边框文件/JSON 编辑器不再出现，助手日志默认折叠', JSON.stringify(devUI));
+
+    // 5) 图层 JSON 仍可按模板应用（不再依赖已移除的 JSON 编辑器 UI）
     const layersDoc = JSON.stringify({
         templateName: '高级图层测试',
         layers: [
@@ -619,16 +728,17 @@ app.whenReady().then(async () => {
             { type: 'text', x: 0.5, y: 0.88, text: 'ADV', size: 0.03, color: '#f2e4c4', align: 'center', maxW: 0.8, maxLines: 1 }
         ]
     });
-    await exec(`document.getElementById('frameText').value = ${JSON.stringify(layersDoc)}; document.getElementById('btnFrameApply').click(); true`);
+    await exec(`(() => { const doc = JSON.parse(${JSON.stringify(layersDoc)});
+        App.applyPresetToCurrent({ templateName: doc.templateName, aiLayers: doc.layers, aiBackground: '#ffffff' });
+        return true; })()`);
     await sleep(400);
     const advApplied = await exec(`({ status: document.getElementById('frameStatus').textContent, name: App.template && App.template.templateName,
         n: (App.template && Array.isArray(App.template.aiLayers)) ? App.template.aiLayers.length : 0, sameEl: !!(App.image.el && App.image.el.__qfsOrig) })`);
-    check(advApplied.n === 3 && advApplied.name === '高级图层测试', '高级区 layers JSON 按模板应用', JSON.stringify(advApplied));
-    check(advApplied.sameEl === true, '高级区应用同样不动照片', String(advApplied.sameEl));
+    check(advApplied.n === 3 && advApplied.name === '高级图层测试', 'layers JSON 仍可按模板应用', JSON.stringify(advApplied));
+    check(advApplied.sameEl === true, '应用图层模板同样不动照片', String(advApplied.sameEl));
 
     // 6) 再套一个普通预设：必须清掉 aiLayers，不能继续画 AI 图层（否则就是框中框）
-    const plainDoc = JSON.stringify({ templateName: '普通预设', photoFrameStyle: 'CARD_3D' });
-    await exec(`document.getElementById('frameText').value = ${JSON.stringify(plainDoc)}; document.getElementById('btnFrameApply').click(); true`);
+    await exec(`App.applyPresetToCurrent({ templateName: '普通预设', photoFrameStyle: 'CARD_3D' }); true`);
     await sleep(500);
     const plain = await exec(`({ name: App.template && App.template.templateName,
         layers: (App.template && Array.isArray(App.template.aiLayers)) ? App.template.aiLayers.length : 0,
@@ -663,6 +773,8 @@ app.whenReady().then(async () => {
         status: document.getElementById('frameStatus').textContent })`);
     check(failed.errorHidden === false && /模拟|中断/.test(failed.msg),
         '生成失败在主界面显示原因', JSON.stringify(failed));
+    const errSetupBtn = await exec(`!!document.getElementById('btnFrameErrSetup')`);
+    check(errSetupBtn === true, '失败时提供「检查 AI 设置」入口', String(errSetupBtn));
     await exec(`document.getElementById('btnFrameErrLog').click(); true`);
     await sleep(120);
     const logShown = await exec(`!document.getElementById('frameErrorLog').hidden`);
@@ -731,18 +843,42 @@ app.whenReady().then(async () => {
     check(!!brief.app && brief.app.ratio === '4:5', '速写识别出 4:5 竖幅', JSON.stringify(brief.app));
     check(/主色/.test(brief.title) && /重心/.test(brief.title), '速写标题带主色与重心', String(brief.title).slice(0, 80));
 
-    // 13) API 通道：没配置时拒绝生成
+    // 13) 没配置时：统一设置弹窗自动打开，暂存这次请求，配好后自动续跑
     await exec(`window.QfsAiProvider.setChannel('api'); window.QfsAiProvider.save({baseUrl:'https://mock.local/v1', apiKey:'', model:''}); true`);
     await exec(`document.getElementById('framePrompt').value = '暖色胶片'; document.getElementById('btnGenerate').click(); true`);
-    await sleep(500);
-    const noCfg = await exec(`document.getElementById('frameStatus').textContent`);
-    check(/还没配好/.test(noCfg), 'API 通道未配置时给出明确提示', noCfg);
+    await sleep(300);
+    const noCfg = await exec(`({ status: document.getElementById('frameStatus').textContent,
+        setupOpen: document.getElementById('aiSetupModal').style.display === 'flex',
+        moved: document.getElementById('frameAdvanced').parentElement.id === 'aiSetupSlot',
+        done: document.getElementById('btnAiSetupDone').textContent,
+        state: document.getElementById('aiSetupState').textContent })`);
+    check(noCfg.setupOpen && noCfg.moved && /已打开设置/.test(noCfg.status)
+        && /继续生成/.test(noCfg.done) && /还没填好/.test(noCfg.state),
+        '没配好 AI 时打开统一设置、说明缺什么并暂存生成请求', JSON.stringify(noCfg));
 
-    // 14) API 通道：回 4 个 JSON（含两款不合格）→ 出 4 款 + 自动体检修正
-    await exec(`window.QfsAiProvider.save({baseUrl:'https://mock.local/v1', apiKey:'sk-test-1234', model:'mock-1'}); true`);
-    const beforeAi = aiCalls;
+    // 关闭设置只退出，不偷偷执行暂存的生成
+    const beforeClose = aiCalls;
+    await exec(`document.getElementById('btnAiSetupClose').click(); true`);
+    await sleep(250);
+    const closedSetup = await exec(`({ hidden: document.getElementById('aiSetupModal').style.display !== 'flex',
+        status: document.getElementById('frameStatus').textContent })`);
+    check(closedSetup.hidden && aiCalls === beforeClose && /已关闭设置/.test(closedSetup.status),
+        '点 X 关闭设置不会自动生成', JSON.stringify(closedSetup));
     await exec(`document.getElementById('btnGenerate').click(); true`);
-    await sleep(2000);
+    await sleep(250);
+
+    // 14) 在设置里填好字段后点完成 → 自动继续生成 4 款 + 自动体检修正
+    await exec(`(() => {
+        const set = (id, v) => { const el = document.getElementById(id);
+            el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+        set('frameApiBase', 'https://mock.local/v1');
+        set('frameApiKey', 'sk-test-1234');
+        set('frameApiModel', 'mock-1');
+        return true;
+    })()`);
+    const beforeAi = aiCalls;
+    await exec(`document.getElementById('btnAiSetupDone').click(); true`);
+    await sleep(2200);
     const apiRun = await exec(`({ names: [...document.querySelectorAll('.frame-swatch-name')].map(x=>x.textContent),
         imgs: document.querySelectorAll('.frame-swatch-img img').length,
         badges: [...document.querySelectorAll('.frame-swatch-lint')].map(x=>x.textContent),
@@ -794,55 +930,226 @@ app.whenReady().then(async () => {
     check(garbage.hidden === false && /可解析/.test(garbage.msg), '模型回垃圾时给出可读原因', JSON.stringify(garbage));
     await exec(`window.QfsAiProvider.setChannel('local'); true`);
 
-    // 16) 拾景纸刊：入口、两种路径、图像模型配置、弹层开关、无通道时给可读原因
+    // 16) 拾景纸刊：零配置本地渲染，无通道/Key/图像模型概念
     const zineDom = await exec(`({
-        entry: !!document.getElementById('btnZineOpen'),
-        modal: !!document.getElementById('zineModal'),
-        paths: [...(document.getElementById('zinePath')?.options || [])].map(o => o.value),
-        imageModel: !!document.getElementById('frameApiImageModel'),
-        compiler: !!window.QfsZine,
+        tabFrame: !!document.getElementById('tabFrameStudio'),
+        tabZine: !!document.getElementById('btnZineOpen'),
+        slot: !!document.getElementById('studioSlot'),
+        view: !!document.getElementById('zineModal'),
+        inSlot: document.getElementById('zineModal')?.parentElement?.id === 'studioSlot',
+        channel: !!document.getElementById('zineChannel'),
+        oneClick: !!document.getElementById('btnZineOneClick'),
+        renderer: !!window.QfsZineRender,
         panel: !!window.QfsZinePanel
     })`);
-    check(zineDom.entry && zineDom.modal && zineDom.compiler && zineDom.panel,
-        '纸刊入口 / 弹层 / 编译器 / 面板都已挂载', JSON.stringify(zineDom));
-    check(zineDom.paths.join(',') === 'collage,distill' && zineDom.imageModel,
-        '两条创作路径与图像模型配置都在', JSON.stringify(zineDom.paths));
+    check(zineDom.tabFrame && zineDom.tabZine && zineDom.slot && zineDom.view,
+        '两个标签与插槽都在（DOM 搬运在切标签时完成）', JSON.stringify(zineDom));
+    check(!zineDom.channel && !zineDom.oneClick && zineDom.renderer && zineDom.panel,
+        '纸刊无通道/本机服务配置，本地渲染器已挂载', JSON.stringify(zineDom));
 
     await exec(`document.getElementById('btnZineOpen').click(); true`);
     await sleep(250);
-    const zineOpen = await exec(`({ shown: document.getElementById('zineModal').style.display === 'flex',
-        brief: !!document.getElementById('zineBrief'), results: !!document.getElementById('zineResults') })`);
-    check(zineOpen.shown && zineOpen.brief && zineOpen.results, '点入口能打开纸刊弹层', JSON.stringify(zineOpen));
-
-    // 图像模型没配时点生成 → 明确提示，不发请求
-    await exec(`window.QfsAiProvider.save({ baseUrl:'', apiKey:'', model:'', imageModel:'' }); window.QfsZinePanel.init(); document.getElementById('btnZineMake').click(); true`);
-    await sleep(250);
-    const zineNoKey = await exec(`document.getElementById('zineStatus').textContent`);
-    check(/Key|配好/.test(zineNoKey), '没配图像通道时给出可读原因', zineNoKey);
-
-    // 配好通道 → 真跑一次：prompt 被编译、源图带上、结果进画廊
-    const beforeZine = zineCalls;
-    await exec(`(() => {
-        window.QfsAiProvider.save({ baseUrl:'https://mock/v1', apiKey:'sk-zine', model:'text', imageModel:'image-1' });
-        window.QfsAiProvider.setChannel('api');
-        document.getElementById('zinePath').value = 'collage';
-        document.getElementById('zineSubject').value = '银杏下的背影';
-        document.getElementById('btnZineMake').click();
-        return true;
-    })()`);
-    await sleep(900);
-    const zineDone = await exec(`({
-        cards: document.querySelectorAll('#zineResults .zine-card').length,
-        img: !!document.querySelector('#zineResults .zine-card img'),
-        hasUse: !!document.querySelector('#zineResults .zine-card-acts button'),
-        status: document.getElementById('zineStatus').textContent
+    const zineOpen = await exec(`({
+        shown: document.getElementById('zineModal').hidden === false,
+        frameHidden: document.getElementById('frameView').hidden === true,
+        zineTabActive: document.getElementById('btnZineOpen').classList.contains('active'),
+        modalOpen: document.getElementById('frameModal').style.display === 'flex',
+        inSlot: document.getElementById('zineModal').parentElement.id === 'studioSlot',
+        styles: document.querySelectorAll('#zineStyles .zine-style').length,
+        active: (document.querySelector('#zineStyles .zine-style.active') || {}).dataset?.style || '',
+        thumbs: document.querySelectorAll('#zineStyles .zine-style-thumb').length,
+        thumbReady: [...document.querySelectorAll('#zineStyles .zine-style-thumb')]
+            .every((n) => String(n.src || '').indexOf('data:image/png') === 0),
+        setupHidden: document.getElementById('btnAiSetup').hidden,
+        promptMore: !!document.querySelector('.zine-prompt-more'),
+        promptClosed: !!(document.querySelector('.zine-prompt-more') && !document.querySelector('.zine-prompt-more').open)
     })`);
-    check(zineCalls - beforeZine === 1, '纸刊只调一次图像接口', String(zineCalls - beforeZine));
-    check(/paper-zine poster/.test(lastZinePrompt) && /银杏下的背影/.test(lastZinePrompt),
-        '编译后的提示词真的送到了图像接口', lastZinePrompt.slice(0, 60));
-    check(/^data:image\//.test(lastZineSource), '实景拼贴把源照片一并送去', lastZineSource.slice(0, 24));
-    check(zineDone.cards === 1 && zineDone.img && zineDone.hasUse, '成品进画廊且能导入', JSON.stringify(zineDone));
-    await exec(`document.getElementById('zineClose').click(); true`);
+    check(zineOpen.shown && zineOpen.frameHidden && zineOpen.zineTabActive && zineOpen.modalOpen && zineOpen.inSlot,
+        '点标签切到纸刊视图（DOM 已搬进插槽，不再叠罗汉）', JSON.stringify(zineOpen));
+    check(zineOpen.styles === 6 && zineOpen.active && zineOpen.promptMore && zineOpen.promptClosed,
+        '纸刊有 6 张可视化风格卡，技术提示词默认收起', JSON.stringify(zineOpen));
+    check(zineOpen.thumbs === 6 && zineOpen.thumbReady && zineOpen.setupHidden,
+        '风格卡带真实预览图，纸刊页不显示无关的 AI 设置', JSON.stringify(zineOpen));
+    const measureOverflow = () => exec(`(() => {
+        const ids = ['frameModal', 'frameView', 'zineModal', 'zinePrompt', 'zineResults'];
+        const pick = (el) => ({ sw: el.scrollWidth, cw: el.clientWidth, sh: el.scrollHeight, ch: el.clientHeight,
+            overX: el.scrollWidth > el.clientWidth + 1, overY: el.scrollHeight > el.clientHeight + 1 });
+        const out = { win: { w: innerWidth, h: innerHeight }, scale: getComputedStyle(document.documentElement).getPropertyValue('--font-scale') };
+        ids.forEach(id => { const el = document.getElementById(id); if (el) out[id] = pick(el); });
+        const body = document.querySelector('.zine-body'); if (body) out['zine-body'] = pick(body);
+        const card = document.querySelector('.frame-card'); if (card) out['frame-card'] = pick(card);
+        return out;
+    })()`);
+    const origSize = win.getContentSize();
+    await win.setContentSize(1000, 700);
+    await exec(`document.documentElement.style.setProperty('--font-scale', '1.4'); true`);
+    await sleep(200);
+    const zineNarrow = await measureOverflow();
+    await exec(`document.documentElement.style.removeProperty('--font-scale'); true`);
+    await win.setContentSize(origSize[0], origSize[1]);
+    await sleep(100);
+    check(!zineNarrow.frameModal.overX && !zineNarrow.frameModal.overY
+        && !zineNarrow['frame-card'].overX && !zineNarrow['frame-card'].overY
+        && !zineNarrow.zineModal.overX && !zineNarrow.zineModal.overY
+        && zineNarrow.zineResults.ch >= 100,
+        '纸刊在窄窗 140% 缩放下不溢出，结果区不被挤没', JSON.stringify({
+            modal: zineNarrow.frameModal, card: zineNarrow['frame-card'], zine: zineNarrow.zineModal,
+            results: zineNarrow.zineResults.ch
+        }));
+
+    // Esc 先退回 AI 造型标签，不直接关弹层
+    await exec(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); true`);
+    await sleep(150);
+    const escBack = await exec(`({ frameBack: document.getElementById('frameView').hidden === false,
+        modalOpen: document.getElementById('frameModal').style.display === 'flex' })`);
+    check(escBack.frameBack && escBack.modalOpen, 'Esc 先退回 AI 造型标签而非关弹层', JSON.stringify(escBack));
+    await exec(`document.getElementById('btnZineOpen').click(); true`);
+    await sleep(120);
+
+    // 零配置：本地渲染器直接从照片取 4 主色，不访问任何接口
+    const localRender = await exec(`(() => {
+        const R = window.QfsZineRender;
+        const pal = R.samplePalette(App.image.el, 4);
+        const out = R.render('pen-wash-travel', App.image.el, { id: 'pen-wash-travel', title: 'TRAVEL' });
+        return { pal, w: out.W, h: out.H, url: out.dataUrl.slice(0, 22) };
+    })()`);
+    check(localRender.pal.length === 4 && localRender.pal.every((c) => /^#[0-9A-F]{6}$/.test(c))
+        && /^data:image\/png/.test(localRender.url) && localRender.w > 0 && localRender.h > 0,
+        '本地渲染从照片取 4 主色并产出 PNG', JSON.stringify(localRender));
+
+    // 标题一改，风格预览跟着重画（所见即所得）
+    const thumbBefore = await exec(`document.querySelector('#zineStyles .zine-style-thumb').src`);
+    await exec(`(() => { const el = document.getElementById('zineSubject');
+        el.value = '预览标题'; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+    await sleep(450);
+    const thumbAfter = await exec(`document.querySelector('#zineStyles .zine-style-thumb').src`);
+    check(thumbBefore !== thumbAfter, '标题改动会实时更新风格预览',
+        String(thumbAfter.length - thumbBefore.length));
+
+    // 全部内置风格都能一键渲染，且完全不调图像接口
+    const names = await exec(`window.QfsZinePrompts.BUILTIN.map(p => p.name)`);
+    const ids = await exec(`window.QfsZinePrompts.BUILTIN.map(p => p.id)`);
+    const beforeZine = zineCalls;
+    const rendered = [];
+    for (const id of ids) {
+        await exec(`(() => { const sel = document.getElementById('zinePromptPreset');
+            sel.value = ${JSON.stringify(id)}; sel.dispatchEvent(new Event('change', { bubbles: true }));
+            document.getElementById('zineSubject').value = '银杏下的背影';
+            document.getElementById('btnZineMake').click(); return true; })()`);
+        await sleep(1600);
+        rendered.push(await exec(`({ name: (document.querySelector('#zineResults .zine-card-name') || {}).textContent,
+            src: (document.querySelector('#zineResults .zine-card img') || {}).src || '',
+            acts: document.querySelectorAll('#zineResults .zine-card-acts button').length,
+            status: document.getElementById('zineStatus').textContent })`));
+    }
+    check(zineCalls === beforeZine, '纸刊渲染不调用任何图像接口', String(zineCalls - beforeZine));
+    check(rendered.length === ids.length && rendered.every((r, i) => r.name && r.name.indexOf(names[i]) >= 0
+        && /^data:image\/png/.test(r.src) && r.acts >= 2 && /已生成/.test(r.status)),
+        '全部内置风格都能本地渲染进画廊，带导入/下载按钮', JSON.stringify(rendered.map((r) => r.name)));
+    const zineBatch = await exec(`({
+        count: document.querySelectorAll('#zineResults .zine-card').length,
+        unique: new Set([...document.querySelectorAll('#zineResults .zine-card img')].map((n) => n.src)).size,
+        again: !document.getElementById('btnZineAgain').hidden
+    })`);
+    check(zineBatch.count === 4 && zineBatch.unique === 4 && zineBatch.again,
+        '每次生成 4 种互不相同的构图变化，并显示「换一批」', JSON.stringify(zineBatch));
+    const beforeAgain = await exec(`document.querySelector('#zineResults .zine-card img').src`);
+    await exec(`document.getElementById('btnZineAgain').click(); true`);
+    await sleep(1700);
+    const afterAgain = await exec(`document.querySelector('#zineResults .zine-card img').src`);
+    check(beforeAgain !== afterAgain, '点「换一批」会画出全新一组', 'changed');
+    const resultLayout = await exec(`(() => {
+        const c = document.querySelector('#zineResults .zine-card');
+        return { cols: getComputedStyle(c).gridTemplateColumns, kicker: !!document.querySelector('.zine-card-kicker'),
+            tip: !!document.querySelector('.zine-card-tip') };
+    })()`);
+    check(resultLayout.cols.split(' ').length === 2 && resultLayout.kicker && resultLayout.tip,
+        '成品卡在宽窗下图文并排，操作与提示都在可见处', JSON.stringify(resultLayout));
+
+    await exec(`document.getElementById('tabFrameStudio').click(); true`);
+    const tabBack = await exec(`document.getElementById('frameView').hidden === false`);
+    check(tabBack, '点 AI 造型标签能切回', String(tabBack));
+
+    // AI 造型视图在窄窗 140% 下也不能把弹层顶出屏幕（整体自己滚动）
+    await win.setContentSize(1000, 700);
+    await exec(`document.documentElement.style.setProperty('--font-scale', '1.4'); true`);
+    await sleep(200);
+    const frameNarrow = await exec(`(() => {
+        const pick = (el) => ({ sw: el.scrollWidth, cw: el.clientWidth, sh: el.scrollHeight, ch: el.clientHeight,
+            overX: el.scrollWidth > el.clientWidth + 1, overY: el.scrollHeight > el.clientHeight + 1 });
+        return { modal: pick(document.getElementById('frameModal')), card: pick(document.querySelector('.frame-card')),
+            view: pick(document.getElementById('frameView')), gallery: pick(document.getElementById('frameGallery')) };
+    })()`);
+    await exec(`document.documentElement.style.removeProperty('--font-scale'); true`);
+    await win.setContentSize(origSize[0], origSize[1]);
+    await sleep(100);
+    check(!frameNarrow.modal.overX && !frameNarrow.modal.overY && !frameNarrow.card.overX
+        && !frameNarrow.card.overY && !frameNarrow.view.overX,
+        'AI 造型在窄窗 140% 缩放下不溢出', JSON.stringify(frameNarrow));
+
+    // 撤销/换模板会整体替换 template；面板里的微调基准必须跟着失效，
+    // 否则下一次改底色会把已经撤销掉的 AI 图层写回来。
+    const panelSync = await exec(`(() => {
+        document.getElementById('btnFramePanel').click();
+        const old = App.template;
+        const next = JSON.parse(JSON.stringify(old || {}));
+        delete next.aiLayers;
+        App.template = next;
+        App._onTemplateChanged();
+        const hidden = document.getElementById('frameTweak').hidden;
+        App.template = old;
+        App._onTemplateChanged();
+        return { hidden, back: (App.template.aiLayers || []).length };
+    })()`);
+    check(panelSync.hidden === true,
+        '模板被替换后微调区收起，不会拿过期基准回写', JSON.stringify(panelSync));
+
+    // 面板布局：整体自己滚动、画廊不再挤成 0 高、模型浮层 escape 滚动容器
+    const layout = await exec(`(() => {
+        const v = document.getElementById('frameView'), g = document.getElementById('frameGallery');
+        const pop = document.getElementById('frameModelPop');
+        return { overflow: getComputedStyle(v).overflowY, grow: getComputedStyle(g).flexGrow,
+            minH: getComputedStyle(g).minHeight, pop: getComputedStyle(pop).position };
+    })()`);
+    check(layout.overflow === 'auto' && layout.grow === '0' && layout.pop === 'fixed',
+        'AI 面板整体可滚动、画廊保底高度、模型浮层不被裁切', JSON.stringify(layout));
+
+    // 纸刊成品「作为照片导入」：collect-images 返回对象，必须正确取出 items
+    await exec(`document.getElementById('btnZineOpen').click(); true`);
+    await sleep(150);
+    await exec(`document.getElementById('btnZineMake').click(); true`);
+    await sleep(1700);
+    await exec(`window.__qfImportSpy = [];
+        App.importPicked = function (items, skipped) {
+            window.__qfImportSpy.push({ n: items.length, skipped: skipped });
+            return Promise.resolve();
+        }; true`);
+    await exec(`document.querySelector('#zineResults .zine-card-acts button').click(); true`);
+    await sleep(600);
+    const importRes = await exec(`({ calls: window.__qfImportSpy,
+        status: document.getElementById('zineStatus').textContent,
+        closed: document.getElementById('frameModal').style.display === 'none' })`);
+    check(importRes.calls.length === 1 && importRes.calls[0].n === 1 && importRes.calls[0].skipped === 0
+        && !/失败/.test(importRes.status) && importRes.closed,
+        '纸刊成品可作为照片导入（{items,skipped} 返回值已正确处理）', JSON.stringify(importRes));
+    await exec(`document.getElementById('frameModalClose').click(); true`);
+
+    // 导出色域：面板里能选，且真的在编码前转换像素（不是只改文件标签）
+    const csCheck = await exec(`(() => {
+        const sel = document.getElementById('selColorSpace');
+        if (!sel) return { missing: true };
+        sel.value = 'p3';
+        const c = document.createElement('canvas'); c.width = 1; c.height = 1;
+        const x = c.getContext('2d'); x.fillStyle = '#ff0000'; x.fillRect(0, 0, 1, 1);
+        const before = Array.from(x.getImageData(0, 0, 1, 1).data);
+        const after = Array.from(App.applyExportColorSpace(c).getContext('2d').getImageData(0, 0, 1, 1).data);
+        const chosen = App.exportColorSpace();
+        sel.value = 'srgb';
+        return { before, after, chosen, lib: !!window.QfsColorSpace };
+    })()`);
+    check(!csCheck.missing && csCheck.lib && csCheck.chosen === 'p3'
+        && csCheck.after[0] < csCheck.before[0] && csCheck.after[1] > 0 && csCheck.after[3] === 255,
+        '导出色彩空间可选，P3 在编码前真的转换了像素', JSON.stringify(csCheck));
 
     console.log(failures.length ? `\n未通过 ${failures.length} 项：${failures.join(', ')}` : '\nALL PASS');
     win.destroy();

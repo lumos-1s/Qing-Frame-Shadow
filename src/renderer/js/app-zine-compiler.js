@@ -19,15 +19,30 @@
     'use strict';
 
     const PATHS = ['collage', 'distill'];
+    const RATIOS = ['3:5', '5:3', '4:5', '3:4', '1:1', 'original'];
 
     // 目标画布：竖照片给 3:5，横照片给 5:3，方/未知给 4:5。用户可以覆盖。
+    // 'original' = 严格沿用照片宽高比（钢笔淡彩手账这类预设要求「原比例画幅」）。
     function canvasRatio(brief, want) {
-        if (want === '3:5' || want === '5:3' || want === '4:5' || want === '1:1') return want;
+        if (RATIOS.indexOf(want) >= 0) return want;
         const ar = brief && Number(brief.ar);
         if (!ar || !Number.isFinite(ar)) return '3:5';
         if (ar > 1.08) return '5:3';
         if (ar < 0.92) return '3:5';
         return '4:5';
+    }
+
+    // 把比例换算成图像接口能吃的尺寸；长边归一到 1536，短边按 64 取整。
+    function imageSizeFor(brief, ratio) {
+        const known = { '3:5': [1024, 1536], '5:3': [1536, 1024], '4:5': [1216, 1536], '3:4': [1152, 1536], '1:1': [1280, 1280] };
+        const hit = known[String(ratio || '')];
+        if (hit) return { w: hit[0], h: hit[1] };
+        const ar = (brief && Number(brief.ar) > 0) ? Number(brief.ar) : 0.75;
+        let w = ar >= 1 ? 1536 : Math.round(1536 * ar);
+        let h = ar >= 1 ? Math.round(1536 / ar) : 1536;
+        w = Math.round(Math.max(512, Math.min(2048, w)) / 64) * 64;
+        h = Math.round(Math.max(512, Math.min(2048, h)) / 64) * 64;
+        return { w, h };
     }
 
     // 从速写里读现场：这是编译器对照片的"理解"，不是色值复读。
@@ -131,6 +146,65 @@
         return `One print ink, saturated ${base}, used as ${role}. It must continue a real contour or silhouette from the scene across the paper boundary, and change the balance or the eye path. Remove it and the composition must visibly weaken.`;
     }
 
+    // ── 原文模式：内置提示词直接进生成器，这里只替换占位符 + 补照片精确数据 ──
+    function paletteHexes(brief, n) {
+        const pal = (brief && Array.isArray(brief.palette)) ? brief.palette : [];
+        const out = [];
+        pal.forEach((c) => {
+            const h = String((c && c.hex) || '').toUpperCase();
+            if (/^#[0-9A-F]{6}$/.test(h) && out.indexOf(h) < 0) out.push(h);
+        });
+        return out.slice(0, n || 4);
+    }
+    function tonePhrase(brief) {
+        const luma = (brief && brief.luma) || {};
+        const mean = Number(luma.mean);
+        if (Number.isFinite(mean) && mean < 95) return 'deep night tone';
+        const dom = String((brief && brief.dominant && brief.dominant.hex) || '');
+        if (dom && warm(dom)) return 'warm daylight tone';
+        return 'cool landscape tone';
+    }
+    function ratioText(ar) {
+        const table = [[1, '1:1'], [0.75, '3:4'], [0.8, '4:5'], [2 / 3, '2:3'], [1.5, '3:2'], [4 / 3, '4:3'], [16 / 9, '16:9']];
+        let best = table[0], err = Infinity;
+        table.forEach((p) => { const d = Math.abs(p[0] - ar); if (d < err) { err = d; best = p; } });
+        return err < 0.04 ? best[1] : ar.toFixed(2) + ':1';
+    }
+    function fillRawPrompt(text, brief, opts) {
+        const o = opts || {};
+        const subject = String(o.subject || '').trim() || 'the main subject in the photo';
+        const pal = paletteHexes(brief, 4);
+        const shapes = pal.length >= 2
+            ? pal.slice(0, 3).map((h) => 'flat matte ' + h.toLowerCase() + ' irregular blocks').join(', ')
+            : 'flat matte dark emerald irregular blocks, flat matte warm brown irregular blocks';
+        const swatches = pal.length >= 4 ? pal.join(', ') : '#C9A227, #2E4A32, #8A8A8A, #EDE4D3';
+        const value = (key) => {
+            if (/主体|巨物/.test(key)) return subject;
+            if (/细节约束/.test(key)) return String(o.mood || '').trim();
+            if (/平涂色形/.test(key)) return shapes;
+            if (/小元素群/.test(key)) return 'small repeated details from the scene';
+            if (/主色调/.test(key)) return swatches;
+            if (/氛围底色|画面氛围/.test(key)) return tonePhrase(brief);
+            if (/比例/.test(key)) return 'original';
+            return '';
+        };
+        return String(text || '')
+            .replace(/【([^】]+)】/g, (_m, key) => value(key))
+            .replace(/,\s*,/g, ',')
+            .replace(/\s+,/g, ',')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+    function referenceLine(brief) {
+        const bits = [];
+        const pal = paletteHexes(brief, 4);
+        if (pal.length) bits.push('Reference palette (exact, from the photo): ' + pal.join(', ') + '.');
+        bits.push('Background tone: ' + tonePhrase(brief) + '.');
+        const ar = brief && Number(brief.ar);
+        if (ar > 0 && Number.isFinite(ar)) bits.push('Original aspect ratio: ' + ratioText(ar) + '.');
+        return '\n\n' + bits.join('\n');
+    }
+
     function composeCollage(scene, text) {
         const subject = scene.subject ? ` The identifiable subject is ${scene.subject}; preserve it.` : '';
         return [
@@ -165,6 +239,25 @@
         const o = opts || {};
         const path = PATHS.indexOf(o.path) >= 0 ? o.path : 'collage';
         const scene = sceneCard(brief, o.exif, o);
+
+        // 原文模式：内置提示词（或用户手写的提示词）已经把创作方法说完了，
+        // 不再拼默认的 composeCollage/composeDistill，避免两套指令互相打架。
+        // 只做占位符替换、按元数据补比例/负面词，以及可选的照片精确数据。
+        if (o.prompt && String(o.prompt).trim()) {
+            let prompt = fillRawPrompt(o.prompt, brief, o);
+            if (o.augment) prompt += referenceLine(brief, o);
+            const ratio = canvasRatio(brief, o.ratio);
+            return {
+                path, prompt, raw: true, scene,
+                negative: String(o.negative || NEGATIVE),
+                ratio, size: imageSizeFor(brief, ratio),
+                microText: String(o.microText || ''),
+                rationale: String(o.rationale || ''),
+                needsSourceImage: o.needsSourceImage === undefined ? path === 'collage' : !!o.needsSourceImage,
+                chars: prompt.length
+            };
+        }
+
         const text = microText(scene);
         const prompt = path === 'collage' ? composeCollage(scene, text) : composeDistill(scene, text);
         const rationale = path === 'collage'
@@ -173,6 +266,7 @@
         return {
             path, prompt, negative: NEGATIVE, scene,
             ratio: scene.ratio,
+            size: imageSizeFor(brief, scene.ratio),
             microText: text.text,
             rationale,
             needsSourceImage: path === 'collage',
@@ -180,5 +274,5 @@
         };
     }
 
-    return { compile, sceneCard, canvasRatio, microText, accentLine, PATHS, warm, hash, semanticLine };
+    return { compile, sceneCard, canvasRatio, imageSizeFor, fillRawPrompt, referenceLine, microText, accentLine, PATHS, RATIOS, warm, hash, semanticLine };
 });

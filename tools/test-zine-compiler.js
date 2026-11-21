@@ -4,6 +4,7 @@
 
 const path = require('path');
 const Z = require(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app-zine-compiler.js'));
+const PROMPTS = require(path.join(__dirname, '..', 'src', 'renderer', 'js', 'app-zine-prompts.js'));
 
 const failures = [];
 const check = (ok, label, extra) => {
@@ -72,6 +73,37 @@ check(darkCard.dark === true && darkCard.inkArea[1] < card.inkArea[1], '暗调�
 // 8) 空输入不炸
 const empty = Z.compile(null, {});
 check(empty && empty.prompt && empty.ratio === '3:5', '没有速写也能出稿');
+
+// 9) 内置提示词库：原文模式直接用用户原文，不再拼默认编译器文案
+const builtins = PROMPTS.BUILTIN;
+check(builtins.length === 6 && builtins.every((p) => p.text && p.text.trim().length > 40),
+    '内置 6 条提示词都有原文', builtins.map((p) => p.name).join(' / '));
+check(new Set(builtins.map((p) => p.text)).size === 6, '6 条原文彼此不同');
+const tear = builtins.find((p) => p.id === 'tear-narrative');
+const rawTear = Z.compile(portrait, { prompt: tear.text, path: tear.path, ratio: tear.ratio });
+check(rawTear.raw === true && rawTear.prompt === tear.text.trim()
+    && !/A flat scanned paper-zine poster/.test(rawTear.prompt) && rawTear.needsSourceImage === true,
+    '选中内置原文后不再拼默认提示词，且带源图', rawTear.prompt.slice(0, 24));
+
+// 10) 占位符用常驻字段 + 照片速写替换
+const pop = builtins.find((p) => p.id === 'surreal-pop');
+const rawPop = Z.compile(portrait, { prompt: pop.text, subject: '银杏下的背影', mood: 'hands empty', ratio: pop.ratio });
+check(!/【/.test(rawPop.prompt) && /银杏下的背影/.test(rawPop.prompt) && /hands empty/.test(rawPop.prompt),
+    '【主体】/【细节约束】被真实字段替换', rawPop.prompt.slice(0, 80));
+check(/flat matte #c9a227/.test(rawPop.prompt) && /flat matte #2e4a32/.test(rawPop.prompt),
+    '【平涂色形】取自照片主色', rawPop.prompt.match(/flat matte[^,]+/g).join(' | '));
+check(rawPop.ratio === '3:4' && rawPop.size.w < rawPop.size.h, '3:4 给出竖版尺寸', JSON.stringify(rawPop.size));
+
+// 11) 钢笔淡彩：原比例 + 精确色卡数据
+const wash = builtins.find((p) => p.id === 'pen-wash-travel');
+const rawWash = Z.compile(portrait, { prompt: wash.text, ratio: wash.ratio, augment: true });
+check(rawWash.ratio === 'original' && Math.abs(rawWash.size.w / rawWash.size.h - portrait.ar) < 0.01,
+    '原比例画幅按照片宽高算尺寸', JSON.stringify(rawWash.size));
+check(/Reference palette \(exact/.test(rawWash.prompt) && /#C9A227/.test(rawWash.prompt)
+    && /Original aspect ratio: 2:3/.test(rawWash.prompt),
+    '色卡与氛围数据由照片速写补进原文', rawWash.prompt.slice(-120));
+check(Z.imageSizeFor(landscape, 'original').w > Z.imageSizeFor(landscape, 'original').h,
+    '横照原比例输出横版尺寸', JSON.stringify(Z.imageSizeFor(landscape, 'original')));
 
 console.log('');
 if (failures.length) { console.log('FAILED ' + failures.length + ' 项：' + failures.join(' / ')); process.exit(1); }
