@@ -1384,6 +1384,106 @@
             }
         },
 
+        // 白平衡吸管：屏幕点 → 照片像素 → 5×5 平均 → 反解 temp/tint。
+        // 取样一律用原图（im.el），不用烘焙层：setGrade 是「替换白平衡」而不是叠加，
+        // 若拿已经调过色的像素去解，解出来的值再套回原图会偏两倍。
+        _pickWbAt(e) {
+            const cv = this.dom && this.dom.canvas;
+            const im = this.image;
+            if (!cv || !im || !im.el) return false;
+            const rect = cv.getBoundingClientRect();
+            if (!rect.width || !rect.height) return false;
+            const pr = this._photoRect;
+            if (!pr || !(pr.w > 0) || !(pr.h > 0)) return false;
+            // 与混色器吸管同一套坐标口径：_photoRect 与 _baseSize 都是「基准坐标」，
+            // 不能拿 canvas.width 直接比（那样 DPR≠1 会整体偏一段）。
+            const base = (typeof this._baseSize === 'function')
+                ? this._baseSize() : { w: cv.width, h: cv.height };
+            const bx = (e.clientX - rect.left) / rect.width * base.w;
+            const by = (e.clientY - rect.top) / rect.height * base.h;
+            const nx = (bx - pr.x) / pr.w, ny = (by - pr.y) / pr.h;
+            if (!(nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1)) {
+                this.setStatus('点在照片范围内取中性色（这里是画布或边框）');
+                return true;
+            }
+            const src = im.el;
+            const W = src.naturalWidth || src.width || 0;
+            const H = src.naturalHeight || src.height || 0;
+            if (!W || !H) return false;
+            // 单点取样会被噪点和 JPEG 块效应带偏：取 5×5 求平均
+            const R = 2, n = R * 2 + 1;
+            const sx = Math.round(nx * W), sy = Math.round(ny * H);
+            const x0 = Math.max(0, Math.min(W - n, sx - R));
+            const y0 = Math.max(0, Math.min(H - n, sy - R));
+            if (!this._wbCv) {
+                this._wbCv = document.createElement('canvas');
+                this._wbCv.width = n; this._wbCv.height = n;
+                this._wbCtx = this._wbCv.getContext('2d', { willReadFrequently: true });
+            }
+            let d = null;
+            try {
+                this._wbCtx.clearRect(0, 0, n, n);
+                this._wbCtx.drawImage(src, x0, y0, n, n, 0, 0, n, n);
+                d = this._wbCtx.getImageData(0, 0, n, n).data;
+            } catch (_) { d = null; }
+            if (!d) { this.setStatus('这块像素读不出来，换一处点'); return true; }
+            let r = 0, g = 0, b = 0;
+            for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+            const cnt = d.length / 4;
+            r /= cnt; g /= cnt; b /= cnt;
+            // 端点没有色相可言：纯白/纯黑点下去，解出来的色温全是噪声
+            const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+            if (mx > 248 || mx < 14) {
+                this.setStatus(mx > 248
+                    ? '这里已经过曝，没有色相可解；换一块灰墙或中间调'
+                    : '这里太暗，解不出可信的白平衡；换一块中间调');
+                return true;
+            }
+            // 饱和色不能当白参考：绿叶/蓝天/红墙「也」能被解成中性，代价是把整张
+            // 推向补色（点一片叶子，全图变品红）。这不是算法错，是选错了参考点。
+            const sat = mx > 0 ? (mx - mn) / mx : 0;
+            if (sat > 0.62) {
+                this.setStatus('这个点颜色太浓，不是中性色；换一块灰墙 / 白纸 / 阴天天空');
+                return true;
+            }
+            const A = window.QfsAcr;
+            if (!A || typeof A.neutralize !== 'function' || (A.ready && !A.ready())) {
+                this.setStatus('白平衡表还没就绪，稍等一下再点');
+                return true;
+            }
+            const solved = A.neutralize(r, g, b);
+            if (!solved || !isFinite(solved.spread)) {
+                // 切图时 ACR 表会在后台重解一次，这一瞬（几十毫秒）解不出来。
+                // 踢一下加载、稍后自动重试，别让用户「再点一次」。
+                if (typeof A.ensure === 'function') A.ensure();
+                this.setStatus('白平衡表还在准备，稍等一下…');
+                clearTimeout(this._wbRetryT);
+                this._wbRetryT = setTimeout(() => {
+                    const s2 = A.neutralize(r, g, b);
+                    if (s2 && isFinite(s2.spread)) this._applyWb(s2);
+                    else this.setStatus('白平衡表还没就绪，稍后再点一次');
+                }, 260);
+                return true;
+            }
+            this._applyWb(solved, sat > 0.30
+                ? '（这个点偏色较重，不是中性灰，结果可能夸张）' : '');
+            return true;
+        },
+
+        // 反解结果落到参数上。单独拆出来是因为「表还没就绪」时要延迟重试，
+        // 重试用的是同一段落值逻辑，不复制第二份。
+        _applyWb(solved, warn) {
+            if (this.pushUndo) this.pushUndo();
+            const t = Math.round(solved.temperature), ti = Math.round(solved.tint);
+            // global：即使当前选中了蒙版，白平衡也是整张照片的事（与自动调色同理）
+            this.setGrade({ temp: t, tint: ti }, { global: true });
+            // 与滑块一致：低清先出，80ms 后补全分辨率，松手那一下不僵
+            clearTimeout(this._wbSettleT);
+            this._wbSettleT = setTimeout(() => this.rebuildGrade('full'), 80);
+            this.setStatus('白平衡：色温 ' + t + ' / 色调 ' + ti
+                + (warn || (solved.spread > 30 ? '（这个点不太中性，结果可能偏，建议换一处）' : '')));
+        },
+
         // 参数变了：立刻出一张降采样供拖动时看，静置 220ms 再补全分辨率
         setGrade(patch, opts) {
             const im = this.image;
@@ -1843,13 +1943,50 @@
             }
             const reset = $('btnGradeReset');
             if (reset) reset.addEventListener('click', () => this.resetGrade());
+
+            // ── 白平衡吸管 ────────────────────────────────────────────────
+            // QfsAcr.neutralize 一直在（自动调色在用），但用户没有入口，只能靠
+            // 眼睛猜色温。这里把它接成一次点击：点画面里的中性色，反解 temp/tint。
+            const wbBtn = $('btnWbPick');
+            if (wbBtn) {
+                const pane = $('canvasPane');
+                const setWb = (on) => {
+                    this._wbPick = !!on;
+                    wbBtn.classList.toggle('active', !!on);
+                    wbBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+                    if (pane) pane.classList.toggle('wb-picking', !!on);
+                    if (on) {
+                        // 三套取色互斥：同时开着会抢同一个画布按下事件
+                        if (this._mixPick && this._mixPick.setOn) this._mixPick.setOn(false);
+                        if (this._pc && this._pc.setOn) this._pc.setOn(false);
+                        this.setStatus('白平衡吸管：点一下画面里的中性色（灰墙 / 白纸 / 阴天天空）；再点「吸管」或 Esc 退出');
+                    }
+                };
+                this._wbPickSetOn = setWb;
+                wbBtn.addEventListener('click', (e) => { e.stopPropagation(); setWb(!this._wbPick); });
+                // 必须挂在 document 的捕获段：画布自身的 mousedown（选中/拖动元素）
+                // 是先注册的，挂在同一元素上即便 stopPropagation 也拦不住它。
+                document.addEventListener('mousedown', (e) => {
+                    if (!this._wbPick || e.button !== 0) return;
+                    const t = e.target;
+                    if (t !== this.dom.canvas && t !== this.dom.maskOverlay) return;
+                    e.preventDefault(); e.stopPropagation();
+                    this._pickWbAt(e);
+                }, true);
+                document.addEventListener('keydown', (e) => {
+                    if (this._wbPick && e.key === 'Escape') {
+                        setWb(false);
+                        this.setStatus('已退出白平衡吸管');
+                    }
+                });
+            }
             // 亮 / 颜色 / 效果：点标题收起，点右侧「复位」只清本段
             const subs = document.querySelectorAll('#grpGrade .pg-sub');
             for (const sub of subs) {
                 const head = sub.querySelector('.pg-sub-head');
                 if (!head) continue;
                 head.addEventListener('click', (e) => {
-                    if (e.target.closest('.pg-sub-reset')) return;
+                    if (e.target.closest('.pg-sub-reset') || e.target.closest('.pg-sub-tool')) return;
                     sub.classList.toggle('collapsed');
                     head.setAttribute('aria-expanded', sub.classList.contains('collapsed') ? 'false' : 'true');
                 });

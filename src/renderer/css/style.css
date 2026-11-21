@@ -1268,6 +1268,20 @@ input[type=range].fine-tuning::-webkit-slider-thumb {
 /* 这组已经动过：复位按钮常驻，颜色提到 primary，扫一眼就知道哪组不是默认值 */
 .pg-sub.is-dirty .pg-sub-reset { opacity: 1; pointer-events: auto; color: var(--primary-text); border-color: var(--primary-soft); }
 .pg-sub-reset:hover { color: var(--primary-text); border-color: var(--primary); background: var(--primary-soft); }
+/* 组内工具（当前只有白平衡吸管）：常驻可见。它不是「复位」那种危险操作，
+   藏到 hover 才出现，用户永远发现不了这个功能。 */
+.pg-sub-tool {
+    flex: 0 0 auto;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface); color: var(--text-3);
+    font-size: var(--fs-10); padding: 1px 7px 2px;
+    cursor: pointer; transition: color .12s, border-color .12s, background .12s;
+}
+.pg-sub-tool:hover { color: var(--primary-text); border-color: var(--primary); background: var(--primary-soft); }
+.pg-sub-tool.active {
+    color: var(--primary-text); border-color: var(--primary); background: var(--primary-soft);
+    box-shadow: inset 0 0 0 1px var(--primary-soft);
+}
 
 /* 行：标签 + 数值一行，轨道整宽一行。去掉逐行卡片底，靠发丝线分隔 */
 #panel-grade .param-row:has(> input[type=range]) {
@@ -1569,6 +1583,9 @@ input[type=color]::-webkit-color-swatch {
 /* 吸管激活时画布走十字光标；!important 是为了压掉 app.js 写到画布上的内联 cursor */
 #canvasPane.mix-picking #previewCanvas,
 #canvasPane.mix-picking #maskOverlay { cursor: crosshair !important; }
+/* 白平衡吸管：整块画布都是取样区，光标要明确变成准星 */
+#canvasPane.wb-picking canvas,
+#canvasPane.wb-picking #maskOverlay { cursor: crosshair !important; }
 .mix-na-note { display: none; font-size: var(--fs-11); color: var(--text-2); padding: calc(6px * var(--font-scale)) 0; }
 
 /* ── 混色器 / 点颜色 一级页签（对齐 LR：同一组里两个子页）──────────── */
