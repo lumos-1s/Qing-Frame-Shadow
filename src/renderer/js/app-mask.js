@@ -670,6 +670,8 @@
             if (this._maskPreviewOriginal === on) { this._syncMaskOrigHint(); return; }
             const snap = (opts && opts.instant) ? null : this._snapshotPreviewCanvas();
             this._maskPreviewOriginal = on;
+            // 画面换成了未调色的原图：警示是按调色后像素算的，留着会指错地方
+            if (window.QfsClip) window.QfsClip.setSuppressed();
             // 预览换的是渲染源：拖影/元素拖动缓存必须作废，否则下一帧可能拷到旧背景
             if (this._dropDragBase) this._dropDragBase();
             if (this.scheduleRender) this.scheduleRender(true);

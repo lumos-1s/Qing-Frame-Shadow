@@ -272,6 +272,12 @@
                 <div class="stage">
                     <canvas id="previewCanvas" width="800" height="600"></canvas>
                     <canvas id="maskOverlay" class="mask-overlay" width="1" height="1" aria-label="蒙版编辑层：拖出渐变/椭圆，或按住涂抹"></canvas>
+                    <!-- 溢出警示层：只在屏幕上存在，导出路径不经过它（见 app-clip.js） -->
+                    <canvas id="clipOverlay" class="clip-overlay" width="1" height="1" aria-hidden="true"></canvas>
+                    <div id="clipBadge" class="clip-badge" hidden aria-live="polite">
+                        <span class="cb-dot hi"></span><span class="cb-k">高光</span><span class="cb-v" id="clipBadgeHi">0%</span>
+                        <span class="cb-dot lo"></span><span class="cb-k">暗部</span><span class="cb-v" id="clipBadgeLo">0%</span>
+                    </div>
                     <div id="maskBrushCursor" class="mask-brush-cursor" aria-hidden="true" hidden></div>
                     <div id="maskOrigHint" class="mask-orig-hint" hidden>
                         <span class="mask-orig-tag">原图</span>
@@ -1373,6 +1379,10 @@
                                 <div class="histo-exif" id="gradeExif" title="照片的 EXIF 参数"></div>
                                 <span class="histo-raw histo-env" id="gradeEnvTag" hidden></span>
                                 <span class="histo-raw" id="gradeRawTag" hidden></span>
+                                <!-- 溢出警示：与 Lightroom 的 J 同一件事。直方图只说「有多少」，
+                                     它把「在哪里」涂在照片上，修高光时才知道该拉哪一块。 -->
+                                <button type="button" class="histo-auto histo-clipwarn" id="btnClipWarn" aria-pressed="false"
+                                    title="溢出警示：高光顶到 255 涂红、暗部压到 0 涂蓝（J）">溢出</button>
                                 <button type="button" class="histo-auto" id="btnGradeAuto" title="自动调色：曝光、黑白场；普通照片含白平衡，RAW 照片会同时校正显影白平衡（色温/色调）。本地计算，可撤销">自动</button>
                             </div>
                         </div>
@@ -2761,6 +2771,7 @@
     <script src="js/app-acr-shadows.js"></script>
     <script src="js/app-sharpen.js"></script>
     <script src="js/app-histogram.js"></script>
+    <script src="js/app-clip.js"></script>
     <script src="js/app-auto-grade.js"></script>
     <script src="js/app-panel-density.js"></script>
     <script src="js/app-grade.js"></script>

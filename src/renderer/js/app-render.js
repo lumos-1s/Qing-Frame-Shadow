@@ -398,6 +398,8 @@ window.App = Object.assign(window.App || {}, {
     setCompare(on) {
         if (!this.image) return;
         this.draggingCompare = on;
+        // 对比时画面是原图，警示涂的是调色后的溢出位置，两套像素对不上 —— 先收起来
+        if (window.QfsClip) window.QfsClip.setSuppressed();
         const saved = this.getTpl(this.image);
         if (saved) this.template = saved;
         this.normalizeTemplate();

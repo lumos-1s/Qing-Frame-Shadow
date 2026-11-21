@@ -1212,6 +1212,16 @@ input[type=range].fine-tuning::-webkit-slider-thumb {
 }
 .histo-auto:hover { border-color: var(--primary); color: var(--primary-text); background: var(--primary-soft); }
 .histo-auto:disabled { opacity: .45; cursor: default; }
+/* 溢出警示的开态：红/蓝底一半，不靠文字说明也知道它同时在管两头 */
+.histo-clipwarn.is-on {
+    color: var(--text);
+    border-color: rgba(255, 120, 110, .55);
+    background: linear-gradient(90deg, rgba(255, 70, 70, .22) 0 50%, rgba(64, 120, 255, .22) 50% 100%);
+}
+.histo-clipwarn.is-on:hover {
+    border-color: rgba(255, 120, 110, .75);
+    background: linear-gradient(90deg, rgba(255, 70, 70, .30) 0 50%, rgba(64, 120, 255, .30) 50% 100%);
+}
 /* 折叠提示只做一行轻量状态，不再用虚线卡片单独占一块：
    收了几组 + 一个文字入口，组标题上的箭头已经说明怎么展开。 */
 .fold-notice {
@@ -1495,6 +1505,35 @@ input[type=color]::-webkit-color-swatch {
     display: none;
 }
 .mask-overlay.active { display: block; pointer-events: auto; cursor: crosshair; }
+/* 溢出警示层：几何与蒙版层同一套（syncGeometry 按画布视觉矩形写 left/top/width/height），
+   z-index 比蒙版层低一级 —— 编辑蒙版时框线/手柄仍要清楚，不能被红蓝块盖掉。 */
+.clip-overlay {
+    position: absolute; left: 0; top: 0;
+    z-index: 3; pointer-events: none; border-radius: 2px;
+}
+/* 警示开着时左下角给一行读数：只涂颜色时「一格红都没有」分不清是真没溢出
+   还是没开，有百分比就能确认这个键按到了。 */
+.clip-badge {
+    position: absolute; z-index: 17;
+    left: 10px; bottom: 10px;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 9px;
+    border-radius: 7px;
+    background: rgba(10, 14, 13, .80);
+    color: #eafff8;
+    font-size: var(--fs-10);
+    line-height: 1.25;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .10), 0 4px 14px rgba(0, 0, 0, .34);
+}
+.clip-badge[hidden] { display: none; }
+.clip-badge .cb-dot { width: 7px; height: 7px; border-radius: 2px; flex: 0 0 auto; }
+.clip-badge .cb-dot.hi { background: #ff3a3a; }
+.clip-badge .cb-dot.lo { background: #3a78ff; margin-left: 4px; }
+.clip-badge .cb-k { color: rgba(234, 255, 248, .58); }
+.clip-badge .cb-v { font-weight: 600; }
 #grpMask.mask-on .pg-title { color: var(--primary-text); }
 #grpMask.mask-on .pg-title::after {
     content: '已加'; margin-left: 6px; font-size: var(--fs-10);

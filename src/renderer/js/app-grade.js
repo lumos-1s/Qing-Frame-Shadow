@@ -1809,6 +1809,8 @@
             if (this.syncRawUI) this.syncRawUI();
             // 顶部的直方图取的就是这次烘焙出来的预览；分组「动过没动过」也在这里标。
             if (window.QfsHistogram) window.QfsHistogram.refresh(this.image);
+            // 溢出警示与直方图同一份烘焙结果、同一档节流：拖滑块时红蓝块跟着走
+            if (window.QfsClip) window.QfsClip.refresh(this.image);
             this.syncGradeSections(p);
             // 带出蒙版（草稿还原/切回照片）时自动展开蒙版组，别让列表藏在折叠里
             if (window.QfsPanelDensity) window.QfsPanelDensity.syncMasks(this.image);

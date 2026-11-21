@@ -53,6 +53,8 @@ window.App = Object.assign(window.App || {}, {
         // 蒙版编辑层跟着画布的显示尺寸/位移走；有选中蒙版时顺带重画叠加层
         // （照片矩形 app._photoRect 是渲染时写进来的，缩放后必须重算位置）
         if (typeof this.syncOverlayGeometry === 'function') this.syncOverlayGeometry();
+        // 溢出警示层跟着画布的视觉矩形走（缩放/平移都不重扫像素，只重贴）
+        if (window.QfsClip) window.QfsClip.sync();
         if (typeof this.drawMaskOverlay === 'function'
             && typeof this.activeMask === 'function' && this.activeMask(this.image)) {
             this.drawMaskOverlay();

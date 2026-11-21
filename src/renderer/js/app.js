@@ -2581,6 +2581,8 @@ window.App = {
         // 直方图已提到页签之上常驻：每次切图都补一次（无图时模块自己跳过；
         // 调色尚未烘好时先取原图，烘好后再由 grade 模块刷新一次）。
         if (window.QfsHistogram && this.image) window.QfsHistogram.refresh(this.image);
+        // 溢出警示跟着换图重扫（开着的状态下切图不应该继续显示上一张的红蓝块）
+        if (window.QfsClip) window.QfsClip.refresh(this.image);
         this.refreshUI();
         this.autoFit = true;
         this.scheduleRender(true);

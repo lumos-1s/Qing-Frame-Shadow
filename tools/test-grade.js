@@ -89,7 +89,6 @@ async function main() {
     });
     await win.loadFile(path.join(ROOT, 'src', 'renderer', 'index.html'));
     await sleep(500);
-    win.showInactive();
     const exec = (expr) => win.webContents.executeJavaScript(expr);
 
     // ① 色表必须「自己」加载：产品路径只在启动空闲时 ensure，不该依赖导入 XMP。
