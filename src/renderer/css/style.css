@@ -2512,7 +2512,19 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .frame-compose-row .mini-btn { flex: 0 0 auto; padding-inline: calc(18px * var(--font-scale)); }
 /* 导演选框不是并列的生成方式，而是「翻来翻去都不对」时的兜底：只做一行细字，
    不占主决策位置；真的打开后才亮起金点，让用户知道现在走的是它。 */
-.frame-director { display: flex; align-items: center; padding-left: 2px; margin-top: -3px; }
+.frame-director { display: flex; align-items: center; gap: calc(12px * var(--font-scale)); padding-left: 2px; margin-top: -3px; }
+/* AI 破框是「交出去生成一张」的重操作：耗时长、要模型，所以给它一个描边胶囊，
+   和左边那行灰字区分开，并用 margin-left:auto 推到右端，不干扰主输入区。 */
+.frame-break-btn {
+    margin-left: auto; flex: 0 0 auto;
+    padding: calc(3px * var(--font-scale)) calc(10px * var(--font-scale));
+    border: 1px solid rgba(220,186,121,.55); border-radius: 999px;
+    background: transparent; color: var(--text-2);
+    font: inherit; font-size: var(--fs-11); cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+}
+.frame-break-btn:hover { border-color: var(--brand-gold); background: rgba(220,186,121,.10); color: var(--text); }
+.frame-break-btn:disabled { opacity: .5; cursor: default; }
 .frame-director-link {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 2px 0; border: 0; border-radius: 0; background: none;

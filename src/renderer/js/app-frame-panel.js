@@ -43,6 +43,8 @@
     // 导演是「挑不出来」时的兜底，不做粘性记忆——每次打开面板都从 free 起，
     // 免得用户下次进来先看到一个自己没选过的模式。
     let genMode = 'free';
+    // AI 破框正在跑：挡住重复点击，也用来防「生成中又切照片」把结果挂到别的图上。
+    let breaking = false;
     const previewCache = new Map();
 
     function api() { return window.qingframe || {}; }
@@ -902,6 +904,95 @@
         return !!(P.ready && P.ready(cfg));
     }
 
+    // ── AI 破框：照片 + 一段固定描述交给图像模型，直出一张成片 ──────────
+    // 和「导演选框」是两条路：导演只挑现成边框、输出仍是可编辑工程（撤销、换字、
+    // 换色都在）；这里输出的是一张位图，进来就作为新照片入库，能继续调色/加字/
+    // 导出，但没有图层，也不能回头改那几笔「溢出」。
+    // 这也是为什么它必须写在按钮上：一次几十秒，且模型不保证原样保留人物细节。
+    const BREAK_PROMPT = [
+        '把这张照片做成「3D 破框」立体装裱效果：照片嵌在一个竖版矩形相框里，',
+        '相框立在一张温暖的米白色纸面上，纸面有细腻的轻微纹理，构图留白均衡。',
+        '画面中的主体元素（树枝、花丛、人物轮廓等）自然延伸出相框边界，落到纸面上，',
+        '并在纸面投下方向一致的柔和阴影，形成真实可信的三维纵深，不要过度夸张、不要生硬。',
+        '严格保留原图的人物身份、面部特征、表情、姿势、服装、原始环境、色彩与光线特征；',
+        '不得修改、重新诠释或替换参考照片中的任何关键元素。',
+        '风格：高级编辑摄影、极简奢华、温暖中性色调、照片级真实渲染、竖版画幅。'
+    ].join('');
+
+    // 交给图像接口的源图：长边 1280 的 JPEG。原图 6000px 直接传会把请求体撑到
+    // 十几 MB，网关多半 413；1280 对「重绘一张成片」这个用途已经够用。
+    function breakSourceDataUrl() {
+        const src = photoSource();
+        const nw = src && (src.naturalWidth || src.width);
+        const nh = src && (src.naturalHeight || src.height);
+        if (!nw || !nh) return '';
+        try {
+            const k = Math.min(1, 1280 / Math.max(nw, nh));
+            const c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(nw * k));
+            c.height = Math.max(1, Math.round(nh * k));
+            const g = c.getContext('2d');
+            g.fillStyle = '#ffffff';
+            g.fillRect(0, 0, c.width, c.height);
+            g.drawImage(src, 0, 0, c.width, c.height);
+            return c.toDataURL('image/jpeg', 0.9);
+        } catch (_) { return ''; }
+    }
+
+    // 生成结果变成一张新照片：走和「导入照片」一样的入库路径——push 进 images、
+    // 排缩略图、选中它。之后调色/裁切/导出全都照常，和普通照片没有区别。
+    async function addGeneratedPhoto(dataUrl, name) {
+        const A = window.App;
+        if (!A || !Array.isArray(A.images)) throw new Error('主程序还没准备好');
+        const img = (typeof window.qfsImage === 'function') ? window.qfsImage() : new Image();
+        img.decoding = 'async';
+        await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = () => reject(new Error('生成的图打不开'));
+            img.src = dataUrl;
+        });
+        if (!img.naturalWidth || !img.naturalHeight) throw new Error('生成的图是空的');
+        const im = {
+            el: img, name: name || 'AI 生成', path: null, sample: false,
+            w: img.naturalWidth, h: img.naturalHeight, exif: {}, customSettings: null
+        };
+        A.images.push(im);
+        if (typeof A.queueThumb === 'function') A.queueThumb(im);
+        if (typeof A.buildThumbnails === 'function') A.buildThumbnails();
+        if (typeof A.selectImage === 'function') A.selectImage(A.images.length - 1);
+    }
+
+    async function aiBreakFrame() {
+        if (breaking) return;
+        const P = window.QfsAiProvider;
+        if (!P || typeof P.image !== 'function') { setStatus('这个版本没有图像通道', 'bad'); return; }
+        if (!(P.imageReady && P.imageReady())) {
+            setStatus('先填图像模型：AI 设置 → 接口地址 / Key / 图像模型', 'bad');
+            openAiSetup(false);
+            return;
+        }
+        const source = breakSourceDataUrl();
+        if (!source) { setStatus('这张照片取不出来，换一张再试', 'bad'); return; }
+        breaking = true;
+        const btn = $('btnFrameBreak');
+        if (btn) btn.disabled = true;
+        progress(true, 'AI 正在重绘，通常 30–90 秒');
+        setStatus('已提交，等模型出图…');
+        try {
+            const r = await P.image({ prompt: BREAK_PROMPT, source: source, size: '1024x1536' });
+            if (!r || !r.ok) { setStatus('生成失败：' + ((r && r.error) || '未知原因'), 'bad'); return; }
+            if (!r.image) { setStatus('接口说成功了，但里面没有图', 'bad'); return; }
+            await addGeneratedPhoto(r.image, 'AI 破框');
+            setStatus('已生成一张「AI 破框」，在胶片条里，可以接着调色或导出');
+        } catch (e) {
+            setStatus('生成出错：' + (e && e.message ? e.message : String(e)), 'bad');
+        } finally {
+            breaking = false;
+            if (btn) btn.disabled = false;
+            progress(false);
+        }
+    }
+
     // 给模型看的缩略图：长边 512 就够判断构图与明暗，再大只是把请求体撑胖。
     function directorThumb() {
         const src = photoSource();
@@ -1746,9 +1837,11 @@
         if (devLog) devLog.hidden = ch !== 'local';
         const cfg = P ? P.load() : { baseUrl: '', apiKey: '', model: '' };
         const base = $('frameApiBase'), key = $('frameApiKey'), model = $('frameApiModel');
+        const imgModel = $('frameImageModel');
         if (base && base.value !== cfg.baseUrl) base.value = cfg.baseUrl;
         if (key && !key.value) key.value = cfg.apiKey;
         if (model && model.value !== cfg.model) model.value = cfg.model;
+        if (imgModel && !imgModel.value) imgModel.value = cfg.imageModel || '';
         const hint = $('frameChannelHint');
         if (hint) {
             if (ch === 'recipe') hint.textContent = '免配置 · 不联网 · 点一下秒出 4 款';
@@ -1771,8 +1864,9 @@
             baseUrl: ($('frameApiBase') && $('frameApiBase').value) || '',
             apiKey: ($('frameApiKey') && $('frameApiKey').value) || '',
             model: ($('frameApiModel') && $('frameApiModel').value) || '',
-            // 图像模型字段已从界面移除；保留旧值，避免保存时把它清掉。
-            imageModel: prev.imageModel || ''
+            // 图像模型：AI 破框走 images/edits，和文字模型是两个名字。留空时
+            // 主进程会回落用 model——多数网关会因此 404，所以界面上明确写了要填。
+            imageModel: (($('frameImageModel') && $('frameImageModel').value) || '').trim() || (prev.imageModel || '')
         };
     }
     function bindChannelUI() {
@@ -1793,7 +1887,7 @@
                 if (!d.scope || d.scope === 'frame') syncChannelUI();
             });
         }
-        for (const id of ['frameApiBase', 'frameApiKey', 'frameApiModel']) {
+        for (const id of ['frameApiBase', 'frameApiKey', 'frameApiModel', 'frameImageModel']) {
             const el = $(id); if (!el) continue;
             el.addEventListener('change', () => { P.save(apiFormCfg()); syncChannelUI(); });
         }
@@ -1847,6 +1941,8 @@
                 setStatus('已切回自由造型');
             }
         });
+        const brk = $('btnFrameBreak');
+        if (brk) brk.addEventListener('click', () => { aiBreakFrame(); });
         syncModeUI();
         // 面板滚动/窗口缩放时跟着按钮重新定位模型浮层，避免它飘在旧位置。
         if (typeof window.addEventListener === 'function') {

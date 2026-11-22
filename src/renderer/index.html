@@ -2389,6 +2389,8 @@
                             <span id="frameDirectorText">不知道要什么？让导演从 91 款里挑</span>
                             <span class="frame-director-tail" id="frameDirectorTail" aria-hidden="true">→</span>
                         </button>
+                        <button type="button" class="frame-break-btn" id="btnFrameBreak"
+                                title="把这张照片交给图像模型，直接生成一张破框成片（约 30–90 秒；先在「AI 设置」里填图像模型）">AI 破框 · 生成一张</button>
                     </div>
                 </div>
                 <div class="frame-toolbar">
@@ -2478,6 +2480,10 @@
                                     <button type="button" class="mini-btn" id="btnFrameApiTest">测试连接</button>
                                 </div>
                             </div>
+                            <label class="frame-api-field" for="frameImageModel">
+                                <span class="frame-adv-label">图像模型（AI 破框用，可留空）</span>
+                                <input type="text" id="frameImageModel" class="frame-api-input" placeholder="如 gpt-image-1 / seedream-3.0；留空则复用上面的模型名" autocomplete="off" spellcheck="false" />
+                            </label>
                             <div class="frame-api-note" id="frameApiNote">支持 OpenAI 兼容接口：官方、中转或自建网关。填完点「测试连接」，成功后再保存。</div>
                         </div>
                         <div class="frame-adv-row" id="frameAgentRow">

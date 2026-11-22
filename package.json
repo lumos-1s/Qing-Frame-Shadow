@@ -155,6 +155,7 @@
     "test:director": "node tools/test-frame-director.js",
     "test:directorpanel": "node tools/run-electron.js tools/test-director-panel.js",
     "test:aivision": "node tools/test-ai-vision.js",
+    "test:aibreak": "node tools/run-electron.js tools/test-ai-break.js",
     "test:localagent": "node tools/test-local-agent.js",
     "test:acp": "node tools/test-acp-client.js",
     "wall:jank": "node tools/wall-jank.js",
