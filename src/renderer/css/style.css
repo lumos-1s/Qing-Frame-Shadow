@@ -701,14 +701,9 @@ html.dark #previewCanvas {
     width: min(520px, 88%); padding: 12px 8px;
 }
 .ph-preview {
-    width: 188px; height: 126px; padding: 5px;
-    border: 1px solid var(--border); border-radius: 9px;
-    background: var(--surface); box-shadow: 0 6px 20px rgba(0,0,0,.22);
-    margin-bottom: 20px;
-}
-.ph-preview img {
-    display: block; width: 100%; height: 100%;
-    object-fit: cover; border-radius: 5px; filter: saturate(.9) brightness(.92);
+    width: 56px; height: 56px; margin-bottom: 18px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-3);
 }
 .ph-title { font-size: var(--fs-14); font-weight: 600; color: var(--text); }
 .ph-desc { margin: 6px 0 20px; font-size: var(--fs-11); color: var(--text-3); }
