@@ -127,7 +127,23 @@ const RUN = `(async () => {
     add(!A.$('puzzleStyles').querySelector('.active'), '手动改参数后风格不高亮',
         Array.from(A.$('puzzleStyles').querySelectorAll('.active')).map(b => b.dataset.val).join(','));
 
-    // ⑤ 退出拼图：入口关闭、照片入口收起、素材栏还原
+    // ⑦ 全部重置格子：清掉每格的缩放/偏移/旋转，不动照片与格子的几何
+    A.template.puzzle.slots[1].zoom = 240;
+    A.template.puzzle.slots[1].offsetX = 12;
+    A.template.puzzle.slots[1].rotate = 2;
+    realClick(A.$('btnResetAllSlots'));
+    await sleep(150);
+    const sc1 = A.template.puzzle.slots[1];
+    add(sc1.zoom == null && sc1.offsetX == null && sc1.rotate == null,
+        '全部重置格子清掉每格的缩放/偏移/旋转', [sc1.zoom, sc1.offsetX, sc1.rotate].join('/'));
+    add(sc1.imageIndex === 1, '全部重置格子保留照片', sc1.imageIndex);
+    A.template.puzzle.axisVals = { v: [0.3], h: [0.7] };
+    realClick(A.$('btnResetPuzzleAxes'));
+    await sleep(150);
+    add(Object.keys(A.template.puzzle.axisVals || {}).length === 0,
+        '恢复分隔线按钮把格子大小还原为默认比例', JSON.stringify(A.template.puzzle.axisVals));
+
+    // ⑧ 退出拼图：入口关闭、照片入口收起、素材栏还原
     A.$('btnPuzzleExit').click();
     await sleep(180);
     add(A.template.puzzle.enabled === 0, '退出后拼图关闭', A.template.puzzle.enabled);

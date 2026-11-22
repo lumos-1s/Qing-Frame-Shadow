@@ -3697,6 +3697,7 @@ window.App = {
         bindBtn('btnEditGapCaption', () => this.addEditGapCaption());
         bindBtn('btnDeleteGapCaption', () => this.deleteCaption());
 bindBtn('btnResetAllSlots', () => this.resetAllSlots());
+bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
                 bindBtn('btnPuzzleClearSlots', () => this.clearPuzzleSlots());
         bindBtn('btnPuzzleDisable', () => this.disablePuzzle());
         bindBtn('btnExportPuzzle', () => this.exportPuzzle());
