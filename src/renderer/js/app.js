@@ -1375,7 +1375,11 @@ window.App = {
             if (this._immersionOpen) return;
             if (this._activePuzzleSlot == null || e.button !== 0) return;
             const t = e.target;
-            if (t && t.closest && t.closest('#previewCanvas, #panel-puzzle, #btnImmersive')) return;
+            // 拼图模式下的「选中格」操作入口都算画布内交互：浮层按钮、照片库、
+            // 胶片条、退出按钮。以前它们被这条规则当成"画布以外"先清掉选中格，
+            // 于是按钮 click 时 _activePuzzleSlot 已是 null，表现为点了没反应。
+            if (t && t.closest && t.closest('#previewCanvas, #panel-puzzle, #btnImmersive, '
+                + '#puzzleSlotBar, #btnPuzzleExit, #thumbStrip, #sidePhotoBody')) return;
             this.clearActivePuzzleSlot();
         }, true);
         window.addEventListener('mousemove', e => {

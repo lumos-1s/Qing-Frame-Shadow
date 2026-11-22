@@ -26,6 +26,11 @@ const RUN = `(async () => {
   const res = [];
   const add = (ok, label, got) => res.push({ ok: !!ok, label: label, got: String(got) });
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  // 真实鼠标会先发 mousedown；只调 el.click() 会漏掉「点画布以外清选中」的全局监听
+  const realClick = (el) => {
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    el.click();
+  };
 
   try {
     const ims = [];
@@ -77,28 +82,35 @@ const RUN = `(async () => {
         '有图格子：旋转/复位/清空按钮可用', [A.$('psbRotate').disabled, A.$('psbReset').disabled, A.$('psbClear').disabled].join('/'));
 
     // ④ 点照片库第 5 张 → 放进选中格 0，两个入口都出现角标
-    A.$('photoLibGrid').children[4].click();
+    realClick(A.$('photoLibGrid').children[4]);
     await sleep(250);
     add(A.template.puzzle.slots[0].imageIndex === 4, '点照片库照片放进选中格', A.template.puzzle.slots[0].imageIndex);
+    add(A._activePuzzleSlot === 0, '点照片库不会先清掉选中格', A._activePuzzleSlot);
     add(A.currentIdx === 0, '放图不切走当前主图', A.currentIdx);
+    realClick(A.dom.thumbStrip.querySelectorAll('.thumb')[0]);
+    await sleep(150);
+    add(A.template.puzzle.slots[0].imageIndex === 0, '点胶片条照片放进选中格', A.template.puzzle.slots[0].imageIndex);
+    realClick(A.$('photoLibGrid').children[4]); // 复原成第 5 张，供后面核对「风格不改格子内容」
+    await sleep(150);
     const cardBadge = A.$('photoLibGrid').children[4].querySelector('.photo-lib-slot');
     const thumbBadge = A.dom.thumbStrip.querySelectorAll('.thumb-item')[4].querySelector('.thumb-used');
     add(!!cardBadge && cardBadge.textContent === '1', '照片库出现已用角标', cardBadge && cardBadge.textContent);
     add(!!thumbBadge && thumbBadge.textContent === '1', '胶片条出现已用角标', thumbBadge && thumbBadge.textContent);
 
     // ⑤ 浮层按钮真的改模型
-    A.$('psbRotate').click();
+    realClick(A.$('psbRotate'));
     await sleep(120);
     add(A.template.puzzle.slots[0].rotate === 1, '浮层旋转按钮生效', A.template.puzzle.slots[0].rotate);
-    A.$('psbReset').click();
+    add(A._activePuzzleSlot === 0, '点浮层按钮不会先清掉选中格', A._activePuzzleSlot);
+    realClick(A.$('psbReset'));
     await sleep(120);
     add(A.template.puzzle.slots[0].zoom == null, '浮层复位按钮清掉手动缩放', A.template.puzzle.slots[0].zoom);
-    A.$('psbClear').click();
+    realClick(A.$('psbClear'));
     await sleep(150);
     add(A.template.puzzle.slots[0].imageIndex == null, '浮层清空按钮清掉该格照片', A.template.puzzle.slots[0].imageIndex);
     add(A.$('psbRotate').disabled && A.$('psbTitle').textContent.indexOf('空') > 0,
         '空格子：操作按钮置灰且标题标空', A.$('psbTitle').textContent);
-    A.$('photoLibGrid').children[4].click(); // 复原，供后面的风格测试核对「保留格子内容」
+    realClick(A.$('photoLibGrid').children[4]); // 复原，供后面的风格测试核对「保留格子内容」
     await sleep(150);
 
     // ⑥ 风格：改参数不改格子；手动改间距后不高亮
