@@ -2335,6 +2335,14 @@
             <div class="studio-slot" id="studioSlot"></div>
             <div class="frame-body frame-studio" id="frameView">
                 <div class="frame-compose">
+                    <div class="frame-modes" id="frameModes" role="group" aria-label="生成方式">
+                        <button type="button" class="frame-mode-btn active" data-mode="free" aria-pressed="true">
+                            <b>自由造型</b><span>从零画版式</span>
+                        </button>
+                        <button type="button" class="frame-mode-btn" data-mode="director" aria-pressed="false">
+                            <b>导演选框</b><span>从 91 款里挑 + 写文案</span>
+                        </button>
+                    </div>
                     <div class="frame-compose-row">
                         <select id="frameSamplePhoto" class="frame-sample-select" aria-label="选择示例照片" title="用哪张已导入的照片来展示效果"></select>
                         <input type="text" id="framePrompt" class="frame-prompt" placeholder="想要什么感觉？如：展览海报、胶片边框、大字标题" aria-label="描述风格" />
@@ -2788,6 +2796,7 @@
     <script src="js/app-frame-lint.js"></script>
     <script src="js/app-frame-plans.js"></script>
     <script src="js/app-frame-recipes.js"></script>
+    <script src="js/app-frame-director.js"></script>
     <script src="js/app-ai-provider.js"></script>
     <script src="js/app-zine-prompts.js"></script>
     <script src="js/app-zine-compiler.js"></script>

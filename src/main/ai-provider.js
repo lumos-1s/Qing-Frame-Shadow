@@ -92,11 +92,53 @@ async function request(url, cfg, body, timeoutMs) {
     }
 }
 
+// 图片只收内联 data URL：不让渲染层把任意 http 地址塞给上游（SSRF、防盗链、
+// 内网探测都能借这条通道发生）。2 张 / 6MB 是「一张 512px 缩略图 + 一张对比图」
+// 够用的上限，再大对选框没有帮助，只会把请求体顶到网关拒绝。
+const IMAGE_DATA_RE = /^data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/i;
+const MAX_IMAGE_CHARS = 9 * 1024 * 1024;
+const MAX_IMAGES = 2;
+const MAX_TEXT_CHARS = 60000;
+
+function normalizeContent(content) {
+    if (typeof content === 'string') {
+        const t = content.slice(0, MAX_TEXT_CHARS);
+        return t.trim() ? { ok: true, content: t } : { ok: false, error: '空消息' };
+    }
+    if (!Array.isArray(content)) return { ok: false, error: '消息内容必须是文本或内容块' };
+    const parts = [];
+    let images = 0;
+    for (const raw of content) {
+        const p = raw && typeof raw === 'object' ? raw : null;
+        if (!p) continue;
+        if (p.type === 'text' && typeof p.text === 'string') {
+            const t = p.text.slice(0, MAX_TEXT_CHARS);
+            if (t.trim()) parts.push({ type: 'text', text: t });
+            continue;
+        }
+        if (p.type === 'image_url') {
+            const url = typeof p.image_url === 'string' ? p.image_url : (p.image_url && p.image_url.url);
+            const clean = typeof url === 'string' ? url.replace(/\s+/g, '') : '';
+            if (!IMAGE_DATA_RE.test(clean)) return { ok: false, error: '只支持内联的 png/jpeg/webp 图片' };
+            if (clean.length > MAX_IMAGE_CHARS) return { ok: false, error: '图片太大（上限约 6MB）' };
+            if (++images > MAX_IMAGES) return { ok: false, error: '一条消息最多 2 张图' };
+            parts.push({ type: 'image_url', image_url: { url: clean } });
+            continue;
+        }
+        return { ok: false, error: '不支持的内容类型：' + String(p.type || '?') };
+    }
+    return parts.length ? { ok: true, content: parts } : { ok: false, error: '空消息' };
+}
+
 async function chat(cfg, messages) {
     const c = cfg || {};
-    const list = (Array.isArray(messages) ? messages : [])
-        .filter((m) => m && (m.role === 'system' || m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-        .map((m) => ({ role: m.role, content: m.content }));
+    const list = [];
+    for (const m of (Array.isArray(messages) ? messages : [])) {
+        if (!m || (m.role !== 'system' && m.role !== 'user' && m.role !== 'assistant')) continue;
+        const n = normalizeContent(m.content);
+        if (!n.ok) return { ok: false, error: n.error };
+        list.push({ role: m.role, content: n.content });
+    }
     if (!list.length) return { ok: false, error: '没有要发送的内容' };
     if (!String(c.model || '').trim()) return { ok: false, error: '还没填模型名' };
     const body = {
@@ -229,4 +271,4 @@ async function image(cfg, params) {
     return { ok: true, image: got.data, revised: picked.revised, path: src ? 'edits' : 'generations', sourceUrl: picked.value };
 }
 
-module.exports = { chat, models, image, endpoint, normBase, decodeDataUrl, pickImage, DEFAULT_BASE };
+module.exports = { chat, models, image, endpoint, normBase, decodeDataUrl, pickImage, normalizeContent, DEFAULT_BASE };

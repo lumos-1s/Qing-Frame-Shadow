@@ -2438,6 +2438,30 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .frame-compose-row { display: flex; gap: var(--sp-2); align-items: stretch; }
 .frame-compose-row .frame-prompt { flex: 1 1 auto; font-size: var(--fs-13); padding: calc(9px * var(--font-scale)) calc(12px * var(--font-scale)); }
 .frame-compose-row .mini-btn { flex: 0 0 auto; padding-inline: calc(18px * var(--font-scale)); }
+/* 两种生成方式：自由造型（图层）与导演选框（从手工框里挑）。 */
+.frame-modes { display: flex; gap: calc(6px * var(--font-scale)); flex-wrap: wrap; }
+/* 面板底色就是 --surface，未选中态若也透明，两个按钮会糊成一片；
+   给一档 --surface-alt 垫底，选中态再叠金色底 + 双线边，一眼能分出选的是哪个。 */
+.frame-mode-btn {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+    padding: calc(6px * var(--font-scale)) calc(11px * var(--font-scale));
+    border: 1px solid var(--border); border-radius: var(--r-s);
+    background: var(--surface-alt); color: var(--text-2); font: inherit; cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s, box-shadow .15s;
+}
+.frame-mode-btn b { font-size: var(--fs-12); font-weight: 600; letter-spacing: .02em; }
+.frame-mode-btn span { font-size: var(--fs-10); color: var(--text-3); }
+.frame-mode-btn:hover { border-color: var(--border-strong); color: var(--text); }
+.frame-mode-btn.active {
+    border-color: var(--brand-gold);
+    background: rgba(220, 186, 121, .16);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--brand-gold);
+}
+.frame-mode-btn.active b { color: var(--text); }
+.frame-mode-btn.active span { color: var(--text-2); }
+/* 浅色底上 --brand-gold-text(#e6d9b8) 会糊掉，只在深色主题换成暖金副标 */
+html.dark .frame-mode-btn.active span { color: var(--brand-gold-text); }
 /* 灵感模板：不想打字的人点一下就有一句完整方向，仍可继续改 */
 .frame-ideas { display: flex; align-items: center; flex-wrap: wrap; gap: calc(6px * var(--font-scale)); }
 .frame-ideas-label { font-size: var(--fs-10); color: var(--text-3); margin-right: 2px; }
@@ -2611,6 +2635,11 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .frame-api-field > .frame-adv-label { display: block; }
 .frame-api-note { font-size: var(--fs-11); color: var(--text-3); line-height: 1.5; }
 .frame-swatch-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.frame-swatch-why {
+    font-size: var(--fs-10); line-height: 1.45; color: var(--text-3);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; padding-inline: 2px;
+}
 .frame-swatch-lint {
     position: absolute; left: 6px; top: 6px; z-index: 2;
     padding: 1px 6px; border-radius: 2px; font-size: 10px; line-height: 16px;

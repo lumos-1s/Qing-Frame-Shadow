@@ -39,6 +39,10 @@
     let tweakUndoPushed = false, tweakTimer = 0;
     let iterateBase = null;      // 继续改所基于的方案 entry
     let lbEntry = null, lbPreview = '', lbOriginal = '';
+    // 生成方式：free = 模型/配方从零画图层；director = 从手工边框里挑 + 写文案。
+    // 存 localStorage：下次打开还是上次那套，不用每次重选。
+    const MODE_KEY = 'qfs_frame_mode';
+    let genMode = readStore(MODE_KEY) === 'director' ? 'director' : 'free';
     const previewCache = new Map();
 
     function api() { return window.qingframe || {}; }
@@ -444,7 +448,17 @@
         const use = document.createElement('span'); use.className = 'frame-swatch-use'; use.textContent = '套用 ›';
         foot.appendChild(use);
 
-        card.appendChild(imgBox); card.appendChild(foot);
+        card.appendChild(imgBox);
+        // 导演给的「为什么选这款」：一行到两行，鼠标悬停看全文。
+        // 自由造型没有这句，不占位置。
+        if (entry.why) {
+            const why = document.createElement('div');
+            why.className = 'frame-swatch-why';
+            why.textContent = entry.why;
+            why.title = entry.why;
+            card.appendChild(why);
+        }
+        card.appendChild(foot);
         card.addEventListener('click', () => applyEntry(entry));
         card.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyEntry(entry); }
@@ -639,7 +653,10 @@
 
     function setGeneratingUI(on) {
         const btn = $('btnGenerate');
-        if (btn) { btn.disabled = on; btn.textContent = on ? '生成中…' : '生成 4 款'; }
+        if (btn) {
+            btn.disabled = on;
+            btn.textContent = on ? '生成中…' : (genMode === 'director' ? '让导演挑 4 款' : '生成 4 款');
+        }
         const go = $('btnIterateGo'); if (go) go.disabled = on;
         const again = $('btnFrameAgain'); if (again) again.hidden = on || !lastRequest;
         const cancel = $('btnFrameCancel'); if (cancel) cancel.disabled = !on;
@@ -856,15 +873,164 @@
         setStatus((fromRecipe ? '本地配方已出 ' : '已生成 ') + gallery.length + ' 款' + (fixedN ? '，自动修正 ' + fixedN + ' 处' : '') + '，点卡片即可套用', 'ok');
     }
     // ── 导演选框：模型只挑不改版式 ──────────────────────────────
+    // 和「自由造型」的关键差别：AI 不写坐标，只从 app.presets 里选名字 + 写文案。
+    // 因此模型抽风最多是选错框；渲染、撤销、导出仍走手工预设那条老路。
+    function syncModeUI() {
+        const box = $('frameModes');
+        if (box) {
+            const btns = box.querySelectorAll('[data-mode]');
+            for (const b of btns) {
+                const on = b.dataset.mode === genMode;
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            }
+        }
+        const input = $('framePrompt');
+        if (input) {
+            input.placeholder = genMode === 'director'
+                ? '说用途或场合，如：旅行手账、给妈妈的生日卡（可不填）'
+                : '想要什么感觉？如：展览海报、胶片边框、大字标题';
+        }
+        if (!generating) setGeneratingUI(false);
+    }
+
+    function directorApiReady() {
+        const P = window.QfsAiProvider;
+        if (!P || channelOf() !== 'api') return false;
+        const cfg = P.load ? P.load() : {};
+        return !!(P.ready && P.ready(cfg));
+    }
+
+    // 给模型看的缩略图：长边 512 就够判断构图与明暗，再大只是把请求体撑胖。
+    function directorThumb() {
+        const src = photoSource();
+        const w = src && (src.naturalWidth || src.width);
+        const h = src && (src.naturalHeight || src.height);
+        if (!w || !h) return '';
+        try {
+            const k = Math.min(1, 512 / Math.max(w, h));
+            const c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(w * k));
+            c.height = Math.max(1, Math.round(h * k));
+            const g = c.getContext('2d');
+            g.fillStyle = '#ffffff';
+            g.fillRect(0, 0, c.width, c.height);
+            g.drawImage(src, 0, 0, c.width, c.height);
+            return c.toDataURL('image/jpeg', 0.82);
+        } catch (_) { return ''; }
+    }
+
+    async function directorGenerate(text, my, avoid) {
+        const D = window.QfsFrameDirector;
+        if (!D) throw new Error('导演模块未加载，请重启应用');
+        const presets = (app && Array.isArray(app.presets) ? app.presets : []).filter((p) => p && p.templateName);
+        if (!presets.length) throw new Error('边框清单还没加载完，等一秒再试');
+
+        const info = lastBrief || briefOf();
+        const brief = info && info.brief ? info.brief : null;
+        const im = photoImage();
+        const exif = (im && im.exif) || {};
+        const location = (app && app.template && app.template.location) || '';
+        const skip = (Array.isArray(avoid) ? avoid : []).slice(0, 8);
+        const ctx = { brief: brief, exif: exif, intent: text, avoid: skip };
+        let picks = [];
+        let note = '';
+        let dropped = 0;
+
+        if (directorApiReady()) {
+            const P = window.QfsAiProvider;
+            progress(true, '导演正在看照片、翻边框…');
+            let image = directorThumb();
+            const ask = (withImage) => D.buildMessages({
+                presets: presets, brief: brief, briefText: info && info.text, exif: exif,
+                location: location, intent: text, image: withImage ? image : '', count: 4, avoid: skip
+            });
+            let r = await P.chat(ask(!!image), { temperature: 0.8 });
+            if (my !== runSeq) return;
+            // 不少 OpenAI 兼容模型只收文字：带图被拒时去掉图再来一次，
+            // 不把「模型不支持视觉」变成用户的一次失败重试。
+            if (!r.ok && image && /image|vision|content|图片|多模态|unsupported|400/i.test(String(r.error || ''))) {
+                note = '当前模型没看图，按参数摘要选的';
+                r = await P.chat(ask(false), { temperature: 0.8 });
+                if (my !== runSeq) return;
+            }
+            if (!r.ok) throw new Error(r.error || '导演调用失败');
+            const parsed = D.parsePicks(r.content, presets);
+            picks = parsed.picks;
+            dropped = (parsed.dropped || []).length;
+            if (!picks.length) note = '模型没给出可用边框名，已退回本地初选';
+            else if (picks.length < 4) note = '模型只给了 ' + picks.length + ' 款，其余用本地补齐';
+            if (dropped) note = (note ? note + '；' : '') + dropped + ' 个编造的边框名已丢弃';
+        } else {
+            // 三条通道里只有 API 能看图；说清楚"这批为什么是本地挑的"，不让用户以为模型挑的。
+            note = channelOf() === 'api' ? 'AI 还没配好，已用本地初选'
+                : channelOf() === 'recipe' ? '本地配方不调模型，这批按比例与关键词挑；想让它读图请在「高级」切到 API Key'
+                    : '本机助手看不了图，已用本地初选';
+        }
+
+        if (!picks.length) picks = D.localPicks(presets, ctx, 4, Date.now());
+        if (!picks.length) throw new Error('没有可用的边框');
+
+        const built = [];
+        let warns = 0;
+        const used = new Set();
+        for (const pick of picks) {
+            if (built.length >= 4) break;
+            if (!pick || !pick.preset || used.has(pick.preset.templateName)) continue;
+            const c = D.composePreset(pick.preset, pick);
+            warns += (c.warnings || []).length;
+            used.add(pick.preset.templateName);
+            built.push({ preset: c.preset, why: pick.why, director: true });
+        }
+        // 模型给得不够 4 款（或去重后不够）时，用本地初选补齐，不让画廊空着
+        if (built.length < 4) {
+            for (const item of D.localPicks(presets, ctx, 8, Date.now() + 17)) {
+                if (built.length >= 4) break;
+                if (used.has(item.preset.templateName)) continue;
+                const c = D.composePreset(item.preset, item);
+                used.add(item.preset.templateName);
+                built.push({ preset: c.preset, why: item.why, director: true });
+            }
+        }
+
+        const at = Date.now();
+        const roundId = uid();
+        gallery = built.map((b, i) => ({
+            key: 'dir:' + roundId + ':' + i, preset: b.preset, dataUrl: null,
+            source: 'current', director: true, why: b.why,
+            roundPrompt: text, roundAt: at
+        }));
+        previousNames = gallery.map((g) => g.preset.templateName || '');
+        view = 'current';
+        syncTabs();
+        renderGallery();
+
+        progress(true, '正在套用你的照片…');
+        let rendered = 0;
+        for (let i = 0; i < gallery.length; i++) {
+            if (my !== runSeq) return;
+            gallery[i].dataUrl = renderFrameToUrl(gallery[i].preset, photoSource());
+            if (gallery[i].dataUrl) rendered++;
+            renderGallery();
+        }
+        if (!rendered) throw new Error('样片渲染失败：照片未就绪');
+        pushRound(text, built.map((b) => b.preset));
+        renderGallery();
+        setStatus('导演挑了 ' + gallery.length + ' 款'
+            + (warns ? '，' + warns + ' 处文案已按字位压缩' : '')
+            + (note ? ' · ' + note : ''), 'ok');
+    }
+
     async function generate(opts) {
         opts = opts || {};
         const promptEl = $('framePrompt');
         const text = String(opts.prompt != null ? opts.prompt : (promptEl && promptEl.value) || '').trim();
         const base = opts.base ? clone(opts.base) : null;
         if (generating) return;
-        if (!text) { setStatus('先描述你想要的风格', 'bad'); return; }
+        // 导演模式允许空提示：没有想法时就让导演按照片本身挑。
+        if (!text && genMode !== 'director') { setStatus('先描述你想要的风格', 'bad'); return; }
         const channel = channelOf();
-        if (channel !== 'recipe' && !aiConfigured()) {
+        if (genMode !== 'director' && channel !== 'recipe' && !aiConfigured()) {
             // 首次使用 / 配置失效：不把用户丢在一句报错里，直接开统一设置，配好自动续跑。
             pendingGenerate = { prompt: text, base: base, avoid: opts.avoid };
             openAiSetup(true);
@@ -886,6 +1052,10 @@
         if ($('frameAgentOut')) $('frameAgentOut').textContent = '';
         try {
             const photo = lastBrief || briefOf();
+            if (genMode === 'director') {
+                await directorGenerate(text, my, lastRequest.avoid);
+                return;
+            }
             // 本地配方：不配置、不联网、不等模型，直接排 4 款。
             if (channel === 'recipe') {
                 progress(true, base ? '正在换 4 套配色…' : '正在按本地配方排版…');
@@ -1658,6 +1828,23 @@
         const setupModal = $('aiSetupModal');
         if (setupModal) setupModal.addEventListener('click', (e) => { if (e.target === setupModal) closeAiSetup(); });
         bindChannelUI();
+        const modes = $('frameModes');
+        if (modes) modes.addEventListener('click', (e) => {
+            const b = e.target && e.target.closest ? e.target.closest('[data-mode]') : null;
+            if (!b) return;
+            genMode = b.dataset.mode === 'director' ? 'director' : 'free';
+            writeStore(MODE_KEY, genMode === 'director' ? 'director' : '');
+            syncModeUI();
+            refreshBrief();
+            if (genMode === 'director') {
+                setStatus(directorApiReady()
+                    ? '导演会看图从 91 款里挑 4 款，并按照片写文案'
+                    : '未配置 AI：先按比例与关键词本地挑；配好后导演能看图配文');
+            } else {
+                setStatus('已切回自由造型');
+            }
+        });
+        syncModeUI();
         // 面板滚动/窗口缩放时跟着按钮重新定位模型浮层，避免它飘在旧位置。
         if (typeof window.addEventListener === 'function') {
             window.addEventListener('resize', placeModelPop);

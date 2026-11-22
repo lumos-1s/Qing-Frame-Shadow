@@ -48,13 +48,14 @@
 清框影把「加框 → 调色 → 写参数 → 出图」收进一个离线工作台。91 款边框、96 种风格，每一款都还能继续改：
 
 - **边框与排版** — 杂志、拍立得、邮票、报纸、撕纸、胶片、渐变卡、3D 卡、水印与头像叠加；悬停先预览，点选即套用。
+- **一句话选框（AI 导演）** — 说一句「做成旅行手账」或「给妈妈的生日卡」，模型先看一眼缩略图，再从 91 款边框里挑 4 款、写好标题与副标题，并附一句为什么选它。模型只负责「挑哪款 + 写什么字」，坐标、版式、渲染仍由引擎计算，所以最坏情况是挑错框，不会画出跑版的东西。需要先在「AI 设置」里填一个兼容 OpenAI 的接口，本机跑的或云端的都行。
 - **调色** — 直方图、曲线、混色器、校准、蒙版、黑白与锐化，按「亮 / 颜色 / 效果」分段；色温/色调带吸管，点一下画面里的灰墙或白纸就定白平衡；按 J 开「溢出警示」，过曝的地方涂红、死黑的地方涂蓝，一眼看出该拉哪一块；一键自动调色，全程本地计算、可撤销。
 - **RAW 直读** — arw / cr2 / cr3 / nef / raf / dng 等三十余种格式，先出代理图，切到该张时自动补齐全尺寸。
 - **文字 · Logo · EXIF** — 自动读取相机参数，自定义签名与头像排版；文字可在画布上拖动、改字号与颜色。
 - **我的调色** — 存成 Lightroom 可读的 `.xmp`，批量导入、悬停预览、编组搜索，套用到选中或全部照片。
 - **批量出图** — 多图导入、逐张记忆样式、同步到选中、拼图与切图、沉浸照片墙；PNG / JPEG / WebP，最高 8192px。导出可选 sRGB / Display P3 / Adobe RGB：后两者会真的转换像素并嵌入 ICC（WebP 仍按 sRGB）。
 
-> **English** — 91 built-in preset templates with live frame, light and logo controls; per-photo grading with curves, masks and XMP presets; collage, grid slicing, immersive presentation and batch export up to 8192px. Everything stays local.
+> **English** — 91 built-in preset templates with live frame, light and logo controls; per-photo grading with curves, masks and XMP presets; an AI director that picks presets and writes the captions from one sentence; collage, grid slicing, immersive presentation and batch export up to 8192px. Everything stays local.
 
 <a id="how-it-works"></a>
 ## 工作流程 · How it works
