@@ -350,6 +350,39 @@ html.dark .inline-select { color-scheme: dark; }
 }
 .side-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .side-body[hidden] { display: none; }
+/* 拼图模式左侧照片库：胶片条格子小，选图入格时这里给更大的缩略图 */
+.photo-side-hint {
+    font-size: var(--fs-10); color: var(--text-3); line-height: 1.5;
+    padding: calc(4px * var(--font-scale)) var(--sp-3) var(--sp-2);
+}
+.photo-lib-grid {
+    flex: 1; min-height: 0; overflow: auto;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start; gap: var(--sp-2);
+    padding: 0 var(--sp-3) var(--sp-3);
+}
+.photo-lib-item {
+    position: relative; aspect-ratio: 1; min-width: 0;
+    border: 2px solid transparent; border-radius: var(--r-s);
+    overflow: hidden; background: var(--surface-alt); cursor: pointer;
+    transition: border-color .15s, transform .1s;
+}
+.photo-lib-item:hover { border-color: var(--primary); transform: translateY(-1px); }
+.photo-lib-item.main { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.photo-lib-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-lib-slot {
+    position: absolute; top: 3px; right: 3px;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    display: grid; place-items: center; border-radius: 5px;
+    background: var(--primary); color: #06251c;
+    font-size: var(--fs-9); font-weight: 700; line-height: 1;
+    box-shadow: 0 1px 4px rgba(0,0,0,.35);
+}
+.photo-lib-pick {
+    position: absolute; top: 3px; left: 3px;
+    width: 14px; height: 14px; margin: 0; accent-color: var(--primary);
+    cursor: pointer;
+}
 .side-subhead {
     display: flex; align-items: center; justify-content: flex-end; gap: 6px;
     padding: var(--sp-1) var(--sp-3) 0;
@@ -738,6 +771,15 @@ html.dark #previewCanvas {
     background: var(--thumb-active); color: #fff; font-weight: 600; pointer-events: none;
 }
 .thumb-strip .thumb.main { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary), 0 3px 8px rgba(0,0,0,.45); }
+/* 拼图模式下标出照片已放进哪些格：多格复用显示 ×N */
+.thumb-used {
+    position: absolute; right: 2px; bottom: 2px; z-index: 1;
+    min-width: 15px; height: 15px; padding: 0 3px;
+    display: grid; place-items: center;
+    border-radius: 4px; background: var(--primary); color: #06251c;
+    font-size: var(--fs-9); font-weight: 700; line-height: 1;
+    pointer-events: none; box-shadow: 0 1px 4px rgba(0,0,0,.35);
+}
 
 /* ── 侧栏收起 / 展开 / 拖动宽度 ── */
 .panel-collapse-btn {
@@ -1954,6 +1996,13 @@ html.dark .mini-btn.primary { color: var(--primary-ink); }
 /* 未选中拼图格子时，单格偏移/缩放整体降权，避免看起来可操作 */
 .param-row.is-disabled { opacity: .42; }
 .param-row.is-disabled input[type="range"] { cursor: not-allowed; }
+/* 拼图风格：一键设定间距/圆角/底色/比例，不碰每格照片与字幕 */
+.pz-style-label {
+    font-size: var(--fs-10); color: var(--text-3);
+    padding: calc(7px * var(--font-scale)) calc(2px * var(--font-scale)) calc(3px * var(--font-scale));
+}
+#puzzleStyles .mini-btn { padding-left: calc(2px * var(--font-scale)); padding-right: calc(2px * var(--font-scale)); font-size: var(--fs-10); }
+#puzzleStyles .mini-btn.active { border-color: var(--primary); color: var(--primary-text); background: var(--primary-soft); }
 
 .pool-title { font-size: var(--fs-11); color: var(--text-2); padding: var(--sp-2) calc(2px * var(--font-scale)) var(--sp-1); display: flex; align-items: center; gap: var(--sp-1-5); }
 .pool-title .cnt { font-size: var(--fs-10); color: var(--text-3); }
@@ -3113,6 +3162,21 @@ body.platform-darwin .titlebar-controls { display: none; }
     transform: translateY(-1px);
 }
 .stage-immersive-btn:active { transform: translateY(0); }
+
+/* 拼图画布左上角出口：拼图是个模式，退出入口不该埋在右栏底部 */
+.stage-puzzle-exit {
+    position: absolute; top: 14px; left: 14px; z-index: 18;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 34px; padding: 0 12px 0 9px;
+    border: 1px solid rgba(255, 255, 255, .18); border-radius: 11px;
+    background: rgba(10, 14, 13, .62); color: rgba(255, 255, 255, .9);
+    font: inherit; font-size: var(--fs-11); font-weight: 600;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .30), inset 0 1px 0 rgba(255, 255, 255, .10);
+    cursor: pointer; transition: color .18s, border-color .18s, background .18s, transform .18s;
+}
+.stage-puzzle-exit:hover { color: #06251C; border-color: var(--primary); background: var(--primary); transform: translateY(-1px); }
+.stage-puzzle-exit:active { transform: translateY(0); }
 
 .immersion {
     --imm-accent: #46E0B8;

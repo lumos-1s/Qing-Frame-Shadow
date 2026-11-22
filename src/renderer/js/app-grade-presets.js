@@ -108,26 +108,36 @@ window.App = Object.assign(window.App || {}, {
     /* ══ 左侧双模式 ══ */
 
     setSideMode(mode, opts) {
-        const m = mode === 'grade' ? 'grade' : 'border';
+        const m = (mode === 'grade' || mode === 'photo') ? mode : 'border';
         if (this._sideMode !== m) this._endGradePresetHover(true);
         this._sideMode = m;
         const aside = this.$('sidebar');
         if (aside) {
             aside.classList.toggle('mode-grade', m === 'grade');
-            aside.classList.toggle('mode-border', m !== 'grade');
+            aside.classList.toggle('mode-border', m === 'border');
+            aside.classList.toggle('mode-photo', m === 'photo');
         }
         const borderBody = this.$('sideBorderBody');
         const gradeBody = this.$('sideGradeBody');
+        const photoBody = this.$('sidePhotoBody');
         if (borderBody) borderBody.hidden = m !== 'border';
         if (gradeBody) gradeBody.hidden = m !== 'grade';
-        for (const [id, key] of [['sideTabBorder', 'border'], ['sideTabGrade', 'grade']]) {
+        if (photoBody) photoBody.hidden = m !== 'photo';
+        for (const [id, key] of [['sideTabBorder', 'border'], ['sideTabGrade', 'grade'], ['sideTabPhoto', 'photo']]) {
             const tab = this.$(id);
             if (!tab) continue;
             const on = key === m;
             tab.classList.toggle('active', on);
             tab.setAttribute('aria-selected', on ? 'true' : 'false');
         }
-        try { localStorage.setItem('qfs_side_mode', m); } catch (_) { /* 隐私模式 */ }
+        // 照片库是拼图页签的临时模式，不写进偏好，重启后仍是用户上次选的边框/调色。
+        if (m !== 'photo') {
+            try { localStorage.setItem('qfs_side_mode', m); } catch (_) { /* 隐私模式 */ }
+        }
+        if (m === 'photo') {
+            if (this.renderPhotoLibrary) this.renderPhotoLibrary();
+            return;
+        }
         if (m === 'grade') {
             if (!this._gradePresetLoaded) this.refreshGradePresets();
             else this._renderGradePresetList();

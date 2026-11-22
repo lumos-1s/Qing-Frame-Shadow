@@ -73,7 +73,12 @@ window.App = Object.assign(window.App || {}, {
         if (name !== 'grade' && this._activeMaskId) this.setActiveMask(null);
         if (name === 'logo') this.renderLogoPools();
         if (name === 'template') this.refreshTemplates();
+        // 照片库只在拼图页签露出；进/出拼图自动接管并还原左侧素材栏
+        const photoTab = document.getElementById('sideTabPhoto');
+        if (photoTab) photoTab.hidden = name !== 'puzzle';
+        if (typeof this.updatePuzzleSideMode === 'function') this.updatePuzzleSideMode(name);
         if (name === 'puzzle') this.refreshPuzzleUI();
+        if (typeof this.updatePuzzleExitEntry === 'function') this.updatePuzzleExitEntry();
         // 直方图留在调色页签内，切到调色页时补一次（有图才画，无图时模块自己跳过）；
         // 切到别的页签时调色面板被隐藏，直方图自动不画。
         if (name === 'grade' && window.QfsHistogram && this.image) window.QfsHistogram.refresh(this.image);

@@ -227,6 +227,7 @@
                     <div class="side-mode-tabs" role="tablist" aria-label="左侧素材库">
                         <button id="sideTabBorder" class="side-mode-tab active" type="button" data-side-mode="border" role="tab" aria-selected="true">素材库</button>
                         <button id="sideTabGrade" class="side-mode-tab" type="button" data-side-mode="grade" role="tab" aria-selected="false">调色预设</button>
+                        <button id="sideTabPhoto" class="side-mode-tab" type="button" data-side-mode="photo" role="tab" aria-selected="false" hidden>照片</button>
                     </div>
                     <button id="btnSidebarCollapse" class="panel-collapse-btn" type="button" title="收起素材栏 (Ctrl+[)" aria-label="收起素材栏">
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.5 5.5 8 10 12.5"/></svg>
@@ -260,6 +261,13 @@
                     </div>
                     <div id="lvGradePresets" class="grade-preset-list" role="region" aria-label="调色预设列表"></div>
                 </div>
+                <div id="sidePhotoBody" class="side-body" hidden>
+                    <div class="side-subhead">
+                        <button id="btnPhotoLibAdd" class="side-title-action" type="button" title="导入更多照片到胶片条">导入照片</button>
+                    </div>
+                    <div class="photo-side-hint">点照片放进选中格；Ctrl/Shift + 点可勾选多张，再点布局按勾选顺序铺满。</div>
+                    <div id="photoLibGrid" class="photo-lib-grid" role="region" aria-label="照片库"></div>
+                </div>
                 <div id="sidebarResizer" class="side-resizer" title="拖动调整素材栏宽度，双击恢复默认"></div>
             </aside>
 
@@ -286,6 +294,10 @@
                     </div>
                     <div id="rotHint" class="rot-hint" hidden>↻ 拖动旋转<span>Shift 15°</span></div>
                 </div>
+                <button id="btnPuzzleExit" class="stage-puzzle-exit" type="button" title="退出拼图，回到单张照片编辑" hidden>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+                    <span>退出拼图</span>
+                </button>
                 <button id="btnImmersive" class="stage-immersive-btn" type="button" title="全屏沉浸展示 (Ctrl+Shift+P)" aria-label="全屏沉浸展示" hidden>
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/>
@@ -1234,6 +1246,8 @@
                             <div class="el-status" id="lblPuzzleSlot">当前格子：未启用</div>
                             <div class="btn-row btn-12" id="puzzleLayouts"></div>
                             <div class="pz-hint">点画布选中格子，再点下方照片放入；勾选多张后点布局，可按勾选顺序铺满。</div>
+                            <div class="pz-style-label">风格</div>
+                            <div class="btn-row btn-3" id="puzzleStyles"></div>
                             <div class="btn-row btn-2">
                                 <button class="mini-btn" id="btnPuzzleRepuzzle" title="按胶片条勾选顺序重新铺满；没有勾选时用当前主图铺满，并重置每格位置/缩放/旋转">一键铺满</button>
                                 <button class="mini-btn" id="btnPuzzleFillEmpty" title="只补还没放图的空格，已放好的格子不动">补满空位</button>

@@ -3411,6 +3411,7 @@ window.App = {
         strip.innerHTML = '';
         // 图对象 → 缩略图节点 的映射,供 renderFramedThumb 直接定位(见那里的注释)
         const elMap = new Map();
+        const usedMap = this.puzzleUsedImageMap ? this.puzzleUsedImageMap() : new Map();
         this.images.forEach((im, i) => {
             const wrap = document.createElement('div');
             wrap.className = 'thumb-item';
@@ -3495,6 +3496,14 @@ window.App = {
                 tag.title = '同步源：当前编辑中的照片（同步时以它的边框为准）';
                 wrap.appendChild(tag);
             }
+            const usedSlots = usedMap.get(i) || [];
+            if (usedSlots.length) {
+                const used = document.createElement('span');
+                used.className = 'thumb-used';
+                used.textContent = usedSlots.length > 1 ? '×' + usedSlots.length : String(usedSlots[0]);
+                used.title = `已放入拼图第 ${usedSlots.join('、')} 格`;
+                wrap.appendChild(used);
+            }
             strip.appendChild(wrap);
         });
         this._thumbEls = elMap;
@@ -3503,6 +3512,8 @@ window.App = {
         // 批量删除走右键菜单或 Delete，取消多选直接单击任一缩略图或再按一次 Ctrl+A。
         if (typeof this.updateExportEntry === 'function') this.updateExportEntry();
         if (typeof this.updateImmersiveEntry === 'function') this.updateImmersiveEntry();
+        // 左侧照片库与胶片条共用同一份缩略图数据，勾选/入格后同步刷新
+        if (this._sideMode === 'photo' && typeof this.renderPhotoLibrary === 'function') this.renderPhotoLibrary();
     },
 
     // 勾选切换(checkbox;与 Ctrl/Shift 多选同一份 batchSel,按勾选顺序排队)
@@ -3862,6 +3873,8 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
         bindBtn('btnPuzzleAddImg', () => this.openImage());
         bindBtn('btnPuzzleRepuzzle', () => this.rePuzzleFill());
         bindBtn('btnPuzzleFillEmpty', () => this.fillEmptyPuzzleSlots());
+        bindBtn('btnPuzzleExit', () => this.disablePuzzle());
+        bindBtn('btnPhotoLibAdd', () => this.openImage());
 
         // 元素管理
         if ($('slActiveIconOpacity')) $('slActiveIconOpacity').addEventListener('input', () => {
@@ -4121,8 +4134,9 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
             if (sl) { sl.value = r; sl.dispatchEvent(new Event('input')); }
         });
 
-        // 拼图布局
+        // 拼图布局 / 风格
         this.buildPuzzleLayoutBtns();
+        this.buildPuzzleStyleBtns();
 
         // 槽位下拉:切换前先把当前编辑的字幕写入旧槽位,再加载新槽位
         if ($('cbPuzzleGapPick')) $('cbPuzzleGapPick').addEventListener('change', () => this.onPuzzleSlotChange());

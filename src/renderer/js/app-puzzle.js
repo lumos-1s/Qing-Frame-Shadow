@@ -46,6 +46,125 @@ window.App = Object.assign(window.App || {}, {
         return `<span class="pz-layout-ico" aria-hidden="true">${cells}</span>`;
     },
 
+    // 拼图风格：只改间距/圆角/底色/比例，不动每格照片、平移缩放和字幕。
+    puzzleStyles() {
+        return [
+            ['clean', '极简白', { gap: 6, cornerRadius: 0, bgMode: 0, canvasRatio: 'auto', borderColor: 'ffffff' }],
+            ['ink', '细黑边', { gap: 12, cornerRadius: 0, bgMode: 0, canvasRatio: 'auto', borderColor: '16181a' }],
+            ['blur', '模糊底', { gap: 8, cornerRadius: 3, bgMode: 1, canvasRatio: 'auto', borderColor: 'ffffff' }],
+            ['mag', '圆角杂志', { gap: 16, cornerRadius: 7, bgMode: 0, canvasRatio: '4:3', borderColor: 'f2efe8' }],
+        ];
+    },
+
+    buildPuzzleStyleBtns() {
+        const box = this.$('puzzleStyles');
+        if (!box) return;
+        box.innerHTML = '';
+        this.puzzleStyles().forEach(([key, label, cfg]) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'mini-btn pz-style-btn';
+            b.dataset.val = key;
+            b.textContent = label;
+            b.title = `${label}：间距 ${cfg.gap} / 圆角 ${cfg.cornerRadius}% / ${cfg.bgMode ? '模糊照片底' : '纯色底'} / ${cfg.canvasRatio === 'auto' ? '自动比例' : cfg.canvasRatio}`;
+            b.setAttribute('aria-pressed', 'false');
+            b.addEventListener('click', () => this.applyPuzzleStyle(key));
+            box.appendChild(b);
+        });
+    },
+
+    applyPuzzleStyle(key) {
+        if (!this.template) return;
+        const hit = this.puzzleStyles().find(s => s[0] === key);
+        if (!hit) return;
+        this.onSettingCommit();
+        const pk = this.template.puzzle || (this.template.puzzle = this.defaultTemplate().puzzle);
+        Object.assign(pk, JSON.parse(JSON.stringify(hit[2])));
+        this.saveCurrentTemplate();
+        this.refreshPuzzleUI();
+        this.scheduleRender(true);
+        this.setStatus(`已应用拼图风格「${hit[1]}」`);
+    },
+
+    // 画布左上角「退出拼图」：只在拼图页签且拼图真的启用时出现
+    updatePuzzleExitEntry() {
+        const btn = this.$('btnPuzzleExit');
+        if (!btn) return;
+        const active = document.querySelector('#inspTabs .tab.active');
+        const onPuzzleTab = !!(active && active.dataset.tab === 'puzzle');
+        const inPuzzle = !!(onPuzzleTab && this.tplPuzzle && this.tplPuzzle());
+        btn.hidden = !inPuzzle;
+        const photoTab = this.$('sideTabPhoto');
+        if (photoTab) photoTab.hidden = !inPuzzle;
+    },
+
+    // 照片索引 → 已放入的格子号（1 起）。胶片条角标和左侧照片库共用。
+    puzzleUsedImageMap() {
+        const map = new Map();
+        const pk = this.tplPuzzle && this.tplPuzzle();
+        if (!pk) return map;
+        const n = this.puzzleSlotCount(pk.layout || 'single');
+        for (let i = 0; i < n; i++) {
+            const sc = pk.slots && pk.slots[i];
+            if (!sc) continue;
+            let idx = null;
+            if (sc.imageIndex != null) idx = sc.imageIndex;
+            else if (sc.imagePath && this.images) idx = this.images.findIndex(x => x.name === sc.imagePath);
+            if (idx == null || idx < 0) continue;
+            if (!map.has(idx)) map.set(idx, []);
+            map.get(idx).push(i + 1);
+        }
+        return map;
+    },
+
+    // 左侧「照片」模式：拼图页签下自动接管素材栏，点照片直接放入选中格。
+    renderPhotoLibrary() {
+        const grid = this.$('photoLibGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        const used = this.puzzleUsedImageMap();
+        (this.images || []).forEach((im, i) => {
+            const card = document.createElement('div');
+            card.className = 'photo-lib-item' + (this.image === im ? ' main' : '');
+            const img = document.createElement('img');
+            const fresh = !!(im.thumb && im._thumbEl === im.el);
+            img.src = fresh ? im.thumb : ((im.el && im.el.src) || '');
+            img.alt = im.name || ('照片' + (i + 1));
+            img.loading = 'lazy';
+            img.draggable = false;
+            card.appendChild(img);
+            const slots = used.get(i) || [];
+            if (slots.length) {
+                const badge = document.createElement('span');
+                badge.className = 'photo-lib-slot';
+                badge.textContent = slots.length > 1 ? '×' + slots.length : String(slots[0]);
+                card.appendChild(badge);
+            }
+            card.title = (im.name || ('照片' + (i + 1)))
+                + (slots.length ? `（已放入第 ${slots.join('、')} 格）` : '（点此放入选中格）');
+            card.addEventListener('click', e => {
+                if (e.shiftKey || e.ctrlKey || e.metaKey) { e.stopPropagation(); this.toggleSelect(i); return; }
+                this.assignPuzzlePhotoFromStrip(i);
+            });
+            grid.appendChild(card);
+        });
+    },
+
+    // 进拼图页签自动切到照片库，离开时还原用户原来的素材栏模式。
+    updatePuzzleSideMode(tabName) {
+        const onPuzzle = tabName === 'puzzle' && !!(this.template && this.template.puzzle && this.template.puzzle.enabled);
+        if (onPuzzle) {
+            if (this._sideMode !== 'photo') {
+                this._sideModeBeforePuzzle = this._sideMode || 'border';
+                if (this.setSideMode) this.setSideMode('photo', { activateTab: false });
+            }
+        } else if (this._sideMode === 'photo' && this._sideModeBeforePuzzle) {
+            const back = this._sideModeBeforePuzzle;
+            this._sideModeBeforePuzzle = null;
+            if (this.setSideMode) this.setSideMode(back, { activateTab: false });
+        }
+    },
+
     buildPuzzleLayoutBtns() {
         const box = this.$('puzzleLayouts');
         if (!box) return;
@@ -89,6 +208,7 @@ window.App = Object.assign(window.App || {}, {
         this.saveCurrentTemplate();
         this.switchTab('puzzle');
         this.refreshPuzzleUI();
+        this.buildThumbnails();
         this.scheduleRender(true);
     },
 
@@ -227,6 +347,7 @@ window.App = Object.assign(window.App || {}, {
         }
         // 间隙字幕捕获(v/h 键)
         if (!this._skipPuzzleCapture && this._puzzleSlot != null) this.captureCaptionToModel(this._puzzleSlot);
+        this.refreshPuzzleStyleHighlight();
     },
 
     // 槽位/间隙下拉改变:先把当前编辑字幕写回旧项,再提交/加载新项
@@ -253,6 +374,24 @@ window.App = Object.assign(window.App || {}, {
         this.refreshPuzzleUI();
     },
 
+    // 按当前参数回显风格按钮；手动拖过滑块后自然不再匹配（不高亮）
+    refreshPuzzleStyleHighlight() {
+        const box = this.$ && this.$('puzzleStyles');
+        const pk = this.template && this.template.puzzle;
+        if (!box || !pk) return;
+        Array.prototype.forEach.call(box.querySelectorAll('button[data-val]'), (b) => {
+            const hit = this.puzzleStyles().find(s => s[0] === b.dataset.val);
+            const cfg = hit && hit[2];
+            const on = !!cfg && cfg.gap === (pk.gap != null ? pk.gap : 6)
+                && cfg.cornerRadius === (pk.cornerRadius != null ? pk.cornerRadius : 3)
+                && cfg.bgMode === (pk.bgMode || 0)
+                && cfg.canvasRatio === (pk.canvasRatio || 'auto')
+                && cfg.borderColor.toLowerCase() === (pk.borderColor || 'ffffff').toLowerCase();
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+    },
+
     refreshPuzzleUI() {
         if (!this.template) return;
         const $ = this.$;
@@ -270,6 +409,8 @@ window.App = Object.assign(window.App || {}, {
                 b.setAttribute('aria-pressed', on ? 'true' : 'false');
             });
         }
+        this.refreshPuzzleStyleHighlight();
+        if (this.updatePuzzleExitEntry) this.updatePuzzleExitEntry();
         // 「一键铺满」：拼图启用且至少有一张照片就可用；「补满空位」只在真有空格时可用
         let emptySlots = 0;
         for (let i = 0; i < n; i++) {
@@ -641,6 +782,7 @@ window.App = Object.assign(window.App || {}, {
         const sc = pk.slots[i];
         if (sc) { sc.imageIndex = undefined; sc.imagePath = undefined; }
         this.saveCurrentTemplate();
+        this.buildThumbnails();
         this.refreshPuzzleUI();
         this.scheduleRender(true);
         this.setStatus('已清空格子 ' + (i + 1) + '（照片仍保留在胶片条）');
@@ -656,8 +798,11 @@ window.App = Object.assign(window.App || {}, {
         this._activePuzzleSlot = null;
         this._puzzleAxisHover = null;
         this.saveCurrentTemplate();
+        this.buildThumbnails();
         this.refreshPuzzleUI();
         this.toggleCaptionEditor(false);
+        if (this.updatePuzzleSideMode) this.updatePuzzleSideMode('canvas');
+        if (this.updatePuzzleExitEntry) this.updatePuzzleExitEntry();
         this.scheduleRender(true);
         this.setStatus('已退出拼图');
     },
@@ -1011,6 +1156,7 @@ window.App = Object.assign(window.App || {}, {
         sc.imageIndex = imgIdx;
         sc.imagePath = undefined;
         this.saveCurrentTemplate();
+        this.buildThumbnails();
         this.refreshPuzzleUI();
         this.scheduleRender(true);
         const im = this.images[imgIdx];
