@@ -536,6 +536,9 @@ window.App = Object.assign(window.App || {}, {
         ta.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 e.preventDefault();
+                // 一次 Esc 只退编辑：不让它继续冒泡到 document 的「取消手势/取消选中」。
+                // 否则编辑中的文字按 Esc 会同时丢掉选中框（app-view.js 的那层也收到）。
+                e.stopPropagation();
                 this.cancelTextEditor();
             } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
@@ -636,6 +639,7 @@ window.App = Object.assign(window.App || {}, {
         const sel = this.selectedEls;
         // 同 hitResizeHandle：选中态已变但还没重绘时，旧把手不能再生效
         if (!hd || !sel || sel.length !== 1 || sel[0].kind !== 'text') return null;
+        if (this._rotHandleOwner && this._rotHandleOwner !== sel[0].obj) return null;
         return Math.hypot(pt.x - hd.x, pt.y - hd.y) <= hd.r + 6 ? hd : null;
     },
 
@@ -754,6 +758,7 @@ window.App = Object.assign(window.App || {}, {
         // 取消选中后可能还没来得及重绘，旧手柄坐标仍在内存里；没有「单选文字」就不算命中
         if (!hs || !hs.length || !pt || !sel || sel.length !== 1
             || (sel[0].kind !== 'text' && sel[0].kind !== 'aiLayer')) return null;
+        if (this._resizeHandleOwner && this._resizeHandleOwner !== sel[0].obj) return null;
         const k = this.textSpaceScale();
         const r = Math.max(8, 9 * k);
         for (const hd of hs) {
@@ -1202,7 +1207,78 @@ window.App = Object.assign(window.App || {}, {
         }
     },
 
-    rebindSelectedEls() { /* template引用稳定,无需重绑 */ },
+    // 模板整体被替换（撤销 / 换预设 / 导入 / AI 面板微调 / 套用另一款）后，
+    // selectedEls 里存的对象引用会变成孤儿：方向键/Delete 改不到画布上的图层，
+    // 虚线框却还画在旧位置。按 index 重绑到新模板，找不到就取消选中。
+    rebindSelectedEls() {
+        const t = this.template;
+        if (!t) {
+            if (this.selectedEls && this.selectedEls.length) this.clearElementSelection({ silent: true });
+            return false;
+        }
+        const lists = {
+            aiLayer: Array.isArray(t.aiLayers) ? t.aiLayers : [],
+            logo: Array.isArray(t.logoElements) ? t.logoElements : [],
+            sticker: (t.decorConfig && Array.isArray(t.decorConfig.stickers)) ? t.decorConfig.stickers : [],
+            text: (t.decorConfig && Array.isArray(t.decorConfig.textLines)) ? t.decorConfig.textLines : []
+        };
+        const old = this.selectedEls || [];
+        const out = [];
+        old.forEach(sel => {
+            if (!sel || !sel.obj) return;
+            const arr = lists[sel.kind];
+            if (!arr) { out.push(sel); return; } // 沉浸式/墙预览等伪选中不归这里管
+            let next = null;
+            if (Number.isInteger(sel.index) && arr[sel.index]) next = arr[sel.index];
+            else if (arr.indexOf(sel.obj) >= 0) next = sel.obj;
+            if (!next) return;
+            if (next !== sel.obj) {
+                sel = Object.assign({}, sel, { obj: next });
+                if (sel.kind === 'aiLayer') sel.index = arr.indexOf(next);
+            }
+            out.push(sel);
+        });
+        const changed = out.length !== old.length || out.some((s, i) => s !== old[i]);
+        this.selectedEls = out;
+        if (changed) {
+            this._resizeHandles = null;
+            this._rotHandle = null;
+            if (typeof this.syncElInputs === 'function') this.syncElInputs();
+        }
+        // 正在编辑的文字若属于被换掉的模板，直接丢编辑器，避免 blur/commit 写回孤儿对象
+        const ed = this._textEditor;
+        if (ed && ed.el) {
+            const arr = ed.ai ? lists.aiLayer : lists.text;
+            if (arr && arr.indexOf(ed.el) < 0) {
+                ed.cancelled = true;
+                ed.ta.remove();
+                this._textEditor = null;
+            }
+        }
+        return changed;
+    },
+
+    // 模板被换掉时手势必须立刻结束，但不要走 cancelElementGesture 的「还原几何」：
+    // 那些对象已经不在新模板里，还原只会改孤儿并塞回一条错误的撤销步。
+    _endGestureForTemplateChange() {
+        if (!this._dragEl && !this._resizeEl && !this._rotEl) return false;
+        this._dragEl = null;
+        this._resizeEl = null;
+        this._rotEl = null;
+        this._skipAiLayer = null;
+        this._skipUserEl = null;
+        this._backingCap = 0;
+        this._aiGuides = null; this._aiSnap = null; this._aiSnapOff = false;
+        this._logoSnapV = null; this._logoSnapH = null;
+        this._logoSnapEdgeV = null; this._logoSnapEdgeH = null;
+        this._logoSnapPhotoV = null; this._logoSnapPhotoH = null;
+        this._resizeHandles = null; this._rotHandle = null;
+        this._dropDragBase();
+        this._hideRotateHint();
+        if (this.dom && this.dom.canvas) this.dom.canvas.style.cursor = '';
+        this.scheduleRender && this.scheduleRender(true);
+        return true;
+    },
 
     moveElement(drag, x, y) {
         const e = drag.ref;
@@ -1540,6 +1616,10 @@ window.App = Object.assign(window.App || {}, {
     drawSelectionBox() {
         this._rotHandle = null;   // 只有「单选一个元素」时才会重新写它
         this._resizeHandles = null;
+        // 缓存的把手坐标必须知道自己属于谁：选中态变了但还没重绘的那一帧，
+        // 旧坐标不能命中另一个对象（否则缩放/旋转基准会错）。
+        this._resizeHandleOwner = null;
+        this._rotHandleOwner = null;
         try {
             const canvas = this.dom.canvas;
             if (!canvas || !this.selectedEls || !this.selectedEls.length) return;
@@ -1574,6 +1654,7 @@ window.App = Object.assign(window.App || {}, {
                             name, x: x + h / 2, y: y + h / 2,
                             cursor: (name === 'nw' || name === 'se') ? 'nwse-resize' : 'nesw-resize'
                         }));
+                        this._resizeHandleOwner = e;
                     }
                     ctx.restore();
                     continue;
@@ -1607,6 +1688,7 @@ window.App = Object.assign(window.App || {}, {
                     corners.forEach(([, x, y]) => ctx.fillRect(x, y, h, h));
                     if (this.selectedEls.length === 1) {
                         const hand = h / 2;
+                        this._resizeHandleOwner = e;
                         this._resizeHandles = corners.map(([name, x, y]) => {
                             const lx = x + hand, ly = y + hand;
                             const ax = m.cx * k + lx * Math.cos(rotTh) - ly * Math.sin(rotTh);
@@ -1636,6 +1718,7 @@ window.App = Object.assign(window.App || {}, {
                             y: m.cy * k - dist * Math.cos(th),
                             r: kr,
                         };
+                        this._rotHandleOwner = e;
                     }
                     ctx.restore();
                     continue;

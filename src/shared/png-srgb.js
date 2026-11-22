@@ -74,6 +74,56 @@
         return out;
     }
 
+    function u32(bytes, off) {
+        return ((bytes[off] << 24) | (bytes[off + 1] << 16) | (bytes[off + 2] << 8) | bytes[off + 3]) >>> 0;
+    }
+    function setU32(bytes, off, v) {
+        bytes[off] = (v >>> 24) & 0xff; bytes[off + 1] = (v >>> 16) & 0xff;
+        bytes[off + 2] = (v >>> 8) & 0xff; bytes[off + 3] = v & 0xff;
+    }
+
+    // 用 iCCP 取代 sRGB chunk。deflate 由主进程传入(zlib.deflateSync)，浏览器里不调用。
+    function insertIcc(input, profile, name, deflate) {
+        const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+        if (!isPng(bytes) || !profile || !profile.length || typeof deflate !== 'function') return bytes;
+        const hasBuf = typeof Buffer !== 'undefined';
+        const label = (hasBuf && Buffer.isBuffer(name)) || Array.isArray(name)
+            ? name : Array.from(String(name || 'ICC') + '\0', (c) => c.charCodeAt(0) & 0xff);
+        const comp = new Uint8Array(deflate(hasBuf && Buffer.isBuffer(profile) ? profile : Buffer.from(profile)));
+        const data = new Uint8Array(label.length + 1 + comp.length);
+        data.set(label, 0);
+        data[label.length] = 0;                 // 压缩方法 0
+        data.set(comp, label.length + 1);
+        const type = [0x69, 0x43, 0x43, 0x50];  // iCCP
+        const chunk = new Uint8Array(12 + data.length);
+        setU32(chunk, 0, data.length);
+        chunk.set(type, 4);
+        chunk.set(data, 8);
+        setU32(chunk, 8 + data.length, crc32(chunk.subarray(4, 8 + data.length)));
+
+        const parts = [bytes.subarray(0, 8)];
+        let off = 8, inserted = false, done = false;
+        while (off + 12 <= bytes.length && !done) {
+            const len = u32(bytes, off);
+            const t = String.fromCharCode(bytes[off + 4], bytes[off + 5], bytes[off + 6], bytes[off + 7]);
+            const end = off + 12 + len;
+            if (end > bytes.length) break;
+            if (t === 'sRGB' || t === 'iCCP') { off = end; continue; }
+            if (!inserted && t === 'IDAT') { parts.push(chunk); inserted = true; }
+            parts.push(bytes.subarray(off, end));
+            if (t === 'IEND') done = true;
+            off = end;
+        }
+        if (!inserted) parts.push(chunk);
+        if (off < bytes.length) parts.push(bytes.subarray(off));
+        let total = 0;
+        parts.forEach((p) => { total += p.length; });
+        const out = new Uint8Array(total);
+        let at = 0;
+        parts.forEach((p) => { out.set(p, at); at += p.length; });
+        return out;
+    }
+
     function ensureBuffer(buf) {
         if (!Buffer.isBuffer(buf)) return buf;
         const out = insertSrgb(buf);
@@ -96,5 +146,5 @@
         } catch (e) { return dataUrl; }
     }
 
-    return { insertSrgb, ensureBuffer, ensureDataUrl };
+    return { insertSrgb, insertIcc, crc32, isPng, ensureBuffer, ensureDataUrl };
 });

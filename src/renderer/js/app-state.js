@@ -198,25 +198,49 @@ window.App = Object.assign(window.App || {}, {
     // 以前快照里只有模板，调色参数挂在 im.grade 上不在栈里，于是
     // 「调完曝光按 Ctrl+Z」撤不掉调色，反而撤掉了上一条边框/文字操作。
     // grade 用非枚举字段挂在快照上：快照本体仍是模板对象，cloneTemplate 的既有语义不变。
-    cloneTemplate() {
-        const t = JSON.parse(JSON.stringify(this.template || null));
+    cloneTemplate(im, tpl) {
+        // 不传参数 = 当前图当前模板（绝大多数调用点）；批量套用要给「别的照片」压栈，
+        // 就得显式传那张图的 image 与模板，否则快照会带上当前图的调色/几何。
+        const image = (im === undefined) ? this.image : im;
+        const src = (tpl === undefined) ? this.template : tpl;
+        const t = JSON.parse(JSON.stringify(src || null));
         if (t && t._draftText) delete t._draftText;
-        const im = this.image;
         // 总是带上 grade（即使是 null）：快照必须能表达「这张照片本来没有调色」，
         // 否则「调完再撤销」时找不到 grade 就什么都不还原，Ctrl+Z 像是失灵了。
-        const grade = (im && im.grade) ? JSON.parse(JSON.stringify(im.grade)) : null;
+        const grade = (image && image.grade) ? JSON.parse(JSON.stringify(image.grade)) : null;
         Object.defineProperty(t, '__grade', { value: grade, enumerable: false, configurable: true, writable: true });
         // RAW 显影参数 + 裁切/旋转也是这张图的状态，撤销必须一起回退。
-        const raw = this.rawSnapshotOf ? this.rawSnapshotOf(im) : null;
+        const raw = this.rawSnapshotOf ? this.rawSnapshotOf(image) : null;
         Object.defineProperty(t, '__raw', { value: raw, enumerable: false, configurable: true, writable: true });
         // 非 RAW 的几何编辑（旋转 / 裁切）以前只改位图，撤销栈完全看不见：
         // Ctrl+Z 撤不掉、重开软件还悄悄丢。把操作日志深拷贝进快照，
         // 撤销时从 im.orig.el 按序重放就能回到任意一步（qfs-img.js 的 qfsApplyGeo）。
-        const geo = (im && !im.raw && im.geoOps) ? JSON.parse(JSON.stringify(im.geoOps)) : null;
+        const geo = (image && !image.raw && image.geoOps) ? JSON.parse(JSON.stringify(image.geoOps)) : null;
         Object.defineProperty(t, '__geo', { value: geo, enumerable: false, configurable: true, writable: true });
         // 记录快照属于哪张图。非枚举，不会被 setTpl/JSON 序列化带进模板文件。
-        Object.defineProperty(t, '__image', { value: im || null, enumerable: false, configurable: true, writable: true });
+        Object.defineProperty(t, '__image', { value: image || null, enumerable: false, configurable: true, writable: true });
         return t;
+    },
+
+    // 给指定照片压一条撤销步。批量套用会一次改多张图，每张都得有自己的历史，
+    // 否则用户切过去按 Ctrl+Z 会提示「没有可撤销的操作」。
+    pushUndoForImage(im, tpl) {
+        if (!im) return;
+        let undo, redo;
+        if (im === this.image) {
+            undo = this.undoStack;
+            redo = this.redoStack;
+        } else {
+            if (!this.historyByImage) this.historyByImage = new WeakMap();
+            let h = this.historyByImage.get(im);
+            if (!h) { h = { undo: [], redo: [] }; this.historyByImage.set(im, h); }
+            undo = h.undo;
+            redo = h.redo;
+        }
+        undo.push(this.cloneTemplate(im, tpl));
+        if (undo.length > this.MAX_UNDO) undo.shift();
+        redo.length = 0;
+        if (im === this.image) this.updateHistoryButtons();
     },
 
     // 栈顶快照与当前状态是否完全一致（模板 + 调色都相同）。
@@ -238,6 +262,14 @@ window.App = Object.assign(window.App || {}, {
         if (JSON.stringify(rawCur) !== JSON.stringify(snap.__raw || null)) return false;
         const geoCur = (im && !im.raw && im.geoOps) ? im.geoOps : null;
         return JSON.stringify(geoCur || null) === JSON.stringify(snap.__geo || null);
+    },
+
+    // 模板整体被替换后的统一出口。撤销/换预设/导入/套用都要走这里：
+    // 选中对象引用会失效，手势也必须结束，AI 面板的微调基准要重建。
+    _onTemplateChanged() {
+        if (this._endGestureForTemplateChange) this._endGestureForTemplateChange();
+        if (this.rebindSelectedEls) this.rebindSelectedEls();
+        if (this._syncAiLayerEdit) this._syncAiLayerEdit();
     },
 
     // 应用一个撤销/重做快照。旧栈里可能存着「只有模板」的老格式，按缺失处理。
@@ -271,6 +303,8 @@ window.App = Object.assign(window.App || {}, {
             // 恢复显影参数和视图；像素由主进程按快照重解（异步，不阻塞撤销栈）
             if (this.rawApplyUndo) this.rawApplyUndo(im, snap.__raw);
         }
+        // 撤销换掉的是整个 template 对象：选中引用、面板基准、进行中的手势都要失效。
+        if (this._onTemplateChanged) this._onTemplateChanged();
     },
 
     // 从原图按日志重放几何操作，把 im.el 换回快照对应的那张位图。

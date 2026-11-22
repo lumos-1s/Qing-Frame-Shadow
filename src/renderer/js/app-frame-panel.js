@@ -35,6 +35,7 @@
     let activePrompt = null, cancelWait = null;
     let progressTimer = 0, progressBase = '';
     let applied = null;          // 当前 AI 边框的微调基准 { key, layers, bg, name, textEdits, textColors }
+    let pendingGenerate = null;  // 首次引导期间暂存的生成请求，配好后自动续跑
     let tweakUndoPushed = false, tweakTimer = 0;
     let iterateBase = null;      // 继续改所基于的方案 entry
     let lbEntry = null, lbPreview = '', lbOriginal = '';
@@ -293,6 +294,20 @@
         const k = docKey(preset);
         return (st || readGalleryStore()).favs.some((f) => docKey(f.preset) === k);
     }
+    // 收藏/保存模板要存「此刻真正生效的版本」：套用后微调过、或在画布上拖过/改过字，
+    // 画廊里那份生成原始数据已经不是用户看到的样子了。
+    function effectivePreset(entry) {
+        if (!entry) return null;
+        if (!applied || applied.key !== entry.key || !Array.isArray(applied.layers)) return entry.preset;
+        const doc = Object.assign({}, entry.preset, {
+            templateName: applied.name || (entry.preset && entry.preset.templateName) || 'AI 边框',
+            aiLayers: clone(applied.layers),
+            aiBackground: applied.bg || '#ffffff'
+        });
+        // layers 优先于 aiLayers：留着旧 layers 会把微调结果整个盖掉。
+        delete doc.layers;
+        return doc;
+    }
     function updateFavCount(st) {
         const el = $('frameFavCount'); if (!el) return;
         const n = ((st || readGalleryStore()).favs || []).length;
@@ -343,8 +358,8 @@
                 + '<div class="frame-gallery-empty-sub">点方案卡片右上角的 ☆，把常用款留在这里</div></div>';
         }
         return '<div class="frame-gallery-empty" id="frameGalleryEmpty"><div class="frame-gallery-empty-ico">◫</div>'
-            + '<div>选一张你已导入的照片，说一句想要的风格，AI 洗出 <b>4 款</b> 让你挑</div>'
-            + '<div class="frame-gallery-empty-sub">没导入照片也能看效果，但用你自己的照片更直观</div></div>';
+            + '<div>点一个灵感，或自己说一句，AI 会先出 <b>4 款</b> 让你挑</div>'
+            + '<div class="frame-gallery-empty-sub">套用后还能在画布上拖动、双击改字；没导入照片也能先看效果</div></div>';
     }
 
     // ── 画廊 ──
@@ -443,6 +458,9 @@
         if (!entry) return;
         const inst = window.App || app;
         if (!inst || typeof inst.applyPresetToCurrent !== 'function') { setStatus('应用未就绪', 'bad'); return; }
+        // 键盘 Enter/Space 激活卡片、大图里的「套用这款」都不会经过画布外的 click，
+        // 必须显式取消旧选中，否则 selectedEls 会指向即将被替换的旧 aiLayers。
+        if (typeof inst.clearElementSelection === 'function') inst.clearElementSelection({ silent: true });
         const layers = layersOfDoc(entry.preset);
         let tpl;
         if (layers) {
@@ -478,10 +496,11 @@
     function toggleFav(entry) {
         if (!entry) return;
         const st = readGalleryStore();
-        const k = docKey(entry.preset);
+        const preset = effectivePreset(entry);
+        const k = docKey(preset);
         const i = st.favs.findIndex((f) => docKey(f.preset) === k);
         if (i >= 0) st.favs.splice(i, 1);
-        else st.favs.unshift({ id: uid(), at: Date.now(), prompt: entry.roundPrompt || currentPrompt || '', preset: clone(entry.preset) });
+        else st.favs.unshift({ id: uid(), at: Date.now(), prompt: entry.roundPrompt || currentPrompt || '', preset: clone(preset) });
         writeGalleryStore(st);
         updateFavCount(st);
         renderGallery();
@@ -648,11 +667,103 @@
         hideError();
     }
 
-    // ── 通道：本机助手 / OpenAI 兼容 API ──
+    // ── 通道：本地配方 / 本机助手 / OpenAI 兼容 API ──
     function channelOf() {
-        if (window.QfsAiProvider && typeof window.QfsAiProvider.channel === 'function') return window.QfsAiProvider.channel();
+        if (window.QfsAiProvider && typeof window.QfsAiProvider.channel === 'function') return window.QfsAiProvider.channel('frame');
         const el = $('frameChannel');
-        return el && el.value === 'api' ? 'api' : 'local';
+        return el && el.value === 'api' ? 'api' : el && el.value === 'local' ? 'local' : 'recipe';
+    }
+    // 本地配方：不调模型、不联网、不等 JSON。照片比例 + 关键词 → 4 份排好的图层文档。
+    // 这是默认通道，也是模型通道失败时的兜底——用户永远能先拿到 4 款能用的。
+    function recipePlans(text, base) {
+        const R = window.FrameRecipes;
+        if (!R) throw new Error('本地配方没有加载，请重启应用');
+        const info = lastBrief || briefOf();
+        const brief = info && info.brief ? info.brief : null;
+        const inst = window.App || app;
+        const im = inst && inst.image;
+        const exif = (im && im.exif) || (inst && inst.image && inst.image.exif) || {};
+        const seed = Date.now();
+        return base
+            ? R.variantsOf(base, { brief: brief, exif: exif, prompt: text, seed: seed })
+            : R.designPlans({ brief: brief, exif: exif, prompt: text, seed: seed, count: 4 });
+    }
+    // 灵感模板：一句话就是一条完整方向，用户不用学提示词写法。
+    const IDEA_PROMPTS = {
+        poster: '做成美术馆展览海报：照片贴边放大，超大标题直接压在照片上，底部一行小字写展期和地点',
+        film: '做成胶片边框：暖调、轻颗粒，照片像一格底片，底部留一条手写日期和相机参数',
+        minimal: '极简留白：大量空白，照片用细线框住，标题小而克制，整体安静',
+        journal: '手账拼贴：照片旁有胶带、错位纸片和手写短句，像旅行手账的一页',
+        archive: '复古档案卡：牛皮纸底色，打字机字体，编号、表格线和一枚小印章',
+        magazine: '时尚杂志封面：大标题压在照片上，带刊号、条码和一两行封面导读'
+    };
+    function aiSetupStatus() {
+        const P = window.QfsAiProvider;
+        if (channelOf() === 'recipe') return { ok: true, text: '本地配方 · 免配置、不联网，点生成秒出 4 款' };
+        if (channelOf() === 'api') {
+            const cfg = P && P.load ? P.load() : {};
+            const ok = !!(P && P.ready && P.ready(cfg));
+            return { ok, text: ok ? ('API 已就绪 · ' + (cfg.model || '默认模型')) : '还没填好：需要接口地址、API Key 和模型名' };
+        }
+        const sel = $('frameAgentSelect');
+        const id = sel && sel.value;
+        if (!id) {
+            const first = sel && sel.options && sel.options[0] ? sel.options[0].textContent : '';
+            return { ok: false, text: /检测中/.test(first) ? '正在检测本机助手…' : '没检测到本机助手。可以切到「API Key」，或安装 claude / codex / opencode 后再试' };
+        }
+        const name = sel.options && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].textContent : id;
+        return { ok: true, text: '本机助手已就绪 · ' + name };
+    }
+    function updateAiSetupState() {
+        const box = $('aiSetupState'); if (!box) return;
+        const s = aiSetupStatus();
+        box.textContent = s.text;
+        box.classList.toggle('bad', !s.ok);
+    }
+    // 统一 AI 设置入口：所有通道/助手/模型配置都在这一个弹窗里，
+    // 没配好时点生成不会报错走人，而是直接把设置弹出来。
+    function aiConfigured() { return aiSetupStatus().ok; }
+    function openAiSetup(fromGenerate, opts) {
+        opts = opts || {};
+        const m = $('aiSetupModal');
+        if (!m) return;
+        if (!fromGenerate && !opts.keepPending) pendingGenerate = null;
+        const adv = $('frameAdvanced'), slot = $('aiSetupSlot');
+        if (adv && slot && adv.parentNode !== slot) slot.appendChild(adv);
+        if (adv) adv.open = true;
+        m.style.display = 'flex';
+        syncChannelUI();
+        updateAiSetupState();
+        const done = $('btnAiSetupDone');
+        if (done) done.textContent = pendingGenerate
+            ? (opts.retry ? '保存并重试' : '保存并继续生成')
+            : '保存设置';
+        if (detectAgents) detectAgents();
+        if (fromGenerate) setStatus('还没配好 AI，已打开设置；配好后会自动继续生成', 'bad');
+    }
+    async function finishAiSetup() {
+        const P = window.QfsAiProvider;
+        if (P && P.save) P.save(apiFormCfg());
+        const st = aiSetupStatus();
+        const pending = pendingGenerate;
+        if (pending && !st.ok) {
+            updateAiSetupState();
+            setStatus('还差一步：' + st.text, 'bad');
+            return;
+        }
+        pendingGenerate = null;
+        const m = $('aiSetupModal');
+        if (m) m.style.display = 'none';
+        if (pending) { await generate(pending); return; }
+        setStatus(st.ok ? 'AI 设置已保存' : '设置还没完成，生成时会再提醒你', st.ok ? 'ok' : '');
+    }
+    // 关闭设置 ≠ 执行暂存的生成：点 X / 背景 / Esc 都只退出，不偷偷跑一次。
+    function closeAiSetup() {
+        const hadPending = !!pendingGenerate;
+        pendingGenerate = null;
+        const m = $('aiSetupModal');
+        if (m) m.style.display = 'none';
+        if (hadPending) setStatus('已关闭设置，需要时再点「生成 4 款」');
     }
     // 从模型回复里抠出 JSON 数组（宽容解析见 app-frame-plans.js）
     function parsePlansFromText(raw) {
@@ -679,6 +790,8 @@
         const brief = (lastBrief && lastBrief.brief) || null;
         const docs = (plans || []).map((p) => sanitizeLayerDoc(p)).filter(Boolean);
         if (!docs.length) throw new Error('模型没有给出可用的图层方案');
+        // 本地配方是确定性排版，不合格时重出同一套没有意义，直接按体检结果修/降级。
+        const fromRecipe = docs.some((d) => d && d.recipe);
         // 生成之后先自己看一眼：能修的当场修（对比度/槽位/层级），修不了的照实提醒。
         const checked = docs.map((p) => {
             if (!window.FrameLint) return { ok: true, preset: p, lint: null };
@@ -690,7 +803,7 @@
         });
         let picks = checked.filter((x) => x.ok);
         // 一款都站不住：带着体检结论自动重出一次，而不是把烂方案端给用户
-        if (!picks.length && !opts.retry) {
+        if (!picks.length && !opts.retry && !fromRecipe) {
             const why = checked.map((x) => (x.lint ? window.FrameLint.describe(x.lint.issues) : '')).join('\n')
                 .replace(/\n+/g, '；').slice(0, 400);
             progress(true, '方案站不住，正在自动重出…');
@@ -708,7 +821,7 @@
         });
         const scored = bolds.filter(Boolean);
         const avg = scored.length ? Math.round(scored.reduce((n, b) => n + b.score, 0) / scored.length) : -1;
-        if (!opts.base && !opts.boldRetry && avg >= 0 && avg < 42) {
+        if (!opts.base && !opts.boldRetry && !fromRecipe && avg >= 0 && avg < 42) {
             const hints = [];
             scored.forEach((b) => (b.hints || []).forEach((h) => { if (hints.indexOf(h) < 0) hints.push(h); }));
             const why = '上一批四款平均大胆度只有 ' + avg + ' 分（' + scored.map((b) => b.grade).join('/') + '），太像传统相框：'
@@ -740,8 +853,9 @@
         pushRound(text, picks.map((g) => g.preset));
         renderGallery();
         const fixedN = picks.reduce((n, g) => n + ((g.lint && g.lint.fixes.length) || 0), 0);
-        setStatus('已生成 ' + gallery.length + ' 款' + (fixedN ? '，自动修正 ' + fixedN + ' 处' : '') + '，点卡片即可套用', 'ok');
+        setStatus((fromRecipe ? '本地配方已出 ' : '已生成 ') + gallery.length + ' 款' + (fixedN ? '，自动修正 ' + fixedN + ' 处' : '') + '，点卡片即可套用', 'ok');
     }
+    // ── 导演选框：模型只挑不改版式 ──────────────────────────────
     async function generate(opts) {
         opts = opts || {};
         const promptEl = $('framePrompt');
@@ -750,12 +864,13 @@
         if (generating) return;
         if (!text) { setStatus('先描述你想要的风格', 'bad'); return; }
         const channel = channelOf();
-        const id = $('frameAgentSelect') && $('frameAgentSelect').value;
-        if (channel === 'local' && !id) { setStatus('未检测到本机助手；也可以在「高级」里改用 API 通道', 'bad'); return; }
-        if (channel === 'api' && !(window.QfsAiProvider && window.QfsAiProvider.ready())) {
-            setStatus('API 通道还没配好：高级 → 接口地址 / Key / 模型', 'bad');
+        if (channel !== 'recipe' && !aiConfigured()) {
+            // 首次使用 / 配置失效：不把用户丢在一句报错里，直接开统一设置，配好自动续跑。
+            pendingGenerate = { prompt: text, base: base, avoid: opts.avoid };
+            openAiSetup(true);
             return;
         }
+        const id = $('frameAgentSelect') && $('frameAgentSelect').value;
         hideError();
         hideIterate();
         generating = true;
@@ -771,6 +886,14 @@
         if ($('frameAgentOut')) $('frameAgentOut').textContent = '';
         try {
             const photo = lastBrief || briefOf();
+            // 本地配方：不配置、不联网、不等模型，直接排 4 款。
+            if (channel === 'recipe') {
+                progress(true, base ? '正在换 4 套配色…' : '正在按本地配方排版…');
+                const docs = recipePlans(text, base);
+                if (my !== runSeq) return;
+                await adoptPlans(docs, my, text, opts);
+                return;
+            }
             // API 通道：不碰本机助手会话与文件，直接让模型回 4 个 JSON
             if (channel === 'api') {
                 progress(true, base ? '正在基于这一款改 4 个变体…' : '正在让模型出 4 款…');
@@ -869,10 +992,34 @@
     }
 
     // ── 失败可视化 ──
+    // 把接口/助手的原始报错翻成用户能行动的一句话；原始日志仍留给「查看日志」。
+    function friendlyError(msg) {
+        const m = String(msg || '生成失败');
+        if (/401|unauthorized|invalid.*(api\s*)?key|incorrect api key|认证失败/i.test(m)) {
+            return 'API Key 无效或已过期。打开「检查 AI 设置」重填 Key，保存后再重试。';
+        }
+        if (/403|forbidden|permission|没有权限/i.test(m)) {
+            return '这个 Key 没有调用权限，或账户额度不足。检查 AI 设置后重试。';
+        }
+        if (/429|rate limit|too many requests|请求过于频繁/i.test(m)) {
+            return '调用太频繁了，等几秒再点「重试」。';
+        }
+        if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|fetch failed|network|网络|连接失败/i.test(m)) {
+            return '连不上 AI 服务。检查网络或接口地址，再点「重试」。';
+        }
+        if (/timeout|timed out|超时/i.test(m)) {
+            return '等太久了。可以重试；如果反复超时，换一个更快的模型。';
+        }
+        if (/404|not found|模型不存在/i.test(m)) {
+            return '接口地址或模型名不对。打开「检查 AI 设置」核对一下。';
+        }
+        return m;
+    }
     function showError(msg) {
-        setStatus(msg, 'bad');
+        const text = friendlyError(msg);
+        setStatus(text, 'bad');
         const box = $('frameError'); const m = $('frameErrorMsg'); const log = $('frameErrorLog');
-        if (m) m.textContent = msg || '生成失败';
+        if (m) m.textContent = text;
         if (log) { log.textContent = (agentStream || '（助手没有输出）').slice(-4000); log.hidden = true; }
         if (box) box.hidden = false;
         const lg = $('btnFrameErrLog'); if (lg) lg.textContent = '查看日志';
@@ -943,9 +1090,10 @@
     async function saveAsTemplate(entry) {
         if (!entry) return;
         const inst = window.App || app;
-        const layers = layersOfDoc(entry.preset);
+        const src = effectivePreset(entry);
+        const layers = layersOfDoc(src);
         if (!layers) { setStatus('只有图层边框能保存为模板', 'bad'); return; }
-        const def = entry.preset.templateName || 'AI 边框';
+        const def = src.templateName || 'AI 边框';
         let name = null;
         if (inst && typeof inst.promptText === 'function') name = await inst.promptText('保存为样式模板（之后可在「样式模板」列表找到）', def);
         else name = window.prompt('保存为模板', def);
@@ -955,7 +1103,7 @@
         const doc = {
             templateName: name,
             aiLayers: clone(layers),
-            aiBackground: typeof entry.preset.aiBackground === 'string' ? entry.preset.aiBackground : '#ffffff'
+            aiBackground: typeof src.aiBackground === 'string' ? src.aiBackground : '#ffffff'
         };
         const r = api().saveTemplate ? await api().saveTemplate(name, doc) : null;
         if (r && r.ok) {
@@ -1074,6 +1222,8 @@
             if (l && l.type === 'text') l.color = applied.textColors[k];
         }
         inst.template.aiLayers = layers;
+        // 整份数组被换成新对象：画布上的选中必须重绑，否则方向键/Delete 操作孤儿图层。
+        if (typeof inst.rebindSelectedEls === 'function') inst.rebindSelectedEls();
         const bgEl = $('frameTweakBg');
         if (bgEl) inst.template.aiBackground = bgEl.value;
         if (typeof inst.saveCurrentTemplate === 'function') inst.saveCurrentTemplate();
@@ -1202,8 +1352,24 @@
             setStatus(r && r.ok ? ('模型：' + m.name) : '(下次发送生效)', r && r.ok ? 'ok' : '');
         }
     }
+    // 模型浮层用 fixed 定位挂到视口：高级区是带 max-height 的滚动容器，
+    // 绝对定位的浮层会从底部被裁掉，改固定坐标后不受任何祖先 overflow 影响。
+    function placeModelPop() {
+        const pop = $('frameModelPop'), btn = $('btnFrameModel');
+        if (!pop || !btn || pop.hidden) return;
+        const r = btn.getBoundingClientRect();
+        const w = pop.offsetWidth || 320;
+        const h = pop.offsetHeight || 320;
+        const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+        const top = (window.innerHeight - r.bottom >= h + 8)
+            ? r.bottom + 4
+            : Math.max(8, r.top - h - 4);
+        pop.style.top = Math.round(top) + 'px';
+        pop.style.left = Math.round(left) + 'px';
+    }
     function openModelPop() {
         const pop = $('frameModelPop'); if (!pop) return; pop.hidden = false;
+        placeModelPop();
         const btn = $('btnFrameModel'); if (btn) btn.setAttribute('aria-expanded', 'true');
         const s = $('frameModelSearch'); if (s) { s.value = ''; renderModelList(''); s.focus(); }
         if (!modelPopUnwatch) {
@@ -1239,12 +1405,26 @@
     }
     async function detectAgents() {
         const sel = $('frameAgentSelect'); if (!sel || !api().agentDetect) return;
+        // 默认本地配方 / API 通道都不需要助手，别在打开面板时白跑一次 CLI 探测。
+        if (channelOf() !== 'local') {
+            const hint0 = $('frameAgentHint');
+            if (hint0) hint0.textContent = '切到「本机助手」后再检测';
+            return;
+        }
         const list = await api().agentDetect(); sel.innerHTML = '';
         const installed = (list || []).filter((a) => a.installed);
         if (!installed.length) {
             const o = document.createElement('option'); o.value = ''; o.textContent = '未检测到本机助手'; sel.appendChild(o);
             const hint = $('frameAgentHint');
-            if (hint) hint.textContent = channelOf() === 'api' ? '当前走 API 通道，本机助手可以不装' : '在「高级」里：需先装 Claude Code / Codex / OpenCode';
+            if (hint) {
+                // 不再让用户去装 CLI：豆包/Codex 扩展/WorkBuddy 都不是可调用的 CLI，
+                // 装了也识别不到。这条通道只认 claude / codex / opencode 三个命令。
+                hint.textContent = '没找到命令行助手（只认 claude / codex / opencode）。豆包、WorkBuddy 这类请切到「API Key」。';
+                hint.title = '本机助手通道通过 PATH 里的命令行调用，只支持 Claude Code、Codex、OpenCode。'
+                    + '桌面应用（豆包 / WorkBuddy / Codex 浏览器扩展）没有命令行入口，无法被这里识别；'
+                    + '它们若提供 OpenAI 兼容接口，请切到「API Key」填地址与 Key。';
+            }
+            updateAiSetupState();
             return;
         }
         for (const a of installed) { const o = document.createElement('option'); o.value = a.id; o.textContent = a.name; sel.appendChild(o); }
@@ -1256,7 +1436,13 @@
         const label = $('frameModelLabel');
         // 已经为同一个助手建好会话：直接回显当前模型，别把标签停在「加载模型中…」
         if (agentKey && agentModels.length) populateModels(agentModels);
-        else { if (label) label.textContent = '加载模型中…'; preloadSession(pick.id); }
+        else {
+            if (label) label.textContent = '加载模型中…';
+            // 本地配方 / API 通道不需要助手会话：打开面板就起进程既慢又容易报错。
+            if (channelOf() === 'local') preloadSession(pick.id);
+            else if (label) label.textContent = '切到「本机助手」后加载';
+        }
+        updateAiSetupState();
     }
 
     // ── 高级区：文件 / JSON / 体检 ──
@@ -1271,24 +1457,30 @@
         if (!list || !list.length) { const em = document.createElement('div'); em.className = 'frame-preview-empty'; em.textContent = '还没有边框文件'; box.appendChild(em); }
         const dir = await (api().framesDir ? api().framesDir() : Promise.resolve({})); const d = $('frameDir'); if (d) d.textContent = dir.path || '';
     }
+    // 文件/JSON 相关 UI 已不对普通用户展示；这些函数保留给可能的内部调用，
+    // 缺 DOM 时静默退出，避免面板初始化报错。
     async function select(name) {
+        const ta = $('frameText'); if (!ta) return;
         const r = await (api().framesRead ? api().framesRead(name) : null); if (!r) return;
-        current = { name: r.name }; $('frameText').value = r.text; loadList();
+        current = { name: r.name }; ta.value = r.text; loadList();
     }
     async function save() {
+        const ta = $('frameText'); if (!ta) return;
         if (!current) { setStatus('先选一个文件', 'bad'); return; }
-        const text = $('frameText').value; const p = parse(text);
+        const text = ta.value; const p = parse(text);
         if (!p.ok) { setStatus(p.issues[0], 'bad'); return; }
         const r = await (api().framesSave ? api().framesSave(current.name, text) : null);
         setStatus(r && r.ok ? '已保存' : ((r && r.message) || '保存失败'), r && r.ok ? 'ok' : 'bad');
     }
     function doCheck() {
-        const p = parse($('frameText').value); if (!p.ok) { setStatus(p.issues.join('；'), 'bad'); return; }
+        const ta = $('frameText'); if (!ta) return;
+        const p = parse(ta.value); if (!p.ok) { setStatus(p.issues.join('；'), 'bad'); return; }
         const issues = inspect(p.t);
         setStatus(issues.length ? ('体检：' + issues.join('；')) : '体检通过', issues.length ? 'bad' : 'ok');
     }
     function applyCurrent() {
-        const p = parse($('frameText').value); if (!p.ok) { setStatus(p.issues[0], 'bad'); return; }
+        const ta = $('frameText'); if (!ta) return;
+        const p = parse(ta.value); if (!p.ok) { setStatus(p.issues[0], 'bad'); return; }
         const issues = inspect(p.t); if (issues.length) { setStatus('先修：' + issues[0], 'bad'); return; }
         const inst = window.App || app;
         if (!inst || typeof inst.applyPresetToCurrent !== 'function') return;
@@ -1333,7 +1525,16 @@
         detectAgents(); loadList();
         if (api().framesWatch) api().framesWatch();
     }
-    function close() { closeLightbox(); hideIterate(); if (modal) modal.style.display = 'none'; }
+    function close() {
+        closeLightbox(); hideIterate();
+        const setup = $('aiSetupModal');
+        if (setup && setup.style.display === 'flex') { setup.style.display = 'none'; pendingGenerate = null; }
+        // 关整个弹层时，把视图复位到 AI 造型；下次打开不会掉进上次的纸刊页
+        if (window.QfsZinePanel && typeof window.QfsZinePanel.backToFrame === 'function') {
+            try { window.QfsZinePanel.backToFrame(); } catch (_) {}
+        }
+        if (modal) modal.style.display = 'none';
+    }
 
     // 画布上直接拖动/双击改字之后，面板里那份「基准图层」已经过时。
     // 不刷新的话，下一次改底色会把用户的拖动结果覆盖掉。
@@ -1342,40 +1543,62 @@
         refreshTweakPanel(true);
     }
 
+    // 主画布切了照片：画廊缩略图和微调基准都要按新照片重算。
+    // 面板关着时只把基准清掉，下次 open() 会自己重建。
+    function refreshForPhotoChange() {
+        if (!modal || modal.style.display !== 'flex') { applied = null; return; }
+        previewCache.clear();
+        const img = photoSource();
+        displayEntries(readGalleryStore()).forEach((g) => {
+            const url = renderFrameToUrl(g.preset, img);
+            if (url) { g.dataUrl = url; previewCache.set(g.key, url); }
+        });
+        refreshTweakPanel(true);
+        renderGallery();
+    }
+
     // ── 通道配置 UI ──
     function syncChannelUI() {
         const P = window.QfsAiProvider;
-        const ch = P ? P.channel() : 'local';
+        const ch = P ? P.channel('frame') : 'recipe';
         const sel = $('frameChannel');
         if (sel) sel.value = ch;
         const box = $('frameApiCfg');
         if (box) box.hidden = ch !== 'api';
+        // 三套方式只显示各自相关字段，别让用户同时看到助手和 API 两组输入。
+        const agentRow = $('frameAgentRow');
+        if (agentRow) agentRow.hidden = ch !== 'local';
+        const devLog = document.querySelector('#frameAdvanced .frame-dev');
+        if (devLog) devLog.hidden = ch !== 'local';
         const cfg = P ? P.load() : { baseUrl: '', apiKey: '', model: '' };
         const base = $('frameApiBase'), key = $('frameApiKey'), model = $('frameApiModel');
-        const imgModel = $('frameApiImageModel');
         if (base && base.value !== cfg.baseUrl) base.value = cfg.baseUrl;
         if (key && !key.value) key.value = cfg.apiKey;
         if (model && model.value !== cfg.model) model.value = cfg.model;
-        if (imgModel && imgModel.value !== (cfg.imageModel || '')) imgModel.value = cfg.imageModel || '';
         const hint = $('frameChannelHint');
         if (hint) {
-            if (ch !== 'api') hint.textContent = '用本机已装的助手，不花 Key';
+            if (ch === 'recipe') hint.textContent = '免配置 · 不联网 · 点一下秒出 4 款';
+            else if (ch === 'local') hint.textContent = '用本机已装的助手，不花 Key';
             else if (P && P.ready(cfg)) hint.textContent = '已配置 · ' + P.mask(cfg.apiKey) + ' · ' + cfg.model;
-            else hint.textContent = '填地址 / Key / 模型，免装 CLI';
+            else hint.textContent = '填地址 / Key / 模型，不用装命令行';
         }
         const note = $('frameApiNote');
         if (note) {
             note.textContent = (P && P.ready(cfg))
-                ? '当前：' + (cfg.baseUrl || '内置默认地址') + ' · ' + cfg.model
-                : '任何 OpenAI 兼容接口都行：官方 / 中转 / 自建网关。填完先用「测试连接」验一次。打包版还可以用环境变量 QFS_AI_PROXY 指到内置中转。';
+                ? '当前：' + (cfg.baseUrl || '内置默认地址') + ' · ' + cfg.model + (P.isLocalBase && P.isLocalBase(cfg.baseUrl) ? '（本机地址免 Key）' : '')
+                : '支持 OpenAI 兼容接口：官方、中转或自建网关。填完点「测试连接」，成功后再保存。';
         }
+        updateAiSetupState();
     }
     function apiFormCfg() {
+        const P = window.QfsAiProvider;
+        const prev = P && P.load ? P.load() : {};
         return {
             baseUrl: ($('frameApiBase') && $('frameApiBase').value) || '',
             apiKey: ($('frameApiKey') && $('frameApiKey').value) || '',
             model: ($('frameApiModel') && $('frameApiModel').value) || '',
-            imageModel: ($('frameApiImageModel') && $('frameApiImageModel').value) || ''
+            // 图像模型字段已从界面移除；保留旧值，避免保存时把它清掉。
+            imageModel: prev.imageModel || ''
         };
     }
     function bindChannelUI() {
@@ -1383,8 +1606,20 @@
         if (!P) return;
         syncChannelUI();
         const sel = $('frameChannel');
-        if (sel) sel.addEventListener('change', () => { P.setChannel(sel.value); syncChannelUI(); });
-        for (const id of ['frameApiBase', 'frameApiKey', 'frameApiModel', 'frameApiImageModel']) {
+        if (sel) sel.addEventListener('change', () => {
+            P.setChannel(sel.value, 'frame');
+            if (sel.value === 'api' || sel.value === 'recipe') closeModelPop();
+            syncChannelUI();
+            if (sel.value === 'local') detectAgents();
+        });
+        // 通道可能被别处（纸刊标签 / 外部）改动，监听广播保持本面板同步
+        if (P.CHANGE_EVENT && typeof window.addEventListener === 'function') {
+            window.addEventListener(P.CHANGE_EVENT, (e) => {
+                const d = (e && e.detail) || {};
+                if (!d.scope || d.scope === 'frame') syncChannelUI();
+            });
+        }
+        for (const id of ['frameApiBase', 'frameApiKey', 'frameApiModel']) {
             const el = $(id); if (!el) continue;
             el.addEventListener('change', () => { P.save(apiFormCfg()); syncChannelUI(); });
         }
@@ -1406,13 +1641,44 @@
 
     function init(a) {
         app = a; modal = $('frameModal');
-        if (a) a._syncAiLayerEdit = syncFromCanvas;
+        if (a) {
+            a._syncAiLayerEdit = syncFromCanvas;
+            a._onAiPhotoChanged = refreshForPhotoChange;
+        }
         if (!modal || modal.dataset.bound === '1') return; modal.dataset.bound = '1';
+        // 配置区搬进统一设置弹窗；高级里不再堆通道/助手/模型。
+        const adv = $('frameAdvanced'), setupSlot = $('aiSetupSlot');
+        if (adv && setupSlot) { setupSlot.appendChild(adv); adv.open = true; }
+        const setupBtn = $('btnAiSetup');
+        if (setupBtn) setupBtn.addEventListener('click', () => openAiSetup(false));
+        const setupClose = $('btnAiSetupClose');
+        if (setupClose) setupClose.addEventListener('click', closeAiSetup);
+        const setupDone = $('btnAiSetupDone');
+        if (setupDone) setupDone.addEventListener('click', finishAiSetup);
+        const setupModal = $('aiSetupModal');
+        if (setupModal) setupModal.addEventListener('click', (e) => { if (e.target === setupModal) closeAiSetup(); });
         bindChannelUI();
+        // 面板滚动/窗口缩放时跟着按钮重新定位模型浮层，避免它飘在旧位置。
+        if (typeof window.addEventListener === 'function') {
+            window.addEventListener('resize', placeModelPop);
+            const studio = $('frameView');
+            if (studio) studio.addEventListener('scroll', placeModelPop, true);
+        }
         $('frameModalClose').addEventListener('click', close);
         modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
         $('btnGenerate').addEventListener('click', () => generate({ prompt: $('framePrompt').value }));
         $('framePrompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) generate({ prompt: $('framePrompt').value }); });
+        const ideas = $('frameIdeas');
+        if (ideas) ideas.addEventListener('click', (e) => {
+            const b = e.target && e.target.closest ? e.target.closest('[data-idea]') : null;
+            if (!b) return;
+            const prompt = IDEA_PROMPTS[b.dataset.idea];
+            const input = $('framePrompt');
+            if (!prompt || !input) return;
+            input.value = prompt;
+            input.focus();
+            setStatus('已填入「' + b.textContent.trim() + '」，可以直接生成，也能接着改');
+        });
         $('btnFrameCancel').addEventListener('click', cancelGeneration);
         $('btnFrameAgain').addEventListener('click', () => { if (lastRequest) generate(lastRequest); });
         $('frameSamplePhoto').addEventListener('change', () => {
@@ -1474,6 +1740,11 @@
         const bg = $('frameTweakBg');
         if (bg) bg.addEventListener('change', applyTweak);
         $('btnFrameRetry').addEventListener('click', () => { if (lastRequest) { hideError(); generate(lastRequest); } });
+        const errSetup = $('btnFrameErrSetup');
+        if (errSetup) errSetup.addEventListener('click', () => {
+            if (lastRequest) pendingGenerate = lastRequest;
+            openAiSetup(false, { keepPending: true, retry: true });
+        });
         $('btnFrameErrLog').addEventListener('click', () => {
             const log = $('frameErrorLog'); const btn = $('btnFrameErrLog');
             if (!log) return;
@@ -1503,19 +1774,32 @@
             cmp.addEventListener('blur', () => setLbCompare(false));
         }
         document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            // 层级：统一设置 → 大图 → 纸刊标签 → 模型菜单 → 整个弹层。逐层退，不越级。
+            const setup = $('aiSetupModal');
+            if (setup && setup.style.display === 'flex') { e.preventDefault(); e.stopPropagation(); closeAiSetup(); return; }
             const lb = $('frameLightbox');
-            if (e.key === 'Escape' && lb && !lb.hidden) { e.preventDefault(); e.stopPropagation(); closeLightbox(); }
+            if (lb && !lb.hidden) { e.preventDefault(); e.stopPropagation(); closeLightbox(); return; }
+            const zine = $('zineModal');
+            if (zine && !zine.hidden && window.QfsZinePanel && window.QfsZinePanel.backToFrame) {
+                e.preventDefault(); e.stopPropagation(); window.QfsZinePanel.backToFrame(); return;
+            }
+            const pop = $('frameModelPop');
+            if (pop && !pop.hidden) { e.preventDefault(); e.stopPropagation(); pop.hidden = true; return; }
+            if (modal && modal.style.display === 'flex') { e.preventDefault(); e.stopPropagation(); close(); }
         }, true);
-        $('btnFrameRefresh').addEventListener('click', () => { loadList(); setStatus('已刷新', 'ok'); });
-        $('btnFrameOpenDir').addEventListener('click', () => api().framesOpenDir && api().framesOpenDir());
-        $('btnFrameCopyDir').addEventListener('click', async () => {
+        // 文件管理 / JSON 编辑器已从界面移除；保留函数但只在元素仍存在时绑定。
+        const bindClick = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
+        bindClick('btnFrameRefresh', () => { loadList(); setStatus('已刷新', 'ok'); });
+        bindClick('btnFrameOpenDir', () => api().framesOpenDir && api().framesOpenDir());
+        bindClick('btnFrameCopyDir', async () => {
             const d = await (api().framesDir ? api().framesDir() : Promise.resolve({}));
             if (d.path && navigator.clipboard) { try { await navigator.clipboard.writeText(d.path); setStatus('路径已复制', 'ok'); return; } catch (_) {} }
             setStatus(d.path || '', '');
         });
-        $('btnFrameSave').addEventListener('click', save);
-        $('btnFrameCheck').addEventListener('click', doCheck);
-        $('btnFrameApply').addEventListener('click', applyCurrent);
+        bindClick('btnFrameSave', save);
+        bindClick('btnFrameCheck', doCheck);
+        bindClick('btnFrameApply', applyCurrent);
         $('btnFrameModel').addEventListener('click', (e) => { e.stopPropagation(); const p = $('frameModelPop'); if (p && !p.hidden) closeModelPop(); else openModelPop(); });
         const fs = $('frameModelSearch'); if (fs) fs.addEventListener('input', () => renderModelList(fs.value));
         $('frameAgentSelect').addEventListener('change', async (e) => {
@@ -1524,6 +1808,7 @@
             agentKey = null; agentModels = []; const label = $('frameModelLabel'); if (label) label.textContent = '加载模型中…';
             await switchAgent(e.target.value);
             preloadSession(e.target.value);
+            updateAiSetupState();
         });
         $('btnAgentNew').addEventListener('click', async () => {
             if (generating) abandonRun();

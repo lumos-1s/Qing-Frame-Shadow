@@ -37,7 +37,21 @@ const { readHeicExif } = require('./heic-exif');
 const { isRaw, RAW_EXTS, develop: developRaw, setCacheRoot: setRawCacheRoot, dispose: disposeRaw } = require('./raw');
 const { readRawExif } = require('./raw-exif');
 const { imageSize } = require('./image-size');
-const { ensureBuffer: ensurePngSrgb } = require('../shared/png-srgb');
+const { ensureBuffer: ensurePngSrgb, insertIcc: insertPngIcc } = require('../shared/png-srgb');
+const { profileBytes: iccProfileBytes } = require('../shared/icc-profile');
+const { applyIccToJpeg } = require('./icc-write');
+
+// 导出色彩空间：sRGB 走原来的 sRGB chunk；P3/Adobe RGB 像素已在渲染层转换，
+// 这里只负责把对应的 ICC profile 嵌进文件（PNG=iCCP，JPG=APP2）。
+const ICC_NAMES = { p3: 'Display P3', adobergb: 'Adobe RGB (1998)' };
+function applyExportColorProfile(buf, f) {
+    const cs = f && f.colorSpace;
+    if (cs !== 'p3' && cs !== 'adobergb') return ensurePngSrgb(buf);
+    const profile = iccProfileBytes(cs);
+    if (!profile) return ensurePngSrgb(buf);
+    if (buf && buf.length > 3 && buf[0] === 0xFF && buf[1] === 0xD8) return applyIccToJpeg(buf, profile);
+    return insertPngIcc(buf, profile, ICC_NAMES[cs], (b) => zlib.deflateSync(b));
+}
 
 // 照片导入支持的扩展名(HEIC 由主进程解码,对渲染进程透明)
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'bmp']
@@ -1881,7 +1895,7 @@ handleIpc('open-sticker-image', async () => {
     return { name: path.basename(fp), data: fs.readFileSync(fp).toString('base64') };
 });
 
-handleIpc('save-image-base64', async (_e, { data, filename }) => {
+handleIpc('save-image-base64', async (_e, { data, filename, colorSpace }) => {
     if (!isTrustedFrame(_e)) return false;
     const st = loadState();
     const dir = validDir(st.lastExportDir) ? st.lastExportDir : null;
@@ -1905,7 +1919,7 @@ handleIpc('save-image-base64', async (_e, { data, filename }) => {
     });
     if (canceled || !filePath) return false;
     if (!EXPORT_EXTS.has(path.extname(filePath).toLowerCase())) return false;
-    fs.writeFileSync(filePath, ensurePngSrgb(Buffer.from(data, 'base64')));
+    fs.writeFileSync(filePath, applyExportColorProfile(Buffer.from(data, 'base64'), { colorSpace }));
     saveState({ lastExportDir: path.dirname(filePath) });
     return true;
 });
@@ -1937,7 +1951,7 @@ handleIpc('save-images-batch', async (_e, files) => {
                 const safeName = safeExportName(f.filename, 'photo.png');
                 const dest = resolveInside(dir, freeFilePath(dir, safeName, written));
                 if (!dest) { fail++; continue; }
-                fs.writeFileSync(dest, ensurePngSrgb(Buffer.from(f.data, 'base64')));
+                fs.writeFileSync(dest, applyExportColorProfile(Buffer.from(f.data, 'base64'), f));
                 written.add(path.basename(dest));
                 ok++;
             } catch (e) { fail++; }
@@ -2035,7 +2049,8 @@ handleIpc('write-export-files', async (event, payload) => {
             return { ok: 0, fail: 1, error: '不支持的导出格式' };
         }
         try {
-            fs.writeFileSync(location.filePath, ensurePngSrgb(await exifWrite.applyExifToExportItem(files[0])));
+            fs.writeFileSync(location.filePath,
+                applyExportColorProfile(await exifWrite.applyExifToExportItem(files[0]), files[0]));
             event.sender.send('export-progress', { done: 1, total: 1 });
             return { ok: 1, fail: 0 };
         } catch (e) {
@@ -2073,7 +2088,7 @@ handleIpc('write-export-files', async (event, payload) => {
                     const dest = resolveInside(destDir, freeFilePath(destDir, safeName, written));
                     if (!dest) { failItem({ filename: safeName }, '文件名无效'); }
                     else {
-                        fs.writeFileSync(dest, ensurePngSrgb(await exifWrite.applyExifToExportItem(f)));
+                        fs.writeFileSync(dest, applyExportColorProfile(await exifWrite.applyExifToExportItem(f), f));
                         written.add(path.basename(dest));
                         ok++;
                     }

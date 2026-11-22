@@ -328,6 +328,12 @@ window.App = {
             if (p && p.exportFormat && this.dom.selFormat) {
                 this.dom.selFormat.value = p.exportFormat;
             }
+            if (p && p.exportColorSpace && this.dom.selColorSpace) {
+                const v = String(p.exportColorSpace);
+                if (Array.from(this.dom.selColorSpace.options).some(o => o.value === v)) {
+                    this.dom.selColorSpace.value = v;
+                }
+            }
             // 尺寸也要跨会话记忆：以前只有质量/格式/EXIF/GPS 四项存了，
             // 习惯导 2048px 的人重开后整批又变回 6000px 原图。
             // 只接受下拉里真实存在的值，避免旧 prefs 里的脏值把 select 变成空选。
@@ -431,6 +437,7 @@ window.App = {
             exportQuality: d.slExportQuality ? d.slExportQuality.value : undefined,
             exportFormat: d.selFormat ? d.selFormat.value : undefined,
             exportSize: d.selExportSize ? d.selExportSize.value : undefined,
+            exportColorSpace: d.selColorSpace ? d.selColorSpace.value : undefined,
             keepExif: !!(d.chkKeepExif && d.chkKeepExif.checked),
             keepGps: !!(d.chkKeepGps && d.chkKeepGps.checked)
         }).catch(() => {});
@@ -557,7 +564,7 @@ window.App = {
     cacheDom() {
         const $ = id => document.getElementById(id);
         this.dom = {
-            btnOpen: $('btnOpen'), btnOpenFolder: $('btnOpenFolder'), btnSave: $('btnSave'), btnCopy: $('btnCopy'), selFormat: $('selFormat'), selExportSize: $('selExportSize'),
+            btnOpen: $('btnOpen'), btnOpenFolder: $('btnOpenFolder'), btnSave: $('btnSave'), btnCopy: $('btnCopy'), selFormat: $('selFormat'), selExportSize: $('selExportSize'), selColorSpace: $('selColorSpace'),
             slExportQuality: $('slExportQuality'), exportSizeNote: $('exportSizeNote'),
             chkKeepExif: $('chkKeepExif'), chkKeepGps: $('chkKeepGps'),
             btnExportSettings: $('btnExportSettings'), exportPop: $('exportPop'),
@@ -654,6 +661,7 @@ window.App = {
         if (d.slExportQuality) d.slExportQuality.addEventListener('change', () => this._saveExportPrefs());
         // 格式也记进偏好：以前每次启动都回到默认 JPG，常用 PNG 的人每次都要重选
         if (d.selFormat) d.selFormat.addEventListener('change', () => this._saveExportPrefs());
+        if (d.selColorSpace) d.selColorSpace.addEventListener('change', () => this._saveExportPrefs());
         // 导出弹层里的「保存到」：更改/改回询问直接复用设置里的同一套取目录逻辑，
         // 只是改完额外刷新弹层这一行（设置弹窗那行由 choose*/clear* 内部顺带刷新）。
         if (d.btnEpPickDir) d.btnEpPickDir.addEventListener('click', async () => {
@@ -1508,7 +1516,12 @@ window.App = {
                 // 从画布内拖到画布外再松手时，浏览器会在 stage 上补一个 click；
                 // 那不是「点空白退出编辑」，别让刚放下的元素立刻失去选中。
                 // 下一次真正的 mousedown 会把这枚标记清掉。
-                if (moved) this._suppressClickClear = true;
+                if (moved) {
+                    this._suppressClickClear = true;
+                    // 如果浏览器没有补发 click，这个标记不能活到下一次真实点击。
+                    clearTimeout(this._suppressClickTimer);
+                    this._suppressClickTimer = setTimeout(() => { this._suppressClickClear = false; }, 350);
+                }
                 this._skipAiLayer = null;
                 this._backingCap = 0;   // 松手恢复全分辨率（下面的 scheduleRender 会按新尺寸重绘）
                 this._aiGuides = null; this._aiSnap = null; this._aiSnapOff = false;
@@ -1638,11 +1651,18 @@ window.App = {
             if (this._textPlaceMode) { this.cancelAddText(); return; }
             if (this.cancelElementGesture) this.cancelElementGesture();
         });
-        document.addEventListener('mousedown', () => { this._suppressClickClear = false; });
+        document.addEventListener('mousedown', () => {
+            clearTimeout(this._suppressClickTimer);
+            this._suppressClickClear = false;
+        });
         document.addEventListener('click', e => {
             const t = e.target;
             if (!t || t === canvas || typeof t.closest !== 'function') return;
-            if (this._suppressClickClear) { this._suppressClickClear = false; return; }
+            if (this._suppressClickClear) {
+                this._suppressClickClear = false;
+                clearTimeout(this._suppressClickTimer);
+                return;
+            }
             if (t.closest('#inspector') || t.closest('.tabs')) return;
             // 按钮/输入控件自己的点击逻辑可能刚把某个元素选中（例如 AI 面板的
             // 「在画布上编辑」），不能在冒泡到 document 时又把它清掉。
@@ -2577,6 +2597,9 @@ window.App = {
         if (saved) this.template = saved;
         else this.normalizeTemplate();
         this.selectedEls = [];
+        // 切照片后 AI 面板的画廊预览与「微调基准」都按新照片重建，
+        // 不然下一次微调会把上一张照片的图层写回当前照片。
+        if (this._onAiPhotoChanged) this._onAiPhotoChanged();
         this.updateStatusBar();
         // 直方图已提到页签之上常驻：每次切图都补一次（无图时模块自己跳过；
         // 调色尚未烘好时先取原图，烘好后再由 grade 模块刷新一次）。
@@ -3726,6 +3749,9 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
         });
         bindBtn('btnZineOpen', () => {
             if (window.QfsZinePanel) { window.QfsZinePanel.init(); window.QfsZinePanel.show(); }
+        });
+        bindBtn('tabFrameStudio', () => {
+            if (window.QfsZinePanel) { window.QfsZinePanel.init(); window.QfsZinePanel.backToFrame(); }
         });
         bindBtn('settingsClose', () => this.closeSettings());
         const settingsTabs = Array.from(document.querySelectorAll('#settingsModal .settings-tab'));

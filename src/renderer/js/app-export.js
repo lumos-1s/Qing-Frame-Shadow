@@ -1,4 +1,6 @@
 // 导出模块：图片导出 —— 从 app.js 拆分
+// 色域转换表在 ../shared/color-space.js（渲染层与 Node 单测共用）。
+
 window.App = Object.assign(window.App || {}, {
     // 等下一帧渲染一次(导出通道专用)。渲染异常必须把 Promise 拒掉:
     // 旧写法 `render(); res();` 在渲染抛错时 res 永不执行 → 导出流程悬死,
@@ -110,7 +112,7 @@ window.App = Object.assign(window.App || {}, {
             const baseName = (j.im.name || 'photo').replace(/\.[^.]+$/, '');
             // 拼图是多图合成,没有单一拍摄信息来源 → 不带;其余按开关带原图路径
             return Object.assign(
-                { data: null, bytes: null, stem: `${baseName}${j.puzzle ? '_拼图' : '_边框'}`, ext },
+                { data: null, bytes: null, colorSpace: this.exportColorSpace(), stem: `${baseName}${j.puzzle ? '_拼图' : '_边框'}`, ext },
                 j.puzzle ? {} : this._exportExifFor(j.im)
             );
         });
@@ -260,6 +262,7 @@ window.App = Object.assign(window.App || {}, {
                         bgx.drawImage(src, 0, 0);
                         src = bg;
                     }
+                    src = this.applyExportColorSpace(src);
                     const enc = await this._encodeExportCanvas(src, mime, quality);
                     if (enc.bytes) { files[n].bytes = enc.bytes; files[n].data = null; }
                     else { files[n].data = enc.data || null; files[n].bytes = null; }
@@ -495,8 +498,10 @@ window.App = Object.assign(window.App || {}, {
         const quality = (fmt === 'jpeg' || fmt === 'webp') ? Math.min(1, Math.max(0.6, (parseInt(this.dom.slExportQuality.value, 10) || 92) / 100)) : 1;
         const ex = this._exportExifFor(im);
         const label = this.gridLabel();
+        const cs = this.exportColorSpace();
         return this._gridBlocks.map((cv, i) => Object.assign({
-            data: cv.toDataURL(mime, quality).split(',')[1],
+            data: this.applyExportColorSpace(cv).toDataURL(mime, quality).split(',')[1],
+            colorSpace: cs,
             filename: baseName + '_' + label + '_' + (i + 1) + '.' + this._gridExt(),
             stem: baseName + '_' + label + '_' + (i + 1),
             ext: this._gridExt(),
@@ -1305,6 +1310,32 @@ window.App = Object.assign(window.App || {}, {
         if (((tpl.decorConfig && tpl.decorConfig.stickers) || []).length) return true;
         return (((tpl.decorConfig && tpl.decorConfig.textLines) || [])
             .some(l => l && l.align === 'free'));
+    },
+
+    // 导出色域：sRGB 是画布原生空间，不用动。P3 / Adobe RGB 必须在编码前把像素真的转过去，
+    // 主进程再嵌入对应 ICC —— 只改文件标签会让颜色错得离谱。常量见文件顶部。
+    exportColorSpace() {
+        const sel = (this.dom && this.dom.selColorSpace) || document.getElementById('selColorSpace');
+        const cs = sel && sel.value;
+        // WebP 的编码器不写 ICC，硬转只会得到没有配置的错色文件
+        if (this.dom && this.dom.selFormat && this.dom.selFormat.value === 'webp') return 'srgb';
+        return (cs === 'p3' || cs === 'adobergb') ? cs : 'srgb';
+    },
+
+    applyExportColorSpace(cv) {
+        const cs = this.exportColorSpace();
+        if (!cv || cs === 'srgb') return cv;
+        const out = document.createElement('canvas');
+        out.width = cv.width; out.height = cv.height;
+        const ctx = out.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(cv, 0, 0);
+        let img;
+        try { img = ctx.getImageData(0, 0, out.width, out.height); }
+        catch (e) { return cv; }
+        const CS = window.QfsColorSpace;
+        if (!CS || !CS.convertRgbaInPlace(img.data, cs)) return cv;
+        ctx.putImageData(img, 0, 0);
+        return out;
     },
 
     // 画布编码:JPEG 走异步 toBlob + 字节直传(实测与 toDataURL 逐字节相同,

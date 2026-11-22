@@ -122,7 +122,8 @@ async function chat(cfg, messages) {
 }
 
 async function models(cfg) {
-    const r = await request(endpoint(cfg && cfg.baseUrl, 'models'), cfg, null, 20000);
+    const probeMs = Math.max(3000, Math.min(20000, Number(cfg && cfg.timeout) || 20000));
+    const r = await request(endpoint(cfg && cfg.baseUrl, 'models'), cfg, null, probeMs);
     if (!r.ok) return r;
     const d = r.data || {};
     const arr = Array.isArray(d.data) ? d.data : (Array.isArray(d.models) ? d.models : []);

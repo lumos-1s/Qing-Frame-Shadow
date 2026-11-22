@@ -47,7 +47,7 @@ contextBridge.exposeInMainWorld('qingframe', {
         return () => ipcRenderer.removeListener('frames-changed', h);
     },
     loadAllPresets: () => ipcRenderer.invoke('load-all-presets'),
-    saveImage: (data, filename) => ipcRenderer.invoke('save-image-base64', { data, filename }),
+    saveImage: (data, filename, colorSpace) => ipcRenderer.invoke('save-image-base64', { data, filename, colorSpace }),
     saveImagesBatch: (files) => ipcRenderer.invoke('save-images-batch', files),
     pickExportLocation: (payload) => ipcRenderer.invoke('pick-export-location', payload),
     pickDefaultExportDir: () => ipcRenderer.invoke('pick-default-export-dir'),

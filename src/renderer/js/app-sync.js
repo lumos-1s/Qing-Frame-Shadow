@@ -83,6 +83,12 @@ window.App = Object.assign(window.App || {}, {
                 delete tgtSnap.manualExif;
                 if (hasCam) tgtSnap.manualExif = base;
             }
+            // 每张目标图各自压一条撤销步：以前同步出去的边框撤不掉，
+            // 用户切到那张照片按 Ctrl+Z 只会得到「没有可撤销的操作」。
+            if (!opts || opts.undo !== false) {
+                const base = prev || (typeof this.defaultTemplate === 'function' ? this.defaultTemplate() : null);
+                if (base) this.pushUndoForImage(im, base);
+            }
             this.setTpl(im, tgtSnap);
             this.queueThumb(im);
             count++;

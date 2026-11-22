@@ -186,6 +186,9 @@ window.App = Object.assign(window.App || {}, {
                 if (pk && pk.enabled && cap) {
                     this.deleteCaption();
                 } else if (this.selectedEls.length) {
+                    // 按住拖动时按 Delete：先结束这次手势，否则鼠标继续移动会改一个
+                    // 已经从模板里删掉的对象，松手还会压进一条错误的撤销步。
+                    if (this.cancelElementGesture) this.cancelElementGesture();
                     this.deleteElement();
                 }
             }

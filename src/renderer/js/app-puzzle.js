@@ -958,7 +958,7 @@ window.App = Object.assign(window.App || {}, {
                         bgx.drawImage(src, 0, 0);
                         src = bg;
                     }
-                    return src.toDataURL(mime, quality).split(',')[1];
+                    return this.applyExportColorSpace(src).toDataURL(mime, quality).split(',')[1];
                 } catch (e) {
                     console.error('[exportPuzzle] render failed', e);
                     this.setStatus('导出失败');
@@ -983,7 +983,7 @@ window.App = Object.assign(window.App || {}, {
         const im0 = this.images && this.images.length ? this.images[this.currentIdx != null ? this.currentIdx : 0] : null;
         const pzName = im0 ? (im0.name || 'photo').replace(/\.[^.]+$/, '') : '';
         const filename = pzName ? `${pzName}_拼图.${ext}` : `拼图.${ext}`;
-        const r = await window.qingframe.saveImage(base64, filename);
+        const r = await window.qingframe.saveImage(base64, filename, this.exportColorSpace());
         if (r) this.setStatus('拼图已导出');
         else this.setStatus('导出失败');
         if (this.image) this.scheduleRender(true);

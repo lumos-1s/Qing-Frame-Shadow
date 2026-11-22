@@ -2410,8 +2410,8 @@
                 <div class="frame-gallery" id="frameGallery" role="list" aria-label="生成的边框方案">
                     <div class="frame-gallery-empty" id="frameGalleryEmpty">
                         <div class="frame-gallery-empty-ico">◫</div>
-                        <div>选一张你已导入的照片，说一句想要的风格，AI 洗出 <b>4 款</b> 让你挑</div>
-                        <div class="frame-gallery-empty-sub">没导入照片也能看效果，但用你自己的照片更直观</div>
+                        <div>选一张你已导入的照片，说一句想要的风格，<b>秒出 4 款</b> 让你挑</div>
+                        <div class="frame-gallery-empty-sub">没导入照片也能看效果；默认「本地配方」免配置、不联网</div>
                     </div>
                 </div>
                 <details class="frame-advanced" id="frameAdvanced">
@@ -2420,6 +2420,7 @@
                         <div class="frame-adv-row">
                             <label class="frame-adv-label" for="frameChannel">用哪种方式</label>
                             <select id="frameChannel" class="frame-agent-select" aria-label="AI 接入方式">
+                                <option value="recipe">本地配方（免配置 · 秒出）</option>
                                 <option value="local">本机助手（不用 Key）</option>
                                 <option value="api">API Key（填一次）</option>
                             </select>
@@ -2786,6 +2787,7 @@
     <script src="js/app-photo-brief.js"></script>
     <script src="js/app-frame-lint.js"></script>
     <script src="js/app-frame-plans.js"></script>
+    <script src="js/app-frame-recipes.js"></script>
     <script src="js/app-ai-provider.js"></script>
     <script src="js/app-zine-prompts.js"></script>
     <script src="js/app-zine-compiler.js"></script>

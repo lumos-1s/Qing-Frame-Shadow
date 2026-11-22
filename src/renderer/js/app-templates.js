@@ -489,6 +489,7 @@ window.App = Object.assign(window.App || {}, {
         this.onSettingCommit();
         this.template = JSON.parse(JSON.stringify(data));
         this.normalizeTemplate();
+        if (typeof this._onTemplateChanged === 'function') this._onTemplateChanged();
         this.saveCurrentTemplate();
         this.refreshUI();
         this.scheduleRender(true);
@@ -548,6 +549,7 @@ window.App = Object.assign(window.App || {}, {
         this.onSettingCommit();
         this.template = JSON.parse(JSON.stringify(data));
         this.normalizeTemplate();
+        if (typeof this._onTemplateChanged === 'function') this._onTemplateChanged();
         this.saveCurrentTemplate();
         this.refreshUI();
         this.scheduleRender(true);
@@ -622,6 +624,7 @@ window.App = Object.assign(window.App || {}, {
         this.onSettingCommit();
         this.template = JSON.parse(JSON.stringify(data));
         this.normalizeTemplate();
+        if (typeof this._onTemplateChanged === 'function') this._onTemplateChanged();
         this.saveCurrentTemplate();
         this.refreshUI();
         this.scheduleRender(true);
@@ -1074,6 +1077,7 @@ window.App = Object.assign(window.App || {}, {
         }
         this.pendingPreset = JSON.parse(JSON.stringify(preset));
         this.template = JSON.parse(JSON.stringify(preset));
+        if (typeof this._onTemplateChanged === 'function') this._onTemplateChanged();
         // 没照片时也要把「背景模糊默认」记忆铺到空画布和待导入模板上。
         if (typeof this.applyBgBlurDefault === 'function') {
             this.applyBgBlurDefault(this.pendingPreset);
@@ -1162,6 +1166,7 @@ window.App = Object.assign(window.App || {}, {
         const next = this.mergePreset(this.template, p);
         this.template = next;
         this.normalizeTemplate();
+        if (typeof this._onTemplateChanged === 'function') this._onTemplateChanged();
         this.saveCurrentTemplate();
         this.refreshUI();
         // 换模板必须重新适配;苹果信息卡的"只变高不 fit"豁免不能把换模板也吃掉

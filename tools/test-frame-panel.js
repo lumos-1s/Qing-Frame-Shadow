@@ -181,9 +181,13 @@ app.whenReady().then(async () => {
         webPreferences: { preload: path.join(__dirname, 'preload-frame-panel.js'), contextIsolation: true, nodeIntegration: false, sandbox: false, backgroundThrottling: false } });
     await win.loadFile(path.join(ROOT, 'src', 'renderer', 'index.html'));
     const exec = (x) => win.webContents.executeJavaScript(x);
-    await sleep(500); win.showInactive();
+    await sleep(500);
     await exec(`(() => { localStorage.setItem('qfs_intro_done','1'); localStorage.removeItem('qfs_ai_gallery_v1'); if (App.closeIntro) App.closeIntro(); return true; })()`);
     await sleep(1200);
+    // 离屏窗口会节流 rAF，拖动快通道要等真实一帧才建缓存：测试里把 rAF 换成 setTimeout
+    // （只在测试窗口生效，产品代码不动）。
+    await exec(`(() => { window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 0); window.cancelAnimationFrame = (id) => clearTimeout(id); return true; })()`);
+    await sleep(100);
     // 回归从本机助手开始，避免上一次失败跑残留的 API 通道影响前段用例
     await exec(`window.QfsAiProvider.setChannel('local', 'frame'); true`);
 
