@@ -3699,8 +3699,7 @@ window.App = {
 bindBtn('btnResetAllSlots', () => this.resetAllSlots());
 bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
                 bindBtn('btnPuzzleClearSlots', () => this.clearPuzzleSlots());
-        bindBtn('btnPuzzleDisable', () => this.disablePuzzle());
-        bindBtn('btnExportPuzzle', () => this.exportPuzzle());
+        // 退出/导出统一走全局入口：画布左上角「退出拼图」+ 顶栏主按钮（拼图页签下自动变「导出拼图」）
         bindBtn('btnGridPreview', () => this.renderGridPreview());
         bindBtn('btnGridExport', () => this.exportGridCrop());
         bindBtn('btnGridPreviewExport', () => this.exportGridCrop());

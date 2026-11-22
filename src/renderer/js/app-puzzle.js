@@ -231,7 +231,8 @@ window.App = Object.assign(window.App || {}, {
         this._puzzleAxisHover = null;
         this.reflowPuzzleSlots(pk, carried.carried, carried.emptyCaps);
         this.reconcilePuzzleCaptions(pk);
-        this.autoFillPuzzleSlots();
+        // 布局按钮只管版式：以前这里会吃掉胶片条勾选并把所有格子重填一遍，
+        // 和「一键铺满 / 补满空位」语义重叠，用户分不清。填图统一走那两个显式按钮。
         this.saveCurrentTemplate();
         this.switchTab('puzzle');
         this.refreshPuzzleUI();
@@ -277,28 +278,6 @@ window.App = Object.assign(window.App || {}, {
         pk.slots = nextSlots;
         pk.captions = nextCaps;
         this.ensurePuzzleSlotsCount(pk);
-    },
-
-    // 批量放图:勾选照片按勾选顺序填各格,勾选不够用当前打开的主图补位;
-    // 无勾选时只做布局几何更新(重算格子位置/大小),绝不改动已有格子内容
-    // (图片 / 平移 / 缩放 / 双击替换全部保留),即使重复点击当前布局也不重填
-    autoFillPuzzleSlots() {
-        const pk = this.template && this.template.puzzle;
-        if (!pk || !pk.enabled) return;
-        const n = this.puzzleSlotCount(pk.layout || 'single');
-        const main = this.image ? this.images.indexOf(this.image) : -1;
-        if (!this.batchSel.length) return;
-        // 按勾选顺序依次填格(不排序),不够用当前主图补位
-        const order = this.batchSel.slice();
-        for (let i = 0; i < n; i++) {
-            const idx = i < order.length ? order[i] : main;
-            const sc = pk.slots[i] || (pk.slots[i] = {});
-            if (idx >= 0) { sc.imageIndex = idx; sc.imagePath = undefined; }
-            else { sc.imageIndex = undefined; sc.imagePath = undefined; }
-        }
-        this.batchSel = [];
-        // 勾选已被填格消费,随后“导出图片”应回到导出当前单张,而不是残留的多选
-        this.selectedIdx = [];
     },
 
     // 兼容旧模型:补 layoutType/axisVals/gapCaptions,并把旧 slots 数组升级为 dict

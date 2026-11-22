@@ -72,6 +72,23 @@ const RUN = `(async () => {
     const stText = A.dom.stCanvas.textContent;
     add(stText.indexOf('画布') === 0 && stText.indexOf('导出 4000') > 0,
         '状态栏区分预览画布与 4000px 导出尺寸', stText);
+    add(!A.$('btnExportPuzzle') && !A.$('btnPuzzleDisable'),
+        '底部重复的导出/退出按钮已移除', [!!A.$('btnExportPuzzle'), !!A.$('btnPuzzleDisable')].join('/'));
+
+    // 布局按钮只管版式：有勾选也不该偷偷重填/消费勾选（填图走显式按钮）
+    const savedSlots = JSON.parse(JSON.stringify(A.template.puzzle.slots));
+    const pkL = A.template.puzzle;
+    pkL.slots[1] = {};
+    A.batchSel = [1, 2];
+    A.setPuzzleLayout(6);
+    await sleep(120);
+    const filledCount = Object.keys(pkL.slots).filter(k => pkL.slots[k].imageIndex != null).length;
+    add(filledCount === 3 && A.batchSel.length === 2,
+        '点布局不再偷偷填满空格或消费勾选', filledCount + '/' + A.batchSel.length);
+    A.batchSel = [];
+    A.template.puzzle.slots = savedSlots;
+    A.refreshPuzzleUI();
+    await sleep(120);
 
     // ③ 选中格子浮层出现，操作按钮可用
     A.setActivePuzzleSlot(0);
