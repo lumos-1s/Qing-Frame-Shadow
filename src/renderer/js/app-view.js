@@ -315,7 +315,18 @@ window.App = Object.assign(window.App || {}, {
             if (!guide && /失败|错误|不支持|不可用|无法|未找到|未加载|请先|请输入|至少保留|没有可|不存在|异常|缺失|未知原因/.test(m)) level = ' st-err';
             else if (!guide && /已|完成|成功/.test(m)) level = ' st-ok';
             this.dom.stCanvas.className = 'st-item grow' + level;
-            this.dom.stCanvas.textContent = `输出 ${this.canvasW()}×${this.canvasH()}` + (m ? ` · ${m}` : '');
+            const cw = this.canvasW(), ch = this.canvasH();
+            const activeTab = this.dom.tabs && this.dom.tabs.querySelector('.tab.active');
+            const onPuzzle = !!(activeTab && activeTab.dataset.tab === 'puzzle' && this.tplPuzzle && this.tplPuzzle());
+            let sizeText = `输出 ${cw}×${ch}`;
+            if (onPuzzle) {
+                // 拼图版式坐标固定 1000 单位、导出恒 4000 长边；预览尺寸不是成品尺寸，
+                // 状态栏把两者同时写清，避免「输出 1800×1350」误导成实际导出大小。
+                const ew = cw >= ch ? 4000 : Math.round(4000 * cw / Math.max(1, ch));
+                const eh = cw >= ch ? Math.round(4000 * ch / Math.max(1, cw)) : 4000;
+                sizeText = `画布 ${cw}×${ch} · 导出 ${ew}×${eh}`;
+            }
+            this.dom.stCanvas.textContent = sizeText + (m ? ` · ${m}` : '');
         }
     },
     canvasW() { return this.dom.canvas ? (this.dom.canvas._logW || this.dom.canvas.width) : 0; },

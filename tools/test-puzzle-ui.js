@@ -64,6 +64,9 @@ const RUN = `(async () => {
         '照片库标出已入格的 4 张', A.$('photoLibGrid').querySelectorAll('.photo-lib-slot').length);
     add(!A.$('btnPuzzleExit').hidden, '拼图页签：退出拼图入口出现', A.$('btnPuzzleExit').hidden);
     add(A.$('puzzleStyles').children.length === 4, '风格预设 4 个按钮', A.$('puzzleStyles').children.length);
+    const stText = A.dom.stCanvas.textContent;
+    add(stText.indexOf('画布') === 0 && stText.indexOf('导出 4000') > 0,
+        '状态栏区分预览画布与 4000px 导出尺寸', stText);
 
     // ③ 选中格子浮层出现，操作按钮可用
     A.setActivePuzzleSlot(0);
