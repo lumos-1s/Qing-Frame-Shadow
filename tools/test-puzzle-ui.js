@@ -52,6 +52,8 @@ const RUN = `(async () => {
     ims[0].customSettings = JSON.parse(JSON.stringify(A.template));
     A.imageTemplates.set(ims[0], ims[0].customSettings);
     A.buildThumbnails(); A.updateEmptyState(); A.afterImageSelect();
+    add(!A.dom.btnSave.disabled && !A.dom.btnCopy.disabled,
+        '导入照片后导出/复制按钮恢复可用', [A.dom.btnSave.disabled, A.dom.btnCopy.disabled].join('/'));
 
     // ① 非拼图页签：照片入口 / 退出按钮都不该出现
     A.switchTab('canvas');

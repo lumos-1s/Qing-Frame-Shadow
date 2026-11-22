@@ -5178,7 +5178,9 @@ bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
         if (ms && empty) ms.style.display = 'none';
         // 无照片时这几个顶栏动作会静默 return，点了像按钮坏了一样。
         // 置灰由这里统一管：导入 / 删除 / 换图都会经过 updateEmptyState，自动恢复。
-        for (const id of ['btnReset', 'btnRandom', 'btnSyncSel']) {
+        // 导出/复制在无照片时点了只会弹「请先导入照片」，空态下直接置灰，
+        // 免得首屏那排亮绿色按钮看起来像能用。
+        for (const id of ['btnReset', 'btnRandom', 'btnSyncSel', 'btnSave', 'btnExportSettings', 'btnCopy']) {
             const b = document.getElementById(id);
             if (b) b.disabled = empty;
         }
