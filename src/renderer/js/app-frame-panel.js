@@ -40,9 +40,9 @@
     let iterateBase = null;      // 继续改所基于的方案 entry
     let lbEntry = null, lbPreview = '', lbOriginal = '';
     // 生成方式：free = 模型/配方从零画图层；director = 从手工边框里挑 + 写文案。
-    // 存 localStorage：下次打开还是上次那套，不用每次重选。
-    const MODE_KEY = 'qfs_frame_mode';
-    let genMode = readStore(MODE_KEY) === 'director' ? 'director' : 'free';
+    // 导演是「挑不出来」时的兜底，不做粘性记忆——每次打开面板都从 free 起，
+    // 免得用户下次进来先看到一个自己没选过的模式。
+    let genMode = 'free';
     const previewCache = new Map();
 
     function api() { return window.qingframe || {}; }
@@ -876,18 +876,19 @@
     // 和「自由造型」的关键差别：AI 不写坐标，只从 app.presets 里选名字 + 写文案。
     // 因此模型抽风最多是选错框；渲染、撤销、导出仍走手工预设那条老路。
     function syncModeUI() {
-        const box = $('frameModes');
-        if (box) {
-            const btns = box.querySelectorAll('[data-mode]');
-            for (const b of btns) {
-                const on = b.dataset.mode === genMode;
-                b.classList.toggle('active', on);
-                b.setAttribute('aria-pressed', on ? 'true' : 'false');
-            }
+        const on = genMode === 'director';
+        const link = $('btnFrameDirector');
+        if (link) {
+            link.classList.toggle('active', on);
+            link.setAttribute('aria-pressed', on ? 'true' : 'false');
         }
+        const text = $('frameDirectorText');
+        if (text) text.textContent = on ? '导演模式：只从 91 款里挑 + 按照片写文案' : '不知道要什么？让导演从 91 款里挑';
+        const tail = $('frameDirectorTail');
+        if (tail) tail.textContent = on ? '切回' : '→';
         const input = $('framePrompt');
         if (input) {
-            input.placeholder = genMode === 'director'
+            input.placeholder = on
                 ? '说用途或场合，如：旅行手账、给妈妈的生日卡（可不填）'
                 : '想要什么感觉？如：展览海报、胶片边框、大字标题';
         }
@@ -1678,6 +1679,9 @@
         if (!modal) return; modal.style.display = 'flex';
         refreshSamplePhotos();
         refreshBrief();
+        // 导演是兜底入口，不做粘性：每次打开都回到正常的「生成 4 款」。
+        genMode = 'free';
+        syncModeUI();
         if (window.QfsAiProvider) syncChannelUI();
         // 关掉面板期间可能调过色/裁切：历史与收藏的预览都按当前照片重画，不能拿旧缓存。
         previewCache.clear();
@@ -1828,18 +1832,17 @@
         const setupModal = $('aiSetupModal');
         if (setupModal) setupModal.addEventListener('click', (e) => { if (e.target === setupModal) closeAiSetup(); });
         bindChannelUI();
-        const modes = $('frameModes');
-        if (modes) modes.addEventListener('click', (e) => {
-            const b = e.target && e.target.closest ? e.target.closest('[data-mode]') : null;
-            if (!b) return;
-            genMode = b.dataset.mode === 'director' ? 'director' : 'free';
-            writeStore(MODE_KEY, genMode === 'director' ? 'director' : '');
+        const dLink = $('btnFrameDirector');
+        if (dLink) dLink.addEventListener('click', () => {
+            genMode = genMode === 'director' ? 'free' : 'director';
             syncModeUI();
             refreshBrief();
             if (genMode === 'director') {
                 setStatus(directorApiReady()
-                    ? '导演会看图从 91 款里挑 4 款，并按照片写文案'
-                    : '未配置 AI：先按比例与关键词本地挑；配好后导演能看图配文');
+                    ? '导演会看图，从 91 款手工边框里挑 4 款，并按照片写标题与参数'
+                    : '未配置 AI：先按比例与关键词本地挑 4 款；配好后导演能看图配文');
+                const input = $('framePrompt');
+                if (input && typeof input.focus === 'function') input.focus();
             } else {
                 setStatus('已切回自由造型');
             }

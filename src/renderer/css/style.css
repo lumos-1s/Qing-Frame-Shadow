@@ -2438,30 +2438,25 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .frame-compose-row { display: flex; gap: var(--sp-2); align-items: stretch; }
 .frame-compose-row .frame-prompt { flex: 1 1 auto; font-size: var(--fs-13); padding: calc(9px * var(--font-scale)) calc(12px * var(--font-scale)); }
 .frame-compose-row .mini-btn { flex: 0 0 auto; padding-inline: calc(18px * var(--font-scale)); }
-/* 两种生成方式：自由造型（图层）与导演选框（从手工框里挑）。 */
-.frame-modes { display: flex; gap: calc(6px * var(--font-scale)); flex-wrap: wrap; }
-/* 面板底色就是 --surface，未选中态若也透明，两个按钮会糊成一片；
-   给一档 --surface-alt 垫底，选中态再叠金色底 + 双线边，一眼能分出选的是哪个。 */
-.frame-mode-btn {
-    display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-    padding: calc(6px * var(--font-scale)) calc(11px * var(--font-scale));
-    border: 1px solid var(--border); border-radius: var(--r-s);
-    background: var(--surface-alt); color: var(--text-2); font: inherit; cursor: pointer;
-    transition: border-color .15s, background .15s, color .15s, box-shadow .15s;
+/* 导演选框不是并列的生成方式，而是「翻来翻去都不对」时的兜底：只做一行细字，
+   不占主决策位置；真的打开后才亮起金点，让用户知道现在走的是它。 */
+.frame-director { display: flex; align-items: center; padding-left: 2px; margin-top: -3px; }
+.frame-director-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 0; border: 0; border-radius: 0; background: none;
+    color: var(--text-3); font: inherit; font-size: var(--fs-11);
+    cursor: pointer; transition: color .15s;
 }
-.frame-mode-btn b { font-size: var(--fs-12); font-weight: 600; letter-spacing: .02em; }
-.frame-mode-btn span { font-size: var(--fs-10); color: var(--text-3); }
-.frame-mode-btn:hover { border-color: var(--border-strong); color: var(--text); }
-.frame-mode-btn.active {
-    border-color: var(--brand-gold);
-    background: rgba(220, 186, 121, .16);
-    color: var(--text);
-    box-shadow: inset 0 0 0 1px var(--brand-gold);
+.frame-director-dot {
+    width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--brand-gold); opacity: 0; transition: opacity .15s;
 }
-.frame-mode-btn.active b { color: var(--text); }
-.frame-mode-btn.active span { color: var(--text-2); }
-/* 浅色底上 --brand-gold-text(#e6d9b8) 会糊掉，只在深色主题换成暖金副标 */
-html.dark .frame-mode-btn.active span { color: var(--brand-gold-text); }
+.frame-director-tail { transition: transform .15s; }
+.frame-director-link:hover { color: var(--text); }
+.frame-director-link:hover .frame-director-tail { transform: translateX(2px); }
+.frame-director-link.active { color: var(--text); }
+.frame-director-link.active .frame-director-dot { opacity: 1; }
+.frame-director-link.active .frame-director-tail { transform: none; }
 /* 灵感模板：不想打字的人点一下就有一句完整方向，仍可继续改 */
 .frame-ideas { display: flex; align-items: center; flex-wrap: wrap; gap: calc(6px * var(--font-scale)); }
 .frame-ideas-label { font-size: var(--fs-10); color: var(--text-3); margin-right: 2px; }

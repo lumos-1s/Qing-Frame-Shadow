@@ -91,8 +91,13 @@ app.whenReady().then(async () => {
     // 打开面板（离屏，不弹窗）
     await exec(`(() => { window.QfsFramePanel.init(window.App); window.QfsFramePanel.open(); return true; })()`);
     await sleep(400);
-    const opened = await exec(`getComputedStyle(document.getElementById('frameModal')).display === 'flex' && !!document.getElementById('frameModes')`);
-    check(opened === true, '面板打开且有「自由造型 / 导演选框」切换', String(opened));
+    const opened = await exec(`(() => {
+        const link = document.getElementById('btnFrameDirector');
+        return getComputedStyle(document.getElementById('frameModal')).display === 'flex'
+            && !!link && !link.classList.contains('active')
+            && document.getElementById('btnGenerate').textContent === '生成 4 款';
+    })()`);
+    check(opened === true, '面板打开时导演是收起的（默认走自由造型，不逼用户先选模式）', String(opened));
 
     // 接管 AI 通道：页面里 stub chat，能直接检查发出去的消息（是否带图）
     await exec(`(() => {
@@ -113,9 +118,9 @@ app.whenReady().then(async () => {
         return true;
     })()`);
 
-    // 切导演模式 → 生成
+    // 点兜底入口切到导演模式 → 生成
     await exec(`(() => {
-        document.querySelector('#frameModes [data-mode="director"]').click();
+        document.getElementById('btnFrameDirector').click();
         document.getElementById('framePrompt').value = '做成旅行手账，想写标题';
         document.getElementById('btnGenerate').click();
         return true;
