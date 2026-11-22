@@ -689,66 +689,36 @@ html.dark #previewCanvas {
 }
 #previewCanvas:active { cursor: grabbing; }
 
-/* 空态：刷新/首次进入时的首屏，做成一个有产品感的欢迎页，而不是小虚线框 */
+/* 空态：工具本身该安静，不要欢迎页 / 营销话术 */
 .placeholder {
     position: absolute; inset: 0; z-index: 1;
     display: flex; align-items: center; justify-content: center;
     text-align: center; pointer-events: none; overflow: hidden;
-    background:
-        radial-gradient(ellipse 60% 46% at 50% 40%, rgba(70,224,184,.10), transparent 72%),
-        radial-gradient(ellipse 38% 30% at 82% 82%, rgba(90,130,255,.06), transparent 72%);
 }
 .ph-hero {
     pointer-events: auto;
     display: flex; flex-direction: column; align-items: center;
-    width: min(700px, 88%); padding: 12px 8px;
+    width: min(520px, 88%); padding: 12px 8px;
 }
-.ph-art { position: relative; width: 230px; height: 158px; margin-bottom: 22px; }
-.ph-glow {
-    position: absolute; left: 50%; top: 52%; width: 210px; height: 130px;
-    transform: translate(-50%, -50%);
-    background: radial-gradient(ellipse, rgba(70,224,184,.20), transparent 70%);
-    filter: blur(10px);
+.ph-preview {
+    width: 188px; height: 126px; padding: 5px;
+    border: 1px solid var(--border); border-radius: 9px;
+    background: var(--surface); box-shadow: 0 6px 20px rgba(0,0,0,.22);
+    margin-bottom: 20px;
 }
-.ph-frame {
-    position: absolute; display: block; width: 116px; height: 144px;
-    border-radius: 10px; overflow: hidden;
-    border: 3px solid rgba(255,255,255,.92);
-    box-shadow: 0 16px 36px rgba(0,0,0,.42);
+.ph-preview img {
+    display: block; width: 100%; height: 100%;
+    object-fit: cover; border-radius: 5px; filter: saturate(.9) brightness(.92);
 }
-.ph-frame i { display: block; width: 100%; height: 100%; }
-.ph-frame-1 { left: 4px; top: 12px; transform: rotate(-11deg); }
-.ph-frame-1 i { background: linear-gradient(160deg, #f6d9a0 0%, #cf8b5c 46%, #5b4a63 100%); }
-.ph-frame-2 { right: 4px; top: 10px; transform: rotate(9deg); }
-.ph-frame-2 i { background: linear-gradient(160deg, #9fd9ff 0%, #4b86b8 50%, #213a53 100%); }
-.ph-frame-3 { left: 50%; top: 0; margin-left: -58px; border-color: var(--primary); }
-.ph-frame-3 i { background: linear-gradient(155deg, #c8f5dd 0%, #67cfa5 45%, #2a7d63 100%); }
-.ph-eyebrow {
-    font-size: var(--fs-10); font-weight: 700; letter-spacing: .22em;
-    color: var(--primary-text); margin-bottom: 10px;
-}
-.ph-title {
-    margin: 0 0 10px; font-size: clamp(26px, 3vw, 38px); font-weight: 700;
-    letter-spacing: .02em; color: var(--text); line-height: 1.25;
-}
-.ph-desc { margin: 0 0 26px; font-size: var(--fs-13); line-height: 1.8; color: var(--text-2); }
-.ph-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: var(--sp-2-5); }
-.pick-btn { pointer-events: auto; display: inline-flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2-5) calc(26px * var(--font-scale)); font-size: var(--fs-13); border-radius: 12px; }
+.ph-title { font-size: var(--fs-14); font-weight: 600; color: var(--text); }
+.ph-desc { margin: 6px 0 20px; font-size: var(--fs-11); color: var(--text-3); }
+.ph-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: var(--sp-2); }
+.pick-btn { pointer-events: auto; display: inline-flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2-5) calc(20px * var(--font-scale)); font-size: var(--fs-12); border-radius: 10px; }
 .restore-draft-btn { pointer-events: auto; }
 .ph-folder { display: inline-flex; }
-.ph-sample { pointer-events: auto; border-style: solid; border-color: var(--border-strong); color: var(--text-2); }
+.ph-sample { pointer-events: auto; border-color: var(--border-strong); color: var(--text-2); }
 .ph-sample:hover { border-color: var(--primary); color: var(--primary-text); background: var(--primary-soft); }
-.ph-meta {
-    display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 30px;
-}
-.ph-meta span {
-    font-size: var(--fs-10); color: var(--text-3);
-    padding: 4px 11px; border: 1px solid var(--border); border-radius: 999px;
-    background: var(--surface-alt);
-}
-.ph-formats {
-    margin-top: 14px; font-size: var(--fs-10); color: var(--text-3); line-height: 1.6;
-}
+.ph-formats { margin-top: 16px; font-size: var(--fs-10); color: var(--text-3); line-height: 1.6; }
 
 /* 缩略图条 */
 .thumb-strip:empty { display: none; }
