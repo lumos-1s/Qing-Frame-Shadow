@@ -3178,6 +3178,31 @@ body.platform-darwin .titlebar-controls { display: none; }
 .stage-puzzle-exit:hover { color: #06251C; border-color: var(--primary); background: var(--primary); transform: translateY(-1px); }
 .stage-puzzle-exit:active { transform: translateY(0); }
 
+/* 选中格子后的浮层：替换/旋转/复位/清空不再藏在双击和右键菜单里 */
+.puzzle-slot-bar {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 19;
+    display: flex; align-items: center; gap: 4px;
+    max-width: calc(100% - 220px); padding: 5px 7px;
+    border: 1px solid rgba(255, 255, 255, .18); border-radius: 12px;
+    background: rgba(10, 14, 13, .72);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .30), inset 0 1px 0 rgba(255, 255, 255, .10);
+}
+.puzzle-slot-bar[hidden] { display: none; }
+.psb-title {
+    color: rgba(255,255,255,.9); font-size: var(--fs-11); font-weight: 700;
+    padding: 0 6px 0 2px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.puzzle-slot-bar button {
+    border: 1px solid rgba(255,255,255,.15); border-radius: 7px;
+    background: rgba(255,255,255,.08); color: rgba(255,255,255,.88);
+    font: inherit; font-size: var(--fs-10); font-weight: 600;
+    padding: 4px 8px; cursor: pointer; white-space: nowrap;
+    transition: background .15s, border-color .15s, color .15s;
+}
+.puzzle-slot-bar button:hover:not(:disabled) { background: var(--primary); border-color: var(--primary); color: #06251c; }
+.puzzle-slot-bar button:disabled { opacity: .35; cursor: not-allowed; }
+
 .immersion {
     --imm-accent: #46E0B8;
     --imm-accent-soft: rgba(70, 224, 184, .16);

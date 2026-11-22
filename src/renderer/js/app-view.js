@@ -79,6 +79,7 @@ window.App = Object.assign(window.App || {}, {
         if (typeof this.updatePuzzleSideMode === 'function') this.updatePuzzleSideMode(name);
         if (name === 'puzzle') this.refreshPuzzleUI();
         if (typeof this.updatePuzzleExitEntry === 'function') this.updatePuzzleExitEntry();
+        if (typeof this.updatePuzzleSlotBar === 'function') this.updatePuzzleSlotBar();
         // 直方图留在调色页签内，切到调色页时补一次（有图才画，无图时模块自己跳过）；
         // 切到别的页签时调色面板被隐藏，直方图自动不画。
         if (name === 'grade' && window.QfsHistogram && this.image) window.QfsHistogram.refresh(this.image);

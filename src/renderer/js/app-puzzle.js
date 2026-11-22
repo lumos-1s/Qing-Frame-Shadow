@@ -96,6 +96,33 @@ window.App = Object.assign(window.App || {}, {
         btn.hidden = !inPuzzle;
         const photoTab = this.$('sideTabPhoto');
         if (photoTab) photoTab.hidden = !inPuzzle;
+        if (this.updatePuzzleSlotBar) this.updatePuzzleSlotBar();
+    },
+
+    // 选中格子浮层：把「双击换图 / 滚轮缩放 / 右键旋转」这些隐藏手势摆到台面上
+    updatePuzzleSlotBar() {
+        const bar = this.$ && this.$('puzzleSlotBar');
+        if (!bar) return;
+        const pk = this.tplPuzzle && this.tplPuzzle();
+        const active = document.querySelector('#inspTabs .tab.active');
+        const onPuzzleTab = !!(active && active.dataset.tab === 'puzzle');
+        const i = this._activePuzzleSlot;
+        const show = !!(onPuzzleTab && pk && i != null && i >= 0 && i < this.puzzleSlotCount(pk.layout || 'single'));
+        bar.hidden = !show;
+        if (!show) return;
+        const sc = pk.slots[i] || {};
+        const hasImg = sc.imageIndex != null || sc.imagePath != null;
+        const nm = this.slotImageName ? this.slotImageName(i) : null;
+        const title = this.$('psbTitle');
+        if (title) {
+            const n = this.puzzleSlotCount(pk.layout || 'single');
+            title.textContent = `格子 ${i + 1}/${n}` + (nm ? ` · ${nm}` : ' · 空');
+            title.title = title.textContent;
+        }
+        ['psbRotate', 'psbReset', 'psbClear'].forEach(id => {
+            const el = this.$(id);
+            if (el) el.disabled = !hasImg;
+        });
     },
 
     // 照片索引 → 已放入的格子号（1 起）。胶片条角标和左侧照片库共用。

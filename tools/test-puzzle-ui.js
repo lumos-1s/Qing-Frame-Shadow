@@ -65,8 +65,15 @@ const RUN = `(async () => {
     add(!A.$('btnPuzzleExit').hidden, '拼图页签：退出拼图入口出现', A.$('btnPuzzleExit').hidden);
     add(A.$('puzzleStyles').children.length === 4, '风格预设 4 个按钮', A.$('puzzleStyles').children.length);
 
-    // ③ 点照片库第 5 张 → 放进选中格 0，两个入口都出现角标
+    // ③ 选中格子浮层出现，操作按钮可用
     A.setActivePuzzleSlot(0);
+    await sleep(120);
+    add(!A.$('puzzleSlotBar').hidden && A.$('psbTitle').textContent.indexOf('格子 1/4') === 0,
+        '选中格子后画布浮层出现', A.$('psbTitle').textContent);
+    add(!A.$('psbRotate').disabled && !A.$('psbReset').disabled && !A.$('psbClear').disabled,
+        '有图格子：旋转/复位/清空按钮可用', [A.$('psbRotate').disabled, A.$('psbReset').disabled, A.$('psbClear').disabled].join('/'));
+
+    // ④ 点照片库第 5 张 → 放进选中格 0，两个入口都出现角标
     A.$('photoLibGrid').children[4].click();
     await sleep(250);
     add(A.template.puzzle.slots[0].imageIndex === 4, '点照片库照片放进选中格', A.template.puzzle.slots[0].imageIndex);
@@ -76,7 +83,22 @@ const RUN = `(async () => {
     add(!!cardBadge && cardBadge.textContent === '1', '照片库出现已用角标', cardBadge && cardBadge.textContent);
     add(!!thumbBadge && thumbBadge.textContent === '1', '胶片条出现已用角标', thumbBadge && thumbBadge.textContent);
 
-    // ④ 风格：改参数不改格子；手动改间距后不高亮
+    // ⑤ 浮层按钮真的改模型
+    A.$('psbRotate').click();
+    await sleep(120);
+    add(A.template.puzzle.slots[0].rotate === 1, '浮层旋转按钮生效', A.template.puzzle.slots[0].rotate);
+    A.$('psbReset').click();
+    await sleep(120);
+    add(A.template.puzzle.slots[0].zoom == null, '浮层复位按钮清掉手动缩放', A.template.puzzle.slots[0].zoom);
+    A.$('psbClear').click();
+    await sleep(150);
+    add(A.template.puzzle.slots[0].imageIndex == null, '浮层清空按钮清掉该格照片', A.template.puzzle.slots[0].imageIndex);
+    add(A.$('psbRotate').disabled && A.$('psbTitle').textContent.indexOf('空') > 0,
+        '空格子：操作按钮置灰且标题标空', A.$('psbTitle').textContent);
+    A.$('photoLibGrid').children[4].click(); // 复原，供后面的风格测试核对「保留格子内容」
+    await sleep(150);
+
+    // ⑥ 风格：改参数不改格子；手动改间距后不高亮
     A.$('puzzleStyles').querySelector('[data-val="ink"]').click();
     await sleep(200);
     const p2 = A.template.puzzle;

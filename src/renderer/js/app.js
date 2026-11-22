@@ -3875,6 +3875,10 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
         bindBtn('btnPuzzleFillEmpty', () => this.fillEmptyPuzzleSlots());
         bindBtn('btnPuzzleExit', () => this.disablePuzzle());
         bindBtn('btnPhotoLibAdd', () => this.openImage());
+        bindBtn('psbReplace', () => { if (this._activePuzzleSlot != null) this.openSlotImage(this._activePuzzleSlot); });
+        bindBtn('psbRotate', () => { if (this._activePuzzleSlot != null) this.rotatePuzzleSlot(this._activePuzzleSlot); });
+        bindBtn('psbReset', () => { if (this._activePuzzleSlot != null) this.resetPuzzleSlot(this._activePuzzleSlot); });
+        bindBtn('psbClear', () => { if (this._activePuzzleSlot != null) this.clearSlotImage(this._activePuzzleSlot); });
 
         // 元素管理
         if ($('slActiveIconOpacity')) $('slActiveIconOpacity').addEventListener('input', () => {
