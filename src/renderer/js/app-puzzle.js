@@ -19,15 +19,46 @@ window.App = Object.assign(window.App || {}, {
         return (type >= 0 && type < keys.length) ? keys[type] : 'single';
     },
 
+    puzzleLayoutLabel(key) {
+        const hit = this.puzzleLayouts().find(([val]) => val === key);
+        return hit ? hit[1] : (key || '单张');
+    },
+
+    // 布局示意图：12 等分网格，按格子比例画色块。比纯文字按钮更容易一眼选版式。
+    puzzleLayoutIcon(val) {
+        const areas = {
+            single: ['1/1/13/13'],
+            h2: ['1/1/13/7', '1/7/13/13'],
+            v2: ['1/1/7/13', '7/1/13/13'],
+            as2: ['1/1/13/8', '1/8/13/13'],
+            h3: ['1/1/13/5', '1/5/13/9', '1/9/13/13'],
+            v3: ['1/1/5/13', '5/1/9/13', '9/1/13/13'],
+            grid4: ['1/1/7/7', '1/7/7/13', '7/1/13/7', '7/7/13/13'],
+            as4: ['1/1/13/8', '1/8/5/13', '5/8/9/13', '9/8/13/13'],
+            h4: ['1/1/13/4', '1/4/13/7', '1/7/13/10', '1/10/13/13'],
+            v4: ['1/1/4/13', '4/1/7/13', '7/1/10/13', '10/1/13/13'],
+            grid6: ['1/1/7/5', '1/5/7/9', '1/9/7/13', '7/1/13/5', '7/5/13/9', '7/9/13/13'],
+            grid9: ['1/1/5/5', '1/5/5/9', '1/9/5/13', '5/1/9/5', '5/5/9/9', '5/9/9/13', '9/1/13/5', '9/5/13/9', '9/9/13/13'],
+        };
+        const cells = (areas[val] || areas.single)
+            .map(a => `<i style="grid-area:${a}"></i>`)
+            .join('');
+        return `<span class="pz-layout-ico" aria-hidden="true">${cells}</span>`;
+    },
+
     buildPuzzleLayoutBtns() {
         const box = this.$('puzzleLayouts');
         if (!box) return;
         box.innerHTML = '';
         this.puzzleLayouts().forEach(([val, label]) => {
             const b = document.createElement('button');
-            b.className = 'mini-btn';
-            b.textContent = label;
+            b.type = 'button';
+            b.className = 'mini-btn pz-layout-btn';
             b.dataset.val = val;
+            b.title = label;
+            b.setAttribute('aria-label', `拼图布局：${label}`);
+            b.setAttribute('aria-pressed', 'false');
+            b.innerHTML = this.puzzleLayoutIcon(val) + `<span class="pz-layout-name">${label}</span>`;
             b.addEventListener('click', () => {
                 this.onSettingCommit();
                 this.setPuzzleLayout(this.layoutTypeOf(val));
@@ -37,24 +68,68 @@ window.App = Object.assign(window.App || {}, {
         });
     },
 
-    // 切换布局并尽量保留各照片槽位(imageIndex 不改)
+    // 切换布局：按阅读顺序把已放好的照片重新排进新布局，而不是让它们卡在旧槽位号上。
+    // 例：4 宫格 → 9 宫格，旧 4 张应落在新布局的 1–4 格；否则会因为槽位编号/列优先
+    // 看起来像"照片全堆在左边一列"。每格自己的缩放/偏移/旋转跟着照片走，字幕也跟图走。
     setPuzzleLayout(layoutType) {
         if (!this.template) return;
         const pk = this.template.puzzle || (this.template.puzzle = this.defaultTemplate().puzzle);
+        this.migratePuzzle();
+        const oldN = this.puzzleSlotCount(pk.layout || 'single');
+        const carried = this.collectPuzzleSlotContent(pk, oldN);
         const oldAxes = pk.axisVals;
         pk.layout = this.layoutKeyOf(layoutType);
         pk.layoutType = layoutType;
         pk.axisVals = oldAxes || {};
         pk.enabled = 1;
         this._puzzleAxisHover = null;
-        this.migratePuzzle();
-        this.ensurePuzzleSlotsCount(pk);
+        this.reflowPuzzleSlots(pk, carried.carried, carried.emptyCaps);
         this.reconcilePuzzleCaptions(pk);
         this.autoFillPuzzleSlots();
         this.saveCurrentTemplate();
         this.switchTab('puzzle');
         this.refreshPuzzleUI();
         this.scheduleRender(true);
+    },
+
+    // 收集当前布局里"有图"的格子（连同该格字幕），用于换布局时按顺序重排。
+    // 没图的格子如果挂了字幕，先按原下标存着；重排后那个位置仍然空着就放回去。
+    collectPuzzleSlotContent(pk, oldN) {
+        const carried = [];
+        const emptyCaps = {};
+        for (let i = 0; i < oldN; i++) {
+            const sc = pk.slots && pk.slots[i];
+            const cap = pk.captions && pk.captions[i];
+            if (sc && (sc.imageIndex != null || sc.imagePath != null)) {
+                carried.push({
+                    sc: JSON.parse(JSON.stringify(sc)),
+                    cap: cap ? JSON.parse(JSON.stringify(cap)) : null,
+                });
+            } else if (cap) {
+                emptyCaps[i] = JSON.parse(JSON.stringify(cap));
+            }
+        }
+        return { carried, emptyCaps };
+    },
+
+    // 把收集到的格子按 0..n-1 顺序写回新布局；超出新布局数量的照片仍留在胶片条。
+    reflowPuzzleSlots(pk, carried, emptyCaps) {
+        const n = this.puzzleSlotCount(pk.layout || 'single');
+        const nextSlots = {};
+        const nextCaps = {};
+        const filled = new Set();
+        carried.slice(0, n).forEach((entry, i) => {
+            nextSlots[i] = entry.sc;
+            if (entry.cap) nextCaps[i] = entry.cap;
+            filled.add(i);
+        });
+        Object.keys(emptyCaps || {}).forEach(k => {
+            const i = parseInt(k, 10);
+            if (i >= 0 && i < n && !filled.has(i) && !nextCaps[i]) nextCaps[i] = emptyCaps[k];
+        });
+        pk.slots = nextSlots;
+        pk.captions = nextCaps;
+        this.ensurePuzzleSlotsCount(pk);
     },
 
     // 批量放图:勾选照片按勾选顺序填各格,勾选不够用当前打开的主图补位;
@@ -180,20 +255,31 @@ window.App = Object.assign(window.App || {}, {
 
     refreshPuzzleUI() {
         if (!this.template) return;
+        const $ = this.$;
         const pk = this.template.puzzle || (this.template.puzzle = this.defaultTemplate().puzzle);
         this.ensurePuzzleSlotsCount(pk);
         this.reconcilePuzzleCaptions(pk);
-        // 「重拼(按序填满)」:拼图内存在图片内容时可用,拼图为空时置灰
-        const rep = this.$('btnPuzzleRepuzzle');
-        if (rep) {
-            const hasContent = pk.slots && Object.keys(pk.slots).some(k => {
-                const sc = pk.slots[k];
-                return sc && (sc.imageIndex != null || sc.imagePath != null);
-            });
-            rep.disabled = !hasContent;
-        }
-        const $ = this.$;
         const n = this.puzzleSlotCount(pk.layout);
+        const layoutLabel = this.puzzleLayoutLabel(pk.layout || 'single');
+        // 布局按钮高亮当前版式
+        const layoutBox = $('puzzleLayouts');
+        if (layoutBox) {
+            Array.prototype.forEach.call(layoutBox.querySelectorAll('button[data-val]'), (b) => {
+                const on = b.dataset.val === (pk.layout || 'single');
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+        }
+        // 「一键铺满」：拼图启用且至少有一张照片就可用；「补满空位」只在真有空格时可用
+        let emptySlots = 0;
+        for (let i = 0; i < n; i++) {
+            const sc = pk.slots[i] || {};
+            if (sc.imageIndex == null && sc.imagePath == null) emptySlots++;
+        }
+        const rep = $('btnPuzzleRepuzzle');
+        if (rep) rep.disabled = !(pk.enabled && this.images && this.images.length);
+        const fillEmpty = $('btnPuzzleFillEmpty');
+        if (fillEmpty) fillEmpty.disabled = !(pk.enabled && this.images && this.images.length && emptySlots > 0);
         if ($('slPuzzleGap')) $('slPuzzleGap').value = pk.gap != null ? pk.gap : 6;
         this.updateLabel('lblPuzzleGap', pk.gap != null ? pk.gap : 6);
         if ($('slPuzzleCorner')) $('slPuzzleCorner').value = pk.cornerRadius != null ? pk.cornerRadius : 3;
@@ -247,6 +333,11 @@ window.App = Object.assign(window.App || {}, {
                 this.setSlotOffsetSliders(sc);
                 if ($('slSlotZoom')) $('slSlotZoom').value = sc.zoom != null ? sc.zoom : 100;
                 this.updateLabel('lblSlotZoom', (sc.zoom != null ? sc.zoom : 100) + '%');
+            } else {
+                // 没选中格子时把单格控件归零，避免显示上一格的数值造成误读
+                this.setSlotOffsetSliders({ offsetX: 0, offsetY: 0 });
+                if ($('slSlotZoom')) $('slSlotZoom').value = 100;
+                this.updateLabel('lblSlotZoom', '100%');
             }
             ['slSlotOffsetX', 'slSlotOffsetY', 'slSlotZoom'].forEach(id => {
                 const el = $(id);
@@ -254,21 +345,23 @@ window.App = Object.assign(window.App || {}, {
                 el.disabled = !hasSlot;
                 if (hasSlot) el.removeAttribute('title');
                 else el.title = '先在画布上点击选中一个格子';
+                const row = el.closest ? el.closest('.param-row') : null;
+                if (row) row.classList.toggle('is-disabled', !hasSlot);
             });
             const lbl = $('lblPuzzleSlot');
             if (lbl) {
-                if (!pk.enabled) lbl.textContent = '当前槽位：无（未启用）';
+                if (!pk.enabled) lbl.textContent = '当前格子：未启用';
                 else if (hasSlot) {
                     const ai = this._activePuzzleSlot;
                     const nm = this.slotImageName(ai);
-                    lbl.textContent = `当前槽位:${ai + 1}/${n}${nm ? ` · ${nm}` : '（空）'} (布局 ${pk.layout})`;
+                    lbl.textContent = `当前格子 ${ai + 1}/${n}${nm ? ` · ${nm}` : '（空）'} · ${layoutLabel}`;
                     lbl.title = nm || '';
                 } else if (/^[vh]\d+$/.test(this._puzzleSlot || '')) {
-                    lbl.textContent = `当前项:${this._puzzleSlot.toUpperCase()} 间隙字幕 (布局 ${pk.layout})`;
+                    lbl.textContent = `当前项：${this._puzzleSlot.toUpperCase()} 间隙字幕 · ${layoutLabel}`;
                     lbl.title = '';
                 } else {
-                    lbl.textContent = `当前槽位:未选中 (布局 ${pk.layout})`;
-                    lbl.title = '';
+                    lbl.textContent = `未选中格子 · ${layoutLabel}`;
+                    lbl.title = '点画布上的格子，可单独调整图片偏移/缩放';
                 }
             }
         }
@@ -466,17 +559,18 @@ window.App = Object.assign(window.App || {}, {
     },
 
     // 重拼:按胶片条中勾选的照片顺序填格(勾选不够用当前主图补位,无勾选用主图铺满),
-    // 同时重置全部格子的平移/缩放,恢复默认填充状态。会覆盖用户所有手工编辑。
+    // 同时重置全部格子的平移/缩放/旋转,恢复默认填充状态。会覆盖用户所有手工编辑。
     rePuzzleFill() {
         const pk = this.template && this.template.puzzle;
         if (!pk || !pk.enabled) { this.setStatus('拼图未启用'); return; }
+        if (!this.images || !this.images.length) { this.setStatus('请先导入照片'); return; }
         this.onSettingCommit();
         this.ensurePuzzleSlotsCount(pk);
         const n = this.puzzleSlotCount(pk.layout || 'single');
         const main = this.image ? this.images.indexOf(this.image) : -1;
         const order = this.batchSel.slice();
         this.batchSel = [];
-        this.selectedIdx = this.batchSel.slice();
+        this.selectedIdx = [];
         for (let i = 0; i < n; i++) {
             const idx = i < order.length ? order[i] : main;
             const sc = pk.slots[i] || (pk.slots[i] = {});
@@ -485,12 +579,57 @@ window.App = Object.assign(window.App || {}, {
             sc.zoom = 100;
             sc.offsetX = 0;
             sc.offsetY = 0;
+            delete sc.rotate;
         }
         this.saveCurrentTemplate();
         this.refreshPuzzleUI();
         this.buildThumbnails();
         this.scheduleRender(true);
-        this.setStatus(order.length ? `已按勾选照片顺序重新拼接${n} 个格子，平移/缩放已重置` : '无勾选照片，已用当前主图铺满 ' + n + ' 个格子，平移/缩放已重置');
+        this.setStatus(order.length ? `已按勾选照片顺序重新拼接 ${n} 个格子，位置/缩放/旋转已重置` : `无勾选照片，已用当前主图铺满 ${n} 个格子，位置/缩放/旋转已重置`);
+    },
+
+    // 只补空格：已放好的格子（含平移/缩放/旋转）完全不动。
+    // 优先用胶片条里还没进拼图的照片，照片不够时再用当前主图补位。
+    fillEmptyPuzzleSlots() {
+        const pk = this.template && this.template.puzzle;
+        if (!pk || !pk.enabled) { this.setStatus('拼图未启用'); return; }
+        if (!this.images || !this.images.length) { this.setStatus('请先导入照片'); return; }
+        this.onSettingCommit();
+        this.ensurePuzzleSlotsCount(pk);
+        const n = this.puzzleSlotCount(pk.layout || 'single');
+        const used = new Set();
+        for (let i = 0; i < n; i++) {
+            const sc = pk.slots[i] || {};
+            if (sc.imageIndex != null) used.add(sc.imageIndex);
+            else if (sc.imagePath) {
+                const k = this.images.findIndex(x => x.name === sc.imagePath);
+                if (k >= 0) used.add(k);
+            }
+        }
+        const order = this.batchSel.length ? this.batchSel.slice() : this.images.map((_, i) => i);
+        const main = this.image ? this.images.indexOf(this.image) : -1;
+        let k = 0;
+        let cycle = 0;
+        let filled = 0;
+        for (let i = 0; i < n; i++) {
+            const sc = pk.slots[i] || (pk.slots[i] = {});
+            if (sc.imageIndex != null || sc.imagePath != null) continue;
+            while (k < order.length && used.has(order[k])) k++;
+            // 照片够：先用没进拼图的；照片不够：循环使用已有照片，避免 9 宫格后 4 格全是同一张
+            const idx = k < order.length ? order[k++] : (order.length ? order[cycle++ % order.length] : main);
+            if (idx < 0) continue;
+            sc.imageIndex = idx;
+            sc.imagePath = undefined;
+            used.add(idx);
+            filled++;
+        }
+        this.batchSel = [];
+        this.selectedIdx = [];
+        this.saveCurrentTemplate();
+        this.refreshPuzzleUI();
+        this.buildThumbnails();
+        this.scheduleRender(true);
+        this.setStatus(filled ? `已补满 ${filled} 个空格` : '没有空格需要补');
     },
 
     // 只清空指定格子的图片(照片仍保留在胶片条,可再放)
@@ -504,7 +643,7 @@ window.App = Object.assign(window.App || {}, {
         this.saveCurrentTemplate();
         this.refreshPuzzleUI();
         this.scheduleRender(true);
-        this.setStatus('已清空槽位 ' + (i + 1) + '(照片仍保留在胶片条)');
+        this.setStatus('已清空格子 ' + (i + 1) + '（照片仍保留在胶片条）');
     },
 
     // 完全退出拼图(回到单照片编辑)
@@ -831,22 +970,51 @@ window.App = Object.assign(window.App || {}, {
         if (pick) pick.value = 's' + i;
         this.refreshPuzzleUI();
         this.scheduleRender();
-        this.setStatus(`已选中槽位 ${i + 1}`);
+        this.setStatus(`已选中格子 ${i + 1}`);
     },
 
-    // 胶片条照片→当前选中槽(拼图模式下 buildThumbnails 点击调用)
+    // 胶片条照片 → 当前选中格；没选格时自动落到第一个空格。
+    // 拼图模式下缩略图单击走这里，不再走 selectImage（否则会把拼图整个切走）。
+    assignPuzzlePhotoFromStrip(imgIdx) {
+        const pk = this.tplPuzzle();
+        if (!pk) return false;
+        let slot = this._activePuzzleSlot;
+        if (slot == null) {
+            const n = this.puzzleSlotCount(pk.layout || 'single');
+            for (let i = 0; i < n; i++) {
+                const sc = pk.slots[i] || {};
+                if (sc.imageIndex == null && sc.imagePath == null) { slot = i; break; }
+            }
+        }
+        if (slot == null) {
+            this.setStatus('格子已放满：先点画布选中要替换的格子，再点照片');
+            return false;
+        }
+        // 填完保持该格选中：连续点不同照片=替换同一格，点下一格再点照片=继续放图
+        this.assignSlotImage(pk, slot, imgIdx);
+        return true;
+    },
+
+    // 胶片条照片→指定格(拼图模式下的单击入口)
     assignSlotImage(pk, slotIdx, imgIdx) {
         if (!this.images || this.images[imgIdx] == null) return;
+        // 先提交旧格的滑块/字幕，再切到目标格；顺序反了会把旧格数值写进新格
         this.onSettingCommit();
         this.ensurePuzzleSlotsCount(pk);
+        this._activePuzzleSlot = slotIdx;
+        this._puzzleSlot = 's' + slotIdx;
         const sc = pk.slots[slotIdx] || (pk.slots[slotIdx] = {});
+        // 让单格滑块先跟上目标格，后续 onSettingCommit 不会把 0/100 写回去
+        this.setSlotOffsetSliders(sc);
+        if (this.$('slSlotZoom')) this.$('slSlotZoom').value = sc.zoom != null ? sc.zoom : 100;
+        this.updateLabel('lblSlotZoom', (sc.zoom != null ? sc.zoom : 100) + '%');
         sc.imageIndex = imgIdx;
         sc.imagePath = undefined;
         this.saveCurrentTemplate();
         this.refreshPuzzleUI();
         this.scheduleRender(true);
         const im = this.images[imgIdx];
-        this.setStatus(`槽位 ${slotIdx + 1} 已使用「${im && im.name ? im.name : '照片' + (imgIdx + 1)}」`);
+        this.setStatus(`格子 ${slotIdx + 1} 已使用「${im && im.name ? im.name : '照片' + (imgIdx + 1)}」`);
     },
 
     // 滚轮缩放该格图片(100%–400%,100% 即图片自然铺满格的"最小限度")

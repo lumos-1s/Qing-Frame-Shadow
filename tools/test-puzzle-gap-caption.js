@@ -98,7 +98,8 @@ const RUN = `(async () => {
     const row = scan(S, 'row', y);
     const photos = row.filter(r => r.k === 'P');
     const idx = photos.map(r => A.puzzleSlotAtPx(r.from + Math.floor(r.len / 2), y));
-    add(photos.length === 2 && JSON.stringify(idx) === '[0,2]', '点画面上半部的两格中心:命中 0 / 2', JSON.stringify(idx));
+    // 行优先后，上半部两格是 0（左上）和 1（右上）；旧实现列优先时是 0 / 2。
+    add(photos.length === 2 && JSON.stringify(idx) === '[0,1]', '点画面上半部的两格中心:命中 0 / 1', JSON.stringify(idx));
     const seam = row[2];
     const seamX = seam.from + Math.floor(seam.len / 2);
     add(A.puzzleSlotAtPx(seamX, y) === null, '点两格之间的空白(缝隙中心)不应选中任何格子', 'x=' + seamX + ' → ' + String(A.puzzleSlotAtPx(seamX, y)));

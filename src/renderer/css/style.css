@@ -1928,6 +1928,33 @@ html.dark .mini-btn.primary { color: var(--primary-ink); }
     .btn-row.btn-12 .mini-btn { padding-left: calc(8px * var(--font-scale)); padding-right: calc(8px * var(--font-scale)); font-size: var(--fs-11); }
 }
 
+/* 拼图布局按钮：小示意图 + 名称。12 个纯文字按钮太难扫，图标能让人一眼选版式。 */
+.btn-row.btn-12 .mini-btn.pz-layout-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: calc(4px * var(--font-scale)); padding: calc(6px * var(--font-scale)) calc(3px * var(--font-scale));
+    min-height: calc(58px * var(--font-scale)); line-height: 1.15; white-space: normal;
+}
+.pz-layout-ico {
+    display: grid; width: 30px; height: 22px; padding: 2px; gap: 1px;
+    grid-template-columns: repeat(12, 1fr); grid-template-rows: repeat(12, 1fr);
+    border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface-alt);
+    color: var(--text-2); transition: color .15s, border-color .15s;
+}
+.pz-layout-ico i { display: block; background: currentColor; opacity: .5; border-radius: 1px; }
+.pz-layout-btn:hover .pz-layout-ico,
+.pz-layout-btn.active .pz-layout-ico { color: var(--primary-text); border-color: var(--primary); }
+.pz-layout-btn:hover .pz-layout-ico i,
+.pz-layout-btn.active .pz-layout-ico i { opacity: .9; }
+.pz-layout-btn.active { border-color: var(--primary); color: var(--primary-text); background: var(--primary-soft); }
+.pz-layout-name { font-size: var(--fs-10); white-space: nowrap; }
+.pz-hint {
+    font-size: var(--fs-10); color: var(--text-3); line-height: 1.55;
+    padding: calc(2px * var(--font-scale)) calc(2px * var(--font-scale)) 0;
+}
+/* 未选中拼图格子时，单格偏移/缩放整体降权，避免看起来可操作 */
+.param-row.is-disabled { opacity: .42; }
+.param-row.is-disabled input[type="range"] { cursor: not-allowed; }
+
 .pool-title { font-size: var(--fs-11); color: var(--text-2); padding: var(--sp-2) calc(2px * var(--font-scale)) var(--sp-1); display: flex; align-items: center; gap: var(--sp-1-5); }
 .pool-title .cnt { font-size: var(--fs-10); color: var(--text-3); }
 .icon-pool {

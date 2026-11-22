@@ -3448,6 +3448,11 @@ window.App = {
             t.addEventListener('click', e => {
                 // 单击 = 选中并切换为当前主图(恢复该图自己的边框模板);Ctrl/Shift+单击 = 追加/取消多选
                 if (e.shiftKey || e.ctrlKey || e.metaKey) { e.stopPropagation(); this.toggleSelect(i); return; }
+                // 拼图模式：单击照片 = 放入当前选中格；直接切主图会把拼图整个切走
+                if (this.tplPuzzle && this.tplPuzzle() && this.assignPuzzlePhotoFromStrip) {
+                    this.assignPuzzlePhotoFromStrip(i);
+                    return;
+                }
                 this.selectImage(i);
             });
             const cb = document.createElement('input');
@@ -3856,6 +3861,7 @@ bindBtn('btnResetAllSlots', () => this.resetAllSlots());
         this.initDiag();
         bindBtn('btnPuzzleAddImg', () => this.openImage());
         bindBtn('btnPuzzleRepuzzle', () => this.rePuzzleFill());
+        bindBtn('btnPuzzleFillEmpty', () => this.fillEmptyPuzzleSlots());
 
         // 元素管理
         if ($('slActiveIconOpacity')) $('slActiveIconOpacity').addEventListener('input', () => {

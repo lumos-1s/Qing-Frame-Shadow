@@ -1119,6 +1119,12 @@ window.App = Object.assign(window.App || {}, {
         const prev = prevTpl || {};
         const next = JSON.parse(JSON.stringify(p));
 
+        // 拼图是独立工作流：换边框预设不应把正在编辑的拼图清掉。
+        // 内置预设 JSON 都不带 puzzle 字段，旧逻辑会被 coerceTemplate 补成默认单图。
+        if (prev.puzzle && prev.puzzle.enabled && (!next.puzzle || !next.puzzle.enabled)) {
+            next.puzzle = JSON.parse(JSON.stringify(prev.puzzle));
+        }
+
         // 全局「背景模糊默认」偏好：显式记忆过时覆盖预设自带值；
         // 未设置(null)时保持预设原样，旧行为和视觉基线都不变。
         if (typeof this.applyBgBlurDefault === 'function') this.applyBgBlurDefault(next);

@@ -1231,15 +1231,20 @@
                     <div class="tab-panel" id="panel-puzzle">
                         <div class="param-group">
                             <div class="pg-title collapsible">拼图布局</div>
-                            <div class="el-status" id="lblPuzzleSlot">当前槽位：无（未启用）</div>
+                            <div class="el-status" id="lblPuzzleSlot">当前格子：未启用</div>
                             <div class="btn-row btn-12" id="puzzleLayouts"></div>
+                            <div class="pz-hint">点画布选中格子，再点下方照片放入；勾选多张后点布局，可按勾选顺序铺满。</div>
+                            <div class="btn-row btn-2">
+                                <button class="mini-btn" id="btnPuzzleRepuzzle" title="按胶片条勾选顺序重新铺满；没有勾选时用当前主图铺满，并重置每格位置/缩放/旋转">一键铺满</button>
+                                <button class="mini-btn" id="btnPuzzleFillEmpty" title="只补还没放图的空格，已放好的格子不动">补满空位</button>
+                            </div>
                         </div>
 
                         <div class="param-group">
                             <div class="pg-title collapsible">间距与字幕</div>
                             <div class="param-row"><label>格子间距</label><input type="range" id="slPuzzleGap" class="ctl-rng" min="0" max="200" value="6" /><span class="pval" id="lblPuzzleGap"></span></div>
                             <div class="param-row"><label>格子圆角</label><input type="range" id="slPuzzleCorner" class="ctl-rng" min="0" max="30" value="3" /><span class="pval" id="lblPuzzleCorner"></span></div>
-                            <div class="param-row"><label>选择</label><select id="cbPuzzleGapPick" class="ctl-sel"></select></div>
+                            <div class="param-row"><label>编辑对象</label><select id="cbPuzzleGapPick" class="ctl-sel"></select></div>
                             <div class="btn-row">
                                 <button class="mini-btn" id="btnEditGapCaption">添加/编辑字幕</button>
                                 <button class="mini-btn danger" id="btnDeleteGapCaption">删除字幕</button>
@@ -1294,9 +1299,9 @@
                                 </select>
                             </div>
                             <div class="param-row"><label>边框色</label><input type="color" id="cpPuzzleBorder" class="ctl-cl" value="#ffffff" /></div>
-                            <div class="param-row"><label>整体偏移 X</label><input type="range" id="slSlotOffsetX" class="ctl-rng" min="-50" max="50" value="0" /><span class="pval" id="lblSlotOffsetX"></span></div>
-                            <div class="param-row"><label>整体偏移 Y</label><input type="range" id="slSlotOffsetY" class="ctl-rng" min="-50" max="50" value="0" /><span class="pval" id="lblSlotOffsetY"></span></div>
-                            <div class="param-row"><label>槽位缩放</label><input type="range" id="slSlotZoom" class="ctl-rng" min="100" max="400" value="100" /><span class="pval" id="lblSlotZoom"></span></div>
+                            <div class="param-row"><label>图片偏移 X</label><input type="range" id="slSlotOffsetX" class="ctl-rng" min="-50" max="50" value="0" /><span class="pval" id="lblSlotOffsetX"></span></div>
+                            <div class="param-row"><label>图片偏移 Y</label><input type="range" id="slSlotOffsetY" class="ctl-rng" min="-50" max="50" value="0" /><span class="pval" id="lblSlotOffsetY"></span></div>
+                            <div class="param-row"><label>图片缩放</label><input type="range" id="slSlotZoom" class="ctl-rng" min="100" max="400" value="100" /><span class="pval" id="lblSlotZoom"></span></div>
                             <div class="param-row">
                                 <label>裁剪方式</label>
                                 <select id="cbSlotFill" class="ctl-sel">

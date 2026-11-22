@@ -1729,7 +1729,9 @@ function buildPuzzleSlots(layoutType, axes) {
         rects.push([0, 0, vp, 1]);
         for (let j = 0; j < rows.length; j++) rects.push([vp, rows[j][0], restW, rows[j][1] - rows[j][0]]);
     } else if (cols.length > 1 && rows.length > 1) {
-        for (const c of cols) for (const r of rows) rects.push([c[0], r[0], c[1] - c[0], r[1] - r[0]]);
+        // 行优先：照片按"从左到右、从上到下"填格，和用户阅读顺序一致。
+        // 旧实现先列后行，4→9 宫格时照片会竖着堆在左列，右侧全空。
+        for (const r of rows) for (const c of cols) rects.push([c[0], r[0], c[1] - c[0], r[1] - r[0]]);
     } else if (cols.length > 1) {
         for (const c of cols) rects.push([c[0], 0, c[1] - c[0], 1]);
     } else {
@@ -1861,6 +1863,64 @@ function drawVerticalPuzzleCaption(ctx, cap, x, y0, y1, gw, fs) {
     });
 }
 
+// 拼图空格：预览里画虚线框 + 加号 + 文案，告诉用户这里可以放照片。
+// 导出时不调用，成品里不会出现提示。
+function drawEmptyPuzzleSlot(ctx, x, y, w, h, idx) {
+    if (!ctx || w < 18 || h < 18) return;
+    const r = Math.min(w, h);
+    const pad = Math.max(2, r * 0.035);
+    const bx = x + pad, by = y + pad;
+    const bw = Math.max(1, w - pad * 2), bh = Math.max(1, h - pad * 2);
+    const radius = Math.max(2, Math.min(12, r * 0.05));
+    ctx.save();
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') ctx.roundRect(bx, by, bw, bh, radius);
+    else ctx.rect(bx, by, bw, bh);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fill();
+    ctx.setLineDash([Math.max(4, r * 0.035), Math.max(3, r * 0.024)]);
+    ctx.lineWidth = Math.max(1.5, r * 0.008);
+    ctx.strokeStyle = 'rgba(52,160,110,0.55)';
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const plus = Math.min(bw, bh) * 0.16;
+    const cx = bx + bw / 2;
+    const cy = by + bh / 2 - (bh > 120 ? plus * 0.35 : 0);
+    ctx.strokeStyle = 'rgba(52,160,110,0.85)';
+    ctx.lineWidth = Math.max(2, r * 0.012);
+    ctx.beginPath();
+    ctx.moveTo(cx - plus / 2, cy);
+    ctx.lineTo(cx + plus / 2, cy);
+    ctx.moveTo(cx, cy - plus / 2);
+    ctx.lineTo(cx, cy + plus / 2);
+    ctx.stroke();
+
+    if (bw > 110 && bh > 64) {
+        const fs = Math.max(10, Math.min(26, r * 0.072));
+        ctx.fillStyle = 'rgba(56,78,66,0.82)';
+        ctx.font = `500 ${fs}px "Microsoft YaHei", "PingFang SC", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('添加照片', cx, cy + plus * 0.9 + fs * 0.45);
+        if (bh > 110) {
+            const fs2 = Math.max(8, fs * 0.62);
+            ctx.fillStyle = 'rgba(56,78,66,0.5)';
+            ctx.font = `${fs2}px "Microsoft YaHei", "PingFang SC", sans-serif`;
+            ctx.fillText('点下方胶片放入', cx, cy + plus * 0.9 + fs * 1.55);
+        }
+    }
+    if (bw > 90) {
+        const fs3 = Math.max(8, Math.min(18, r * 0.048));
+        ctx.fillStyle = 'rgba(56,78,66,0.42)';
+        ctx.font = `${fs3}px "Microsoft YaHei", "PingFang SC", sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`格子 ${idx}`, bx + fs3 * 0.7, by + fs3 * 0.6);
+    }
+    ctx.restore();
+}
+
 function renderPuzzle(app, compare, noSelection) {
     const pk = (app.template && app.template.puzzle) || {};
     const layout = pk.layout || 'single';
@@ -1972,6 +2032,8 @@ function renderPuzzle(app, compare, noSelection) {
         if (!im || !photoSrc(im)) {
             ctx.fillStyle = 'rgba(224,224,224,1)';
             ctx.fillRect(rx, ry, rw, rh);
+            // 预览里给空格一个明确入口；导出(noSelection)不画提示
+            if (!noSelection) drawEmptyPuzzleSlot(ctx, rx + gapPx, ry + gapPx, Math.max(1, rw - gapPx * 2), Math.max(1, rh - gapPx * 2), i + 1);
             // 空格也画选中框:点它往往是为了把照片放进这一格
             if (app._activePuzzleSlot === i) drawSlotSel(rx + gapPx, ry + gapPx, Math.max(1, rw - gapPx * 2), Math.max(1, rh - gapPx * 2));
             return;
