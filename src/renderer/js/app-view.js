@@ -77,6 +77,23 @@ window.App = Object.assign(window.App || {}, {
         const photoTab = document.getElementById('sideTabPhoto');
         if (photoTab) photoTab.hidden = name !== 'puzzle';
         if (typeof this.updatePuzzleSideMode === 'function') this.updatePuzzleSideMode(name);
+        // 切图切的是原图，不是拼图成品：带着拼图切会把拼好的格子切碎。
+        // 进切图页签先把拼图收起来，版式/字幕/每格照片都留在模板里，
+        // 切回拼图页签再原样恢复 —— 用户手动点「退出拼图」不走这条恢复路径。
+        if (name === 'grid' && this.tplPuzzle && this.tplPuzzle()) {
+            this._puzzlePausedByGrid = true;
+            if (this.disablePuzzle) this.disablePuzzle();
+            this.setStatus('切图基于原图，已自动退出拼图；切回拼图页签可继续');
+        } else if (name === 'puzzle' && this._puzzlePausedByGrid && this.template && this.template.puzzle) {
+            this._puzzlePausedByGrid = false;
+            const pk = this.template.puzzle;
+            pk.enabled = 1;
+            if (this.saveCurrentTemplate) this.saveCurrentTemplate();
+            this.refreshPuzzleUI();
+            if (this.buildThumbnails) this.buildThumbnails();
+            this.scheduleRender(true);
+            this.setStatus('已回到拼图');
+        }
         if (name === 'puzzle') this.refreshPuzzleUI();
         if (typeof this.updatePuzzleExitEntry === 'function') this.updatePuzzleExitEntry();
         if (typeof this.updatePuzzleSlotBar === 'function') this.updatePuzzleSlotBar();

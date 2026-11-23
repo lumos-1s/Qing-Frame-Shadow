@@ -169,6 +169,23 @@ const RUN = `(async () => {
     add((names[0] || '').indexOf('_九宫格_1.') > 0 && (names[names.length - 1] || '').indexOf('_九宫格_9.') > 0,
         '块号沿用预览里的编号（1 与 9 都在）', names.join(' '));
 
+    // ⑨ 进切图页签自动退出拼图，切回拼图页签原样恢复
+    const pk = A.template.puzzle;
+    pk.enabled = 1; pk.layout = 'grid4'; pk.layoutType = 6;
+    pk.slots = { 0: { imageIndex: 0 }, 1: { imageIndex: 0 } };
+    A.switchTab('puzzle');
+    add(A.tplPuzzle() !== null, '先在拼图页签确认拼图开着', String(!!A.tplPuzzle()));
+    A.switchTab('grid');
+    add(A.template.puzzle.enabled === 0 && A._puzzlePausedByGrid === true,
+        '切到切图页签时自动退出拼图', A.template.puzzle.enabled);
+    add(/自动退出拼图/.test(A.statusMsg), '状态栏说清为什么退出', A.statusMsg);
+    add(A.template.puzzle.layout === 'grid4'
+        && A.template.puzzle.slots[0].imageIndex === 0 && A.template.puzzle.slots[1].imageIndex === 0,
+        '版式与已放好的格子没有丢', A.template.puzzle.layout + ' ' + Object.keys(A.template.puzzle.slots).join(','));
+    A.switchTab('puzzle');
+    add(A.template.puzzle.enabled === 1 && A.tplPuzzle() !== null,
+        '切回拼图页签原样恢复', A.template.puzzle.enabled);
+
     // 收尾
     $('slGridPad').value = '0'; $('slGridOffsetX').value = '0'; $('slGridOffsetY').value = '0';
     A.hideGridPreview();
