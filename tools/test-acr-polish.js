@@ -200,9 +200,8 @@ async function main() {
         if (res.missing) check(false, '模块已加载', 'App 未定义');
         check(res.halfClip && Math.abs(res.halfClip.lo - 0.5) < 0.02 && Math.abs(res.halfClip.hi - 0.5) < 0.02,
             '半黑半白：阴影/高光各剪切 50%', JSON.stringify(res.halfClip));
-        check(res.redClip && res.redClip.lo > 0.99 && res.redClip.hi > 0.99
-            && res.redClip.loAll === 0 && res.redClip.hiAll === 0,
-            '纯红图按「任一通道」口径亮两角，但纯黑/纯白占比为 0', JSON.stringify(res.redClip));
+        check(res.redClip && res.redClip.lo === 0 && res.redClip.hi === 0,
+            '纯红图（饱和色）不算过曝/过暗，两角都不亮', JSON.stringify(res.redClip));
         check(res.clipOn && res.clipPct > 40 && /%/.test(res.clipText),
             '两角角标点亮，悬停文案带精确百分比', res.clipText);
         check(res.marked && res.unmarked, '点角标在波形上标出端点，再点关闭');

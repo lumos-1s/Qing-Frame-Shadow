@@ -1,4 +1,5 @@
-// 溢出警示回归：高光红 / 暗部蓝、J 键开关、只涂在照片矩形内、对比时收起。
+// 溢出警示回归：过曝红 / 过暗蓝（三通道同时到端点，饱和色不算）、J 键开关、
+// 只涂在照片矩形内、对比时收起。
 // 用法: node tools/run-electron.js tools/test-clip-warn.js
 'use strict';
 
@@ -37,22 +38,25 @@ app.whenReady().then(async () => {
     await exec(`(() => { localStorage.setItem('qfs_intro_done','1'); if (App.closeIntro) App.closeIntro(); return true; })()`);
     await sleep(600);
 
-    // ── 造一张四段照片：纯白 / 只有 R 顶到 255 的橙色 / 只有 R 压到 0 的深蓝 / 中性灰 ──
-    // 前三段各占 1/4，最后一段不该被涂。橙色与深蓝这两段是重点：
-    // 溢出判定必须按「任一通道」，按「三通道同时」就会漏掉偏色高光与偏色暗部。
+    // ── 六段照片：真正烧白(254) / 纯白(255) / 饱和橙 / 真正压黑 / 饱和深蓝 / 中性灰 ──
+    // 重点：只有「三通道同时到端点」的烧白、压黑段该涂；只 R 顶到 255 的橙色、
+    // 只 R 压到 0 的深蓝是饱和色（还有细节），不该涂 —— 涂了就是把正常画面误判成溢出。
+    // 高光判 254：烘焙管线把纯白封顶在 254，两种都得抓到。
     const setup = await exec(`(() => {
-        const c = document.createElement('canvas'); c.width = 400; c.height = 300;
+        const c = document.createElement('canvas'); c.width = 400; c.height = 360;
         const g = c.getContext('2d');
-        g.fillStyle = 'rgb(255,255,255)'; g.fillRect(0, 0, 400, 75);
-        g.fillStyle = 'rgb(255,120,90)';  g.fillRect(0, 75, 400, 75);
-        g.fillStyle = 'rgb(0,40,60)';     g.fillRect(0, 150, 400, 75);
-        g.fillStyle = 'rgb(128,128,128)'; g.fillRect(0, 225, 400, 75);
-        const im = { el: c, w: 400, h: 300, name: 'clip-fixture', grade: null, _grade: null };
+        g.fillStyle = 'rgb(254,254,254)'; g.fillRect(0, 0, 400, 60);
+        g.fillStyle = 'rgb(255,255,255)'; g.fillRect(0, 60, 400, 60);
+        g.fillStyle = 'rgb(255,120,90)';  g.fillRect(0, 120, 400, 60);
+        g.fillStyle = 'rgb(0,0,0)';       g.fillRect(0, 180, 400, 60);
+        g.fillStyle = 'rgb(0,40,60)';     g.fillRect(0, 240, 400, 60);
+        g.fillStyle = 'rgb(128,128,128)'; g.fillRect(0, 300, 400, 60);
+        const im = { el: c, w: 400, h: 360, name: 'clip-fixture', grade: null, _grade: null };
         App.images = [im]; App.image = im; App.currentIdx = 0; App.selectedIdx = [];
         if (App.ensureGrade) App.ensureGrade(im);
         // 测试窗口里引擎还没渲染过，这里直接给出「基准画布 + 照片矩形」的口径
         App._canvasBaseW = 800; App._canvasBaseH = 600;
-        App._photoRect = { x: 200, y: 150, w: 400, h: 300 };
+        App._photoRect = { x: 200, y: 120, w: 400, h: 360 };
         App.draggingCompare = false; App._maskPreviewOriginal = false;
         // 这一份是纯像素/几何测试：停掉渲染队列，避免后台的启动帧把
         // 照片矩形和画布尺寸改回真实布局
@@ -69,13 +73,13 @@ app.whenReady().then(async () => {
     await sleep(120);
     const st = await exec('QfsClip.stats()');
     check(on === true && (await exec('QfsClip.isOn()')) === true, 'setOn(true) 打开警示');
-    check(st && Math.abs(st.hi - 0.5) < 0.02,
-        '高光占比 ≈ 50%（纯白 + 只有 R 顶到 255）', JSON.stringify(st));
-    check(st && Math.abs(st.lo - 0.25) < 0.02,
-        '暗部占比 ≈ 25%（只有 R 压到 0 的深蓝也算）', JSON.stringify(st));
-    check(st && st.w === 400 && st.h === 300, '警示图按原尺寸取样（小图不放大）', JSON.stringify(st));
+    check(st && Math.abs(st.hi - 1 / 3) < 0.02,
+        '高光占比 ≈ 1/3（烧白 254 + 纯白 255，饱和橙不算）', JSON.stringify(st));
+    check(st && Math.abs(st.lo - 1 / 6) < 0.02,
+        '暗部占比 ≈ 1/6（只有纯黑，饱和深蓝不算）', JSON.stringify(st));
+    check(st && st.w === 400 && st.h === 360, '警示图按原尺寸取样（小图不放大）', JSON.stringify(st));
 
-    // 叠加层像素：只该出现在照片矩形里，且高光是红、暗部是蓝
+    // 叠加层像素：只有烧白/压黑段该涂，饱和橙/饱和深蓝/灰都不涂
     const px = await exec(`(() => {
         const ov = document.getElementById('clipOverlay');
         const g = ov.getContext('2d');
@@ -86,18 +90,20 @@ app.whenReady().then(async () => {
         };
         return {
             k,
-            // 照片矩形 200,150 400x300：第一段(白)在 y≈150+37，第二段(橙)在 y≈150+112，
-            // 第三段(深蓝)在 y≈150+187，第四段(灰)在 y≈150+262
-            white: at(400, 187), orange: at(400, 262), dark: at(400, 337), gray: at(400, 412),
+            // 照片矩形 200,120 400x360：段中心 y = 120 + 30/90/150/210/270/330
+            white254: at(400, 150), white255: at(400, 210), orange: at(400, 270),
+            black: at(400, 330), darkblue: at(400, 390), gray: at(400, 450),
             outside: at(20, 20), offPhoto: at(760, 40)
         };
     })()`);
-    check(px.white[0] > 200 && px.white[1] < 100 && px.white[3] > 180,
-        '纯白区域涂红', JSON.stringify(px.white));
-    check(px.orange[0] > 200 && px.orange[1] < 100 && px.orange[3] > 180,
-        '只有 R 顶到 255 的橙色也涂红', JSON.stringify(px.orange));
-    check(px.dark[2] > 180 && px.dark[0] < 100 && px.dark[3] > 180,
-        '只有 R 压到 0 的深蓝涂蓝', JSON.stringify(px.dark));
+    check(px.white254[0] > 200 && px.white254[1] < 100 && px.white254[3] > 180,
+        '烧白 254 区域涂红', JSON.stringify(px.white254));
+    check(px.white255[0] > 200 && px.white255[1] < 100 && px.white255[3] > 180,
+        '纯白 255 区域涂红', JSON.stringify(px.white255));
+    check(px.orange[3] === 0, '饱和橙（只有 R 顶到端点）不涂 —— 它有细节，不是过曝', JSON.stringify(px.orange));
+    check(px.black[2] > 180 && px.black[0] < 100 && px.black[3] > 180,
+        '纯黑区域涂蓝', JSON.stringify(px.black));
+    check(px.darkblue[3] === 0, '饱和深蓝（只有 R 压到 0）不涂 —— 它有细节，不是过暗', JSON.stringify(px.darkblue));
     check(px.gray[3] === 0, '中性灰不涂', JSON.stringify(px.gray));
     check(px.outside[3] === 0 && px.offPhoto[3] === 0,
         '照片矩形外（边框/留白）一个像素都不涂', JSON.stringify([px.outside, px.offPhoto]));
@@ -107,7 +113,7 @@ app.whenReady().then(async () => {
     await sleep(60);
     const afterOff = await exec(`(() => {
         const ov = document.getElementById('clipOverlay');
-        const d = ov.getContext('2d').getImageData(Math.round(400 * (ov.width / 800)), Math.round(187 * (ov.height / 600)), 1, 1).data;
+        const d = ov.getContext('2d').getImageData(Math.round(400 * (ov.width / 800)), Math.round(150 * (ov.height / 600)), 1, 1).data;
         return { on: QfsClip.isOn(), alpha: d[3] };
     })()`);
     check(afterOff.on === false && afterOff.alpha === 0, 'J 键关闭并把画面擦干净', JSON.stringify(afterOff));
@@ -121,7 +127,7 @@ app.whenReady().then(async () => {
         App.draggingCompare = true; QfsClip.setSuppressed();
         const ov = document.getElementById('clipOverlay');
         const g = ov.getContext('2d');
-        const d = g.getImageData(Math.round(400 * (ov.width / 800)), Math.round(187 * (ov.height / 600)), 1, 1).data;
+        const d = g.getImageData(Math.round(400 * (ov.width / 800)), Math.round(150 * (ov.height / 600)), 1, 1).data;
         const off = d[3];
         App.draggingCompare = false; QfsClip.setSuppressed();
         return { off, onAgain: QfsClip.stats().hi > 0 };
@@ -129,7 +135,7 @@ app.whenReady().then(async () => {
     await sleep(160);
     const supBack = await exec(`(() => {
         const ov = document.getElementById('clipOverlay');
-        const d = ov.getContext('2d').getImageData(Math.round(400 * (ov.width / 800)), Math.round(187 * (ov.height / 600)), 1, 1).data;
+        const d = ov.getContext('2d').getImageData(Math.round(400 * (ov.width / 800)), Math.round(150 * (ov.height / 600)), 1, 1).data;
         return d[3];
     })()`);
     check(sup.off === 0, '按住空格对比原图时警示收起', JSON.stringify(sup));
@@ -147,10 +153,10 @@ app.whenReady().then(async () => {
             return d[3];
         };
         return { css: ov.style.width, w: ov.width, h: ov.height, dpr: window.devicePixelRatio || 1,
-            // 半尺寸后照片矩形是 CSS 100,75 200x150；第一段(白)在 y≈75+18
-            inPhoto: at(200, 93),
-            // 这个点在旧矩形（200..600 × 150..450）里，在新矩形外：必须已经不涂
-            oldOnly: at(350, 250),
+            // 半尺寸后照片矩形是 CSS 100,60 200x180；第一段(烧白)中心在 y≈60+15
+            inPhoto: at(200, 75),
+            // 这个点在旧矩形（CSS 200..600 × 120..480）里，在新矩形（CSS 100..300 × 60..240）外
+            oldOnly: at(350, 400),
             outside: at(10, 10) };
     })()`);
     check(zoom.css === '400px' && zoom.w === Math.round(Math.min(2, zoom.dpr) * 400),

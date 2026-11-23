@@ -94,26 +94,25 @@
         const g = new Uint32Array(BINS);
         const b = new Uint32Array(BINS);
         const y = new Uint32Array(BINS);
-        let total = 0, lo = 0, hi = 0, loAll = 0, hiAll = 0;
+        let total = 0, lo = 0, hi = 0;
         for (let i = 0; i < data.length; i += 4) {
             const R = data[i], G = data[i + 1], B = data[i + 2];
             r[R]++; g[G]++; b[B]++;
             // 亮度用 ITU-R BT.601 的整数近似，够画图用
             y[(R * 77 + G * 150 + B * 29) >> 8]++;
             total++;
-            // 与 LR 一致：任一通道顶到端点就算剪切（纯黑/纯白只是其中一种），
-            // 否则偏色照片的高光溢出会被漏掉。细分值给角标的悬停文案用。
+            // 与溢出警示同口径：三通道同时到端点才算「失去细节」的过曝/过暗。
+            // 任一通道到端点只是饱和色（饱和红/饱和蓝还有层次），不算溢出 ——
+            // 否则偏色照片两角三角常亮，和画面上实际涂出来的红蓝也对不上。
             //
             // 高光端判 254 而不是 255：这条烘焙管线的白端实测封顶在 254。
             // 拿纯白（255,255,255）过一遍调色，输出是 (254,254,254)；只认 255
             // 的话，一整片过曝的天空会报 0.0%，两角三角永远不亮（用户实测的坑）。
             // 暗部没有这个问题：纯黑过调色仍是 0，所以仍判 0。
-            if (!R || !G || !B) lo++;
-            if (R >= 254 || G >= 254 || B >= 254) hi++;
-            if (!R && !G && !B) loAll++;
-            if (R >= 254 && G >= 254 && B >= 254) hiAll++;
+            if (!R && !G && !B) lo++;
+            if (R >= 254 && G >= 254 && B >= 254) hi++;
         }
-        return { r, g, b, y, total, lo, hi, loAll, hiAll };
+        return { r, g, b, y, total, lo, hi, loAll: lo, hiAll: hi };
     }
 
     // 3-bin 均值：单像素级的尖刺会让整张直方图看起来像噪声
@@ -216,21 +215,21 @@
         }
     }
 
-    // 剪切角标：常驻两角，数据超阈值点亮；悬停给「任一通道 / 三通道同时」两组占比
+    // 溢出角标：常驻两角，数据超阈值点亮。口径与画面上的红蓝块一致 ——
+    // 三通道同时烧白/压黑才算过曝/过暗，饱和色不算。
     function setClip(stat) {
         const pct = (n) => (stat.total ? (n / stat.total) * 100 : 0);
-        const set = (id, side, any, all, end) => {
+        const set = (id, side, any, end) => {
             const el = $(id);
             if (!el) return;
             const p = pct(any);
             el.classList.toggle('is-on', p > 0.2);
             el.dataset.pct = p.toFixed(2);
-            el.dataset.allPct = pct(all).toFixed(2);
-            el.title = side + '剪切 ' + p.toFixed(2) + '% · 纯' + end + ' '
-                + pct(all).toFixed(2) + '% · 点击在波形上标出端点';
+            el.dataset.allPct = p.toFixed(2);
+            el.title = side + '溢出（' + end + '）' + p.toFixed(2) + '% · 点击在波形上标出端点';
         };
-        set('gradeClipLo', '阴影', stat.lo, stat.loAll, '黑');
-        set('gradeClipHi', '高光', stat.hi, stat.hiAll, '白');
+        set('gradeClipLo', '暗部', stat.lo, '压黑');
+        set('gradeClipHi', '高光', stat.hi, '烧白');
     }
 
     function setExif(im) {
