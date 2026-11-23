@@ -83,9 +83,13 @@ window.App = Object.assign(window.App || {}, {
                 const saved = this.getTpl(im);
                 if (saved) imageTemplates.push({ path: im.path, tpl: JSON.parse(JSON.stringify(saved)) });
             }
+            // 页签不属于模板，得单独记：拼图模板恢复得再完整，右侧还停在「画布」，
+            // 用户也会以为拼图没回来。记下离开时的页签，恢复时照着回去。
+            const activeTab = (this.dom && this.dom.tabs) ? this.dom.tabs.querySelector('.tab.active') : null;
             const draft = {
                 v: 1,
                 savedAt: Date.now(),
+                tab: activeTab ? activeTab.dataset.tab : '',
                 // 调色只存 7 个数字，重启后在新解码的底图上重放即可 —— 与裁切不同，
                 // 它不需要重新编码，所以是真正无损可持久的
                 images: savable.map(im => ({
@@ -247,6 +251,16 @@ window.App = Object.assign(window.App || {}, {
             // 草稿整批换了照片：左侧「我的调色」缩略图/使用中标记要按新图重算。
             if (this.onGradePresetImageChange) this.onGradePresetImageChange();
             this.refreshUI();
+            // 拼图模板已经挂回照片，但页签不会跟着回来：不切回拼图，界面仍停在
+            // 「画布」，看起来就像拼图没恢复。优先按草稿记下的页签；老草稿没有
+            // tab 字段，但拼图是开着的，就回到拼图页签。
+            const wantTab = String(draft.tab || '');
+            const hasTab = !!(this.dom && this.dom.tabs
+                && Array.from(this.dom.tabs.querySelectorAll('.tab[data-tab]'))
+                    .some(t => t.dataset.tab === wantTab));
+            const puzzleOn = !!(this.template && this.template.puzzle && this.template.puzzle.enabled);
+            const backTab = hasTab ? wantTab : (puzzleOn ? 'puzzle' : '');
+            if (backTab) this.switchTab(backTab);
             this.scheduleRender(true);
             const btn = document.getElementById('btnRestoreDraft');
             if (btn) btn.style.display = 'none';
