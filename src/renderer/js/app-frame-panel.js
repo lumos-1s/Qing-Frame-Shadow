@@ -45,6 +45,9 @@
     let genMode = 'free';
     // AI 破框正在跑：挡住重复点击，也用来防「生成中又切照片」把结果挂到别的图上。
     let breaking = false;
+    // 错误块里的「重试」该重跑什么：生成失败重跑生成，破框失败重跑破框，
+    // 否则点一下「重试」会莫名其妙地出一批边框。
+    let errorRetry = null;
     const previewCache = new Map();
 
     function api() { return window.qingframe || {}; }
@@ -732,7 +735,15 @@
         if (channelOf() === 'api') {
             const cfg = P && P.load ? P.load() : {};
             const ok = !!(P && P.ready && P.ready(cfg));
-            return { ok, text: ok ? ('API 已就绪 · ' + (cfg.model || '默认模型')) : '还没填好：需要接口地址、API Key 和模型名' };
+            if (!ok) return { ok: false, text: '还没填好：需要接口地址、API Key 和模型名' };
+            // 对话通了不等于能出图：这两条通道用的是两个模型，界面上得一分为二地说。
+            const only = P && P.textOnlyOf ? P.textOnlyOf(cfg.baseUrl) : '';
+            const img = P && P.imageModelOf ? P.imageModelOf(cfg) : '';
+            let tail;
+            if (only) tail = ' · 但 ' + only + ' 没有画图接口，AI 破框用不了';
+            else if (img) tail = ' · 出图用 ' + img;
+            else tail = ' · AI 破框还差一个图像模型';
+            return { ok: true, text: 'API 已就绪 · ' + (cfg.model || '默认模型') + tail };
         }
         const sel = $('frameAgentSelect');
         const id = sel && sel.value;
@@ -1002,7 +1013,10 @@
     // 「大概是什么原因」，别让人对着 HTTP 404 猜。
     function breakErrorText(r) {
         const e = String((r && r.error) || '未知原因');
-        if (/HTTP 404/.test(e)) return e + '（这个网关多半没开带参考图的 edits 接口）';
+        const code = r && r.code;
+        // 这几种主进程已经写成了整段人话（哪个地址没接口、该换成什么），别再补尾巴
+        if (code === 'no-image-api' || code === 'need-image-model' || code === 'no-images-api') return e;
+        if (/HTTP 404/.test(e)) return e + '（多半是图像模型名不对，或这个网关没有带参考图的接口）';
         if (/HTTP 413/.test(e)) return e + '（请求体过大，源图再压小一点）';
         if (/HTTP 401|HTTP 403/.test(e)) return e + '（Key 无效，或没有这个图像模型的权限）';
         if (/HTTP 429/.test(e)) return e + '（限流或额度用尽，过一会儿再试）';
@@ -1010,12 +1024,26 @@
         return e;
     }
 
+    // 破框失败的信息常常是一整段（哪个地址没有画图接口、该换成什么），塞进工具栏
+    // 那一行状态会被截掉一半，所以放进错误块：那里有地方，还带「检查 AI 设置」。
+    function breakFailed(text) {
+        setStatus(text, 'bad');
+        const box = $('frameError'), m = $('frameErrorMsg'), log = $('frameErrorLog'), lg = $('btnFrameErrLog');
+        if (m) m.textContent = text;
+        if (log) log.hidden = true;
+        if (lg) lg.hidden = true;   // 破框不经过助手会话，没有日志可看
+        if (box) box.hidden = false;
+        errorRetry = () => aiBreakFrame();
+        syncToolbar();
+    }
+
     async function aiBreakFrame() {
         if (breaking) return;
         const P = window.QfsAiProvider;
         if (!P || typeof P.image !== 'function') { setStatus('这个版本没有图像通道', 'bad'); return; }
+        hideError();
         if (!(P.imageReady && P.imageReady())) {
-            setStatus('先填图像模型：AI 设置 → 接口地址 / Key / 图像模型', 'bad');
+            setStatus('先填图像模型：AI 设置 → 图像模型（对话模型出不了图）', 'bad');
             openAiSetup(false);
             return;
         }
@@ -1037,8 +1065,13 @@
             : '已提交（' + box.orient + ' ' + box.ratio + '），等模型出图…');
         try {
             const r = await P.image({ prompt: prompt, source: source, size: box.size });
-            if (!r || !r.ok) { setStatus('生成失败：' + breakErrorText(r), 'bad'); return; }
-            if (!r.image) { setStatus('接口说成功了，但里面没有图', 'bad'); return; }
+            if (!r || !r.ok) {
+                breakFailed('生成失败：' + breakErrorText(r));
+                // 这两类是配置问题（地址没有画图接口 / 没填图像模型），直接把设置摊开
+                if (r && (r.code === 'no-image-api' || r.code === 'need-image-model')) openAiSetup(false);
+                return;
+            }
+            if (!r.image) { breakFailed('接口说成功了，但里面没有图'); return; }
             const made = await addGeneratedPhoto(r.image, 'AI 破框', (cur && cur.name) || '');
             // 面板顶部的照片下拉是独立于主界面的：新图入了库但下拉里没有它，
             // 面板就会一直预览旧图，和主画布对不上。这里重建一次，跟到新图上。
@@ -1046,9 +1079,9 @@
             refreshPhotoPreviews();
             // 成片像素通常只有原图的几分之一，导出前就该知道，别等打出来才发现。
             setStatus('已生成「AI 破框」' + (made.w ? ' ' + made.w + '×' + made.h : '')
-                + '，在胶片条里，可以接着调色或导出');
+                + '，在胶片条里，可以接着调色或导出' + (r.note ? '；' + r.note : ''));
         } catch (e) {
-            setStatus('生成出错：' + (e && e.message ? e.message : String(e)), 'bad');
+            breakFailed('生成出错：' + (e && e.message ? e.message : String(e)));
         } finally {
             breaking = false;
             if (btn) btn.disabled = false;
@@ -1342,16 +1375,18 @@
     }
     function showError(msg) {
         const text = friendlyError(msg);
+        errorRetry = null;
         setStatus(text, 'bad');
         const box = $('frameError'); const m = $('frameErrorMsg'); const log = $('frameErrorLog');
         if (m) m.textContent = text;
         if (log) { log.textContent = (agentStream || '（助手没有输出）').slice(-4000); log.hidden = true; }
         if (box) box.hidden = false;
-        const lg = $('btnFrameErrLog'); if (lg) lg.textContent = '查看日志';
+        const lg = $('btnFrameErrLog'); if (lg) { lg.textContent = '查看日志'; lg.hidden = false; }
         syncToolbar();
     }
     function hideError() {
         const box = $('frameError'); if (box) box.hidden = true;
+        errorRetry = null;
     }
 
     // ── 基于某一款继续改 ──
@@ -1918,18 +1953,32 @@
                 ? '当前：' + (cfg.baseUrl || '内置默认地址') + ' · ' + cfg.model + (P.isLocalBase && P.isLocalBase(cfg.baseUrl) ? '（本机地址免 Key）' : '')
                 : '支持 OpenAI 兼容接口：官方、中转或自建网关。填完点「测试连接」，成功后再保存。';
         }
+        // 图像通道单独一行：对话通了只说明能写字，能出图是另一回事。
+        const imgHint = $('frameImageHint');
+        if (imgHint) {
+            const only = P && P.textOnlyOf ? P.textOnlyOf(cfg.baseUrl) : '';
+            const img = P && P.imageModelOf ? P.imageModelOf(cfg) : '';
+            let bad = false;
+            if (only) {
+                bad = true;
+                imgHint.textContent = only + ' 只有对话接口，出不了图。要用 AI 破框，得把地址、Key、图像模型一起换成带画图能力的网关。';
+            } else if (img) {
+                imgHint.textContent = 'AI 破框会用它出图：' + img;
+            } else {
+                imgHint.textContent = '不填就没有 AI 破框（对话模型出不了图）。例：gpt-image-1 / doubao-seedream-4-0-20260415 / qwen-image-3.0，以你网关的模型列表为准。';
+            }
+            imgHint.classList.toggle('bad', bad);
+        }
         updateAiSetupState();
     }
     function apiFormCfg() {
-        const P = window.QfsAiProvider;
-        const prev = P && P.load ? P.load() : {};
         return {
             baseUrl: ($('frameApiBase') && $('frameApiBase').value) || '',
             apiKey: ($('frameApiKey') && $('frameApiKey').value) || '',
             model: ($('frameApiModel') && $('frameApiModel').value) || '',
-            // 图像模型：AI 破框走 images/edits，和文字模型是两个名字。留空时
-            // 主进程会回落用 model——多数网关会因此 404，所以界面上明确写了要填。
-            imageModel: (($('frameImageModel') && $('frameImageModel').value) || '').trim() || (prev.imageModel || '')
+            // 图像模型：AI 破框走 images/*，和对话模型是两个名字。留空就是不配图像通道，
+            // 别拿上面那个去顶——顶上去的结果是一个「看起来配好了」的 404。
+            imageModel: ($('frameImageModel') && $('frameImageModel').value) || ''
         };
     }
     function bindChannelUI() {
@@ -2083,9 +2132,17 @@
         }
         const bg = $('frameTweakBg');
         if (bg) bg.addEventListener('change', applyTweak);
-        $('btnFrameRetry').addEventListener('click', () => { if (lastRequest) { hideError(); generate(lastRequest); } });
+        $('btnFrameRetry').addEventListener('click', () => {
+            const again = errorRetry;
+            hideError();
+            if (again) { again(); return; }
+            if (lastRequest) generate(lastRequest);
+        });
         const errSetup = $('btnFrameErrSetup');
         if (errSetup) errSetup.addEventListener('click', () => {
+            // 破框失败的下一步是改图像模型，不是排一次生成；保存后也不自动重试——
+            // 出图要花钱，什么时候再花应该由用户点那一下。
+            if (errorRetry) { pendingGenerate = null; openAiSetup(false, { keepPending: true }); return; }
             if (lastRequest) pendingGenerate = lastRequest;
             openAiSetup(false, { keepPending: true, retry: true });
         });

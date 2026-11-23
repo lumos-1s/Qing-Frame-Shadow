@@ -63,7 +63,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
             res.end(Buffer.from('RIFFfakeWEBP', 'utf8'));
         }
     });
-    const r2 = await P.image({ baseUrl: listen(s2), apiKey: 'k', model: 'img' }, { prompt: 'x' });
+    const r2 = await P.image({ baseUrl: listen(s2), apiKey: 'k', model: 'chat-m', imageModel: 'img-1' }, { prompt: 'x' });
     s2.close();
     check(r2.ok === true && /^data:image\/webp;base64,/.test(r2.image || ''), 'url 结果回退成 data URL', r2.error || r2.image.slice(0, 30));
     check(gotPath === '/file.png', '真的去取了图片地址', gotPath);
@@ -82,7 +82,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
             res.end(JSON.stringify({ data: [{ b64_json: 'AAAA' }] }));
         });
     });
-    const r3 = await P.image({ baseUrl: listen(s3), apiKey: 'k', model: 'img-edit' }, { prompt: 'keep the scene', source: PNG });
+    const r3 = await P.image({ baseUrl: listen(s3), apiKey: 'k', model: 'chat-m', imageModel: 'img-edit' }, { prompt: 'keep the scene', source: PNG });
     s3.close();
     check(r3.ok === true && r3.path === 'edits', '带源图走 edits 路径', r3.error || r3.path);
     check(/multipart\/form-data/.test(form.type) && form.hasImage && form.hasPrompt && form.hasModel,
@@ -92,18 +92,21 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
     // 6) 错误路径
     const noModel = await P.image({ apiKey: 'k' }, { prompt: 'x' });
     check(noModel.ok === false && /模型/.test(noModel.error), '缺模型名直接拒绝', noModel.error);
-    const noPrompt = await P.image({ apiKey: 'k', model: 'm' }, {});
+    // 只填了对话模型 = 只配好了一半：不能拿它去请求画图接口，那只会换回一个 404
+    const chatOnly = await P.image({ apiKey: 'k', model: 'chat-m' }, { prompt: 'x' });
+    check(chatOnly.ok === false && chatOnly.code === 'need-image-model', '对话模型名不会被当成图像模型', chatOnly.error);
+    const noPrompt = await P.image({ apiKey: 'k', model: 'chat-m', imageModel: 'img-1' }, {});
     check(noPrompt.ok === false && /画面描述/.test(noPrompt.error), '缺提示词直接拒绝', noPrompt.error);
-    const badSource = await P.image({ apiKey: 'k', model: 'm' }, { prompt: 'x', source: 'not-a-data-url' });
+    const badSource = await P.image({ apiKey: 'k', model: 'chat-m', imageModel: 'img-1' }, { prompt: 'x', source: 'not-a-data-url' });
     check(badSource.ok === false && /data URL/.test(badSource.error), '非法源图被拒绝', badSource.error);
 
     const s4 = await serve((_req, res) => { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'bad key' } })); });
-    const r4 = await P.image({ baseUrl: listen(s4), apiKey: 'wrong', model: 'm' }, { prompt: 'x' });
+    const r4 = await P.image({ baseUrl: listen(s4), apiKey: 'wrong', model: 'chat-m', imageModel: 'img-1' }, { prompt: 'x' });
     s4.close();
     check(r4.ok === false && /401/.test(r4.error) && /bad key/.test(r4.error), '401 带出原因', r4.error);
 
     const s5 = await serve((_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ data: [] })); });
-    const r5 = await P.image({ baseUrl: listen(s5), apiKey: 'k', model: 'm' }, { prompt: 'x' });
+    const r5 = await P.image({ baseUrl: listen(s5), apiKey: 'k', model: 'chat-m', imageModel: 'img-1' }, { prompt: 'x' });
     s5.close();
     check(r5.ok === false && /没返回/.test(r5.error), '空图响应被点破', r5.error);
 

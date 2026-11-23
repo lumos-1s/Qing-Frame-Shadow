@@ -56,7 +56,8 @@ function startServer(handler) {
             res.end(JSON.stringify(body));
         };
         if (req.url === '/v1/images/edits') {
-            if (text.includes('__404__')) return json(404, { error: { message: '模型不存在' } });
+            if (text.includes('__500__')) return json(500, { error: { message: '上游炸了' } });
+            if (/__404__|__NOEDITS__|__NOIMAGES__/.test(text)) return json(404, { error: { message: '模型不存在' } });
             if (text.includes('__URL_X__')) {
                 return json(200, { data: [{ url: 'http://127.0.0.1:' + other.port + '/img.png' }] });
             }
@@ -66,6 +67,9 @@ function startServer(handler) {
             return json(200, { data: [{ b64_json: PNG.toString('base64'), revised_prompt: 'rev' }] });
         }
         if (req.url === '/v1/images/generations') {
+            let body = null;
+            try { body = JSON.parse(text); } catch (_) { body = null; }
+            if (body && /__NOIMAGES__/.test(String(body.prompt || ''))) return json(404, { error: { message: 'not found' } });
             return json(200, { data: [{ b64_json: PNG.toString('base64') }] });
         }
         return json(404, { error: { message: 'not found' } });
@@ -127,9 +131,44 @@ function startServer(handler) {
     check(r4.ok === true && r4.sourceUrl === 'http://127.0.0.1:' + other.port + '/img.png', '跨源 URL 也能取回', String(r4.sourceUrl));
     check(otherAuth === '', '跨源取图没有泄露 Authorization', JSON.stringify(otherAuth));
 
-    // ⑤ 报错要原样透出
-    const r5 = await AI.image(cfg, { prompt: '__404__', source: SRC });
-    check(r5.ok === false && r5.status === 404 && /模型不存在/.test(r5.error), '404 与服务端话术都保留', r5.error);
+    // ⑤ 报错要原样透出；只有 404/405 才改道，500 不该被重试成两次计费
+    const n5 = seen.length;
+    const r5 = await AI.image(cfg, { prompt: '__500__', source: SRC });
+    check(r5.ok === false && r5.status === 500 && /上游炸了/.test(r5.error), '500 与服务端话术都保留', r5.error);
+    check(seen.length === n5 + 1, '500 不触发改道重试', String(seen.length - n5));
+
+    // ⑥ 地址本身没有画图接口：本地拦下，一个包都不发
+    const n6 = seen.length;
+    const r6 = await AI.image({ baseUrl: 'https://api.deepseek.com', apiKey: 'k', model: 'deepseek-chat' }, { prompt: 'x' });
+    check(r6.ok === false && r6.code === 'no-image-api', 'DeepSeek 的地址在本地就被判死', String(r6.code));
+    check(seen.length === n6, '没为它发出任何请求', String(seen.length));
+    check(/只提供对话接口/.test(r6.error) && /火山方舟/.test(r6.error), '说清是「没有画图接口」，并给出能出图的去处', r6.error.slice(0, 46));
+
+    // ⑦ 对话模型名不许冒充图像模型
+    const r7 = await AI.image({ baseUrl, apiKey: 'k-123', model: 'deepseek-chat' }, { prompt: 'x', source: SRC });
+    check(r7.ok === false && r7.code === 'need-image-model', '对话模型名不会被拿去请求画图接口', String(r7.code));
+    check(/deepseek-chat/.test(r7.error), '报错里点名是哪个模型出不了图', r7.error.slice(0, 30));
+    check(seen.length === n6, '这一条也没发请求', String(seen.length));
+
+    const r7b = await AI.image({ baseUrl, apiKey: 'k-123', model: 'deepseek-chat', imageModel: 'seedream-4' }, { prompt: '用图像模型', source: SRC });
+    const q7 = seen[seen.length - 1] || {};
+    check(r7b.ok === true, '显式填了图像模型就照常出图', String(r7b.ok));
+    check(/name="model"[\s\S]{0,80}seedream-4/.test(q7.text), '请求里用的是图像模型名，不是对话模型', 'seedream-4');
+
+    // ⑧ 网关没有 edits：自动退到 generations 的 image 字段
+    const r8 = await AI.image(cfg, { prompt: '__NOEDITS__', source: SRC });
+    const q8 = seen[seen.length - 1] || {};
+    check(r8.ok === true && r8.path === 'generations-img', 'edits 404 后自动改道', String(r8.path));
+    check(q8.url === '/v1/images/generations', '重试打到 generations', q8.url);
+    let altBody = null;
+    try { altBody = JSON.parse(q8.text); } catch (_) { altBody = null; }
+    check(altBody && /^data:image\/jpeg;base64,/.test(String(altBody.image || '')), 'JSON 里带上了参考图', altBody ? String(altBody.image || '').slice(0, 22) : '');
+    check(!!r8.note && /edits/.test(r8.note), '结果里注明是改道来的', String(r8.note));
+
+    // ⑨ 两条路都是 404：给专门的话术，别让人以为是自己填错了
+    const r9 = await AI.image(cfg, { prompt: '__NOIMAGES__', source: SRC });
+    check(r9.ok === false && r9.code === 'no-images-api', '两条路都断时给专门的话术', String(r9.code));
+    check(/edits[\s\S]*generations/.test(r9.error), '把探过的两条路都写清楚', r9.error.slice(0, 46));
 
     main.server.close();
     other.server.close();

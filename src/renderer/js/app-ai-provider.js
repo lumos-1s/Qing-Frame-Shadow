@@ -129,12 +129,43 @@
         if (typeof api.aiImage !== 'function') return { ok: false, error: '图像通道只在桌面版可用' };
         const cfg = load();
         if (!hasCredential(cfg)) return { ok: false, error: '还没填 API Key（本机服务可留空）' };
-        if (!cfg.imageModel && !cfg.model) return { ok: false, error: '还没填图像模型名' };
+        if (!imageModelOf(cfg)) {
+            return {
+                ok: false, code: 'need-image-model',
+                error: cfg.model
+                    ? '还没填图像模型。上面那个「' + cfg.model + '」是对话模型的名字，拿它请求画图接口只会换回 404。'
+                    : '还没填图像模型名。'
+            };
+        }
         const p = params && typeof params === 'object' ? params : {};
         try { return await api.aiImage(cfg, p); }
         catch (e) { return { ok: false, error: '调用失败：' + (e && e.message ? e.message : String(e)) }; }
     }
-    function imageReady() { const c = load(); return !!(hasCredential(c) && (c.imageModel || c.model)); }
+    // 这两张表要和 src/main/ai-provider.js 里的一致：界面得在点按钮之前就知道
+    // 「这个地址画不了图」，而不是让人对着一个 404 去猜是 Key 还是模型名。
+    const TEXT_ONLY_HOSTS = [
+        { re: /(^|\.)deepseek\.com$/i, name: 'DeepSeek' },
+        { re: /(^|\.)moonshot\.(cn|ai)$/i, name: 'Kimi（Moonshot）' },
+        { re: /(^|\.)anthropic\.com$/i, name: 'Anthropic' }
+    ];
+    const IMAGE_MODEL_RE = /(image|dall-?e|seedream|seededit|seedance|cogview|flux|sdxl|stable-?diffusion|kolors|wanx|qwen-image|imagen|ideogram|recraft|grok-2-image)/i;
+    function textOnlyOf(baseUrl) {
+        const s = String(baseUrl || '').trim();
+        if (!s) return '';
+        let host = '';
+        try { host = new URL(s).hostname; } catch (_) { return ''; }
+        for (const t of TEXT_ONLY_HOSTS) if (t.re.test(host)) return t.name;
+        return '';
+    }
+    // 出图用的模型名：填了 imageModel 就用它；没填时只有对话模型名本身像画图模型才复用。
+    function imageModelOf(cfg) {
+        const c = cfg || load();
+        const own = String(c.imageModel || '').trim();
+        if (own) return own;
+        const chat = String(c.model || '').trim();
+        return IMAGE_MODEL_RE.test(chat) ? chat : '';
+    }
+    function imageReady() { const c = load(); return !!(hasCredential(c) && imageModelOf(c)); }
 
     // 一键本机模式：探测常见本地文生图端口，选中第一个能返回模型列表的地址。
     const LOCAL_CANDIDATES = [
@@ -172,5 +203,5 @@
         return { ok: true, text: String(r.content || '').trim().slice(0, 40), model: r.model || c.model };
     }
 
-    return { CFG_KEY, CH_KEY, CHANGE_EVENT, LOCAL_CANDIDATES, load, save, channel, setChannel, ready, mask, chat, models, image, imageReady, test, isLocalBase, detectLocal, applyLocal };
+    return { CFG_KEY, CH_KEY, CHANGE_EVENT, LOCAL_CANDIDATES, load, save, channel, setChannel, ready, mask, chat, models, image, imageReady, imageModelOf, textOnlyOf, test, isLocalBase, detectLocal, applyLocal };
 });

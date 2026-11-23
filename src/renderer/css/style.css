@@ -2713,6 +2713,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .frame-api-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .frame-api-field > .frame-adv-label { display: block; }
 .frame-api-note { font-size: var(--fs-11); color: var(--text-3); line-height: 1.5; }
+/* 图像通道的硬伤（地址根本没有画图接口）：用警示色，别让它和普通说明混在一起 */
+.frame-api-note.bad { color: var(--rose-text); }
 .frame-swatch-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .frame-swatch-why {
     font-size: var(--fs-10); line-height: 1.45; color: var(--text-3);

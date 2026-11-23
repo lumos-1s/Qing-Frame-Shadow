@@ -964,6 +964,9 @@ function aiCfg(payload) {
         baseUrl: str(p.baseUrl, 500),
         apiKey: str(p.apiKey, 400),
         model: str(p.model, 200),
+        // 出图用的是另一个模型名。以前这里把它丢了、再拿对话模型名顶上，
+        // 结果所有配置都「看起来对」却必然 404。
+        imageModel: str(p.imageModel, 200),
         temperature: Number(p.temperature),
         maxTokens: Number(p.maxTokens),
         timeout: Number(p.timeout)
@@ -999,10 +1002,9 @@ handleIpc('zine:import', async (_e, dataUrl, filename) => {
 // 纸刊图像生成：Key 只在主进程，参考图由渲染层以 data URL 传入，不写盘
 handleIpc('ai:image', async (_e, cfg, params) => {
     if (!isTrustedFrame(_e)) return BLOCKED;
+    // 图像模型名由 ai-provider 自己挑（imageModel 优先，其次看对话模型名像不像画图模型），
+    // 这里不要拿 model 去覆盖它——覆盖掉就再也分不清「用户填的是图像模型」还是「对话模型」。
     const c = aiCfg(cfg);
-    // 图像模型名可单独配置，没填就退回文本模型名（多数中转两者同名）
-    const wanted = (cfg && cfg.imageModel) || (typeof params === 'object' && params.model) || c.model;
-    c.model = String(wanted || '').trim().slice(0, 200);
     const p = params && typeof params === 'object' ? params : {};
     p.source = typeof p.source === 'string' ? p.source.slice(0, 24 * 1024 * 1024) : '';
     return aiProvider.image(c, p);

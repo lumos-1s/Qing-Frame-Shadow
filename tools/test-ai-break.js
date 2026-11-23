@@ -210,16 +210,75 @@ app.whenReady().then(async () => {
     check(err.n === beforeErr, '失败不会往照片列表里塞东西', String(err.n));
     check(/生成失败/.test(err.status) && /额度不足/.test(err.status), '错误照原样透出，不吞掉', err.status);
 
-    // ⑤ 网关没开 edits：原文照留，但补一句人能看懂的原因
+    // ⑤ 网关报 404：原文照留，但补一句人能看懂的原因，而且放进错误块（长话不被截断）
     await exec(`(() => {
         window.QfsAiProvider.image = async () => ({ ok: false, status: 404, error: 'HTTP 404：not found' });
         document.getElementById('btnFrameBreak').click();
         return true;
     })()`);
     await sleep(600);
-    const err404 = await exec(`document.getElementById('frameStatus').textContent`);
-    check(/HTTP 404/.test(err404) && /edits/.test(err404),
-        '404 不是只丢状态码，补一句「网关没开 edits」', err404);
+    const e404 = await exec(`({ status: document.getElementById('frameStatus').textContent,
+        box: document.getElementById('frameErrorMsg').textContent,
+        shown: document.getElementById('frameError').hidden === false })`);
+    check(/HTTP 404/.test(e404.box) && /图像模型名|参考图/.test(e404.box),
+        '404 不是只丢状态码，补一句可能的原因', e404.box);
+    check(e404.shown === true, '破框失败进错误块，有地方把话说完', String(e404.shown));
+
+    // ⑥ DeepSeek 这类地址：话术是「没有画图接口」，不是让人去猜 Key
+    await exec(`(() => {
+        window.QfsAiProvider.image = async (p) => {
+            window.__imgCalls.push(p);
+            return { ok: false, code: 'no-image-api', error: 'DeepSeek（api.deepseek.com）只提供对话接口，没有画图接口，AI 破框在这里出不了图。' };
+        };
+        document.getElementById('btnFrameBreak').click();
+        return true;
+    })()`);
+    await sleep(600);
+    const deep = await exec(`({ box: document.getElementById('frameErrorMsg').textContent,
+        shown: document.getElementById('frameError').hidden === false,
+        logHidden: document.getElementById('btnFrameErrLog').hidden,
+        setup: getComputedStyle(document.getElementById('aiSetupModal')).display === 'flex' })`);
+    check(/只提供对话接口/.test(deep.box), '原话照留，不说成「Key 不对」', deep.box.slice(0, 26));
+    check(deep.logHidden === true, '破框没有助手日志，就不摆「查看日志」', String(deep.logHidden));
+    check(deep.setup === true, '顺手把设置摊开，当场就能改', String(deep.setup));
+
+    // ⑦ 错误块里的「重试」要重跑破框，不能把用户带去生成一批边框
+    await exec(`(() => {
+        const m = document.getElementById('aiSetupModal'); if (m) m.style.display = 'none';
+        window.QfsAiProvider.image = async (p) => { window.__imgCalls.push(p); return { ok: false, code: 'need-image-model', error: '还没填图像模型。' }; };
+        return true;
+    })()`);
+    const beforeRetry = await exec('window.__imgCalls.length');
+    await exec(`(() => { document.getElementById('btnFrameRetry').click(); return true; })()`);
+    await sleep(500);
+    const afterRetry = await exec('window.__imgCalls.length');
+    check(afterRetry === beforeRetry + 1, '点重试重跑的是破框', beforeRetry + ' → ' + afterRetry);
+
+    // ⑧ 设置里要写清「能对话 ≠ 能出图」：顶部绿条不能让人以为都配好了
+    await exec(`(() => {
+        localStorage.setItem('qfs_ai_api_v1', JSON.stringify({
+            baseUrl: 'https://api.deepseek.com', apiKey: 'sk-test-1234',
+            model: 'DeepSeek-V4.1-Flash-1017', imageModel: 'DeepSeek-V4.1-Flash-1017'
+        }));
+        localStorage.setItem('qfs_ai_channel', 'api');
+        document.getElementById('btnAiSetup').click();
+        return true;
+    })()`);
+    await sleep(500);
+    const hint = await exec(`(() => {
+        const h = document.getElementById('frameImageHint');
+        const s = document.getElementById('aiSetupState');
+        const card = document.querySelector('.ai-setup-card');
+        const r = h.getBoundingClientRect(), cr = card.getBoundingClientRect();
+        return { text: h.textContent, bad: h.classList.contains('bad'), shown: h.offsetParent !== null,
+            state: s.textContent, fits: h.scrollWidth <= h.clientWidth + 1,
+            inside: r.left >= cr.left - 1 && r.right <= cr.right + 1 };
+    })()`);
+    check(/只有对话接口/.test(hint.text) && hint.bad === true && hint.shown === true,
+        '图像模型下面直接点破「这个地址出不了图」', hint.text);
+    check(/没有画图接口/.test(hint.state), '顶部状态不再只说「已就绪」', hint.state);
+    check(hint.fits === true && hint.inside === true, '提示行在卡片里，不横向溢出',
+        JSON.stringify({ fits: hint.fits, inside: hint.inside }));
 
     console.log('');
     if (failures.length) { console.log('FAILED ' + failures.length + ' · AI 破框'); app.exit(1); return; }

@@ -64,6 +64,27 @@ function clip(s, n) {
     return t.length > n ? t.slice(0, n) + '…' : t;
 }
 
+// 有一类地址压根没有图像接口：OpenAI 兼容说的是「对话接口的形状一样」，
+// 不等于它什么都有。这里只收「确定没有画图能力」的几家——命中时本地直接拦下，
+// 一个请求都不发。否则用户看到的只是一个 404，然后开始怀疑 Key 和模型名。
+const TEXT_ONLY_HOSTS = [
+    { re: /(^|\.)deepseek\.com$/i, name: 'DeepSeek' },
+    { re: /(^|\.)moonshot\.(cn|ai)$/i, name: 'Kimi（Moonshot）' },
+    { re: /(^|\.)anthropic\.com$/i, name: 'Anthropic' }
+];
+function textOnlyGateway(baseUrl) {
+    let host = '';
+    try { host = new URL(normBase(baseUrl)).hostname; } catch (_) { return null; }
+    for (const t of TEXT_ONLY_HOSTS) if (t.re.test(host)) return { host, name: t.name };
+    return null;
+}
+
+// 图像模型名：显式填的 imageModel 优先；没填时，只有当对话模型名本身就像画图模型
+// （有些中转把两者配成同一个名字）才复用。否则宁可拦下——拿 deepseek-chat 去请求
+// /images/edits，回来的 404 只会把人引到错的方向。
+const IMAGE_MODEL_RE = /(image|dall-?e|seedream|seededit|seedance|cogview|flux|sdxl|stable-?diffusion|kolors|wanx|qwen-image|imagen|ideogram|recraft|grok-2-image)/i;
+function looksLikeImageModel(name) { return IMAGE_MODEL_RE.test(String(name || '')); }
+
 async function request(url, cfg, body, timeoutMs) {
     const ms = Math.max(3000, Math.min(300000, Number(timeoutMs) || 120000));
     const ac = typeof AbortController === 'function' ? new AbortController() : null;
@@ -222,12 +243,64 @@ function pickImage(data) {
     return null;
 }
 
+// multipart 版：只有 edits 用它。注意这里绝不能再带 Content-Type——
+// 那个头一旦出现，fetch 就不会生成 boundary，服务端一个字段都解析不到。
+async function requestForm(url, cfg, form, timeoutMs) {
+    const ms = Math.max(3000, Math.min(300000, Number(timeoutMs) || 180000));
+    const ac = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ac ? setTimeout(() => ac.abort(), ms) : null;
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: authHeaders(cfg),
+            body: form,
+            signal: ac ? ac.signal : undefined
+        });
+        const text = await res.text();
+        let data = null;
+        try { data = text ? JSON.parse(text) : null; } catch (_) { data = null; }
+        if (!res.ok) {
+            const msg = (data && (data.error && (data.error.message || data.error.type) || data.message)) || clip(text, 300);
+            return { ok: false, status: res.status, error: 'HTTP ' + res.status + (msg ? '：' + msg : '') };
+        }
+        return { ok: true, status: res.status, data };
+    } catch (e) {
+        const aborted = e && (e.name === 'AbortError' || /abort/i.test(String(e.message || '')));
+        return { ok: false, status: 0, error: aborted ? '请求超时（' + Math.round(ms / 1000) + 's）' : '请求失败：' + (e && e.message ? e.message : String(e)) };
+    } finally { if (timer) clearTimeout(timer); }
+}
+
 async function image(cfg, params) {
     const c = cfg || {};
     const p = params || {};
     const prompt = String(p.prompt || '').trim();
     if (!prompt) return { ok: false, error: '缺画面描述' };
-    if (!String(c.model || '').trim()) return { ok: false, error: '还没填图像模型名' };
+
+    // ① 先问「这个地址有没有画图接口」，别让一次注定 404 的请求去冒充配置错误
+    const only = textOnlyGateway(c.baseUrl);
+    if (only) {
+        return {
+            ok: false, code: 'no-image-api',
+            error: only.name + '（' + only.host + '）只提供对话接口，没有画图接口，AI 破框在这里出不了图。'
+                + '要出图得换一个带图像模型的地址：火山方舟（ark.cn-beijing.volces.com/api/v3）、阿里百炼、'
+                + 'OpenAI 官方，或支持图生图的中转站；地址、Key、图像模型三项要一起换。'
+        };
+    }
+
+    // ② 模型名：出图用的是图像模型，不是对话模型
+    const chatModel = String(c.model || '').trim();
+    const model = String(c.imageModel || p.model || '').trim()
+        || (looksLikeImageModel(chatModel) ? chatModel : '');
+    if (!model) {
+        return {
+            ok: false, code: 'need-image-model',
+            error: chatModel
+                ? '还没填图像模型。上面那个「' + chatModel + '」是对话模型的名字，拿它请求画图接口只会换回 404——'
+                    + '去 AI 设置里填一个能出图的模型名。'
+                : '还没填图像模型名。'
+        };
+    }
+
     const src = typeof p.source === 'string' ? decodeDataUrl(p.source) : null;
     if (p.source && !src) return { ok: false, error: '参考图不是可识别的 data URL' };
     const size = /^\d+x\d+$/.test(String(p.size || '')) ? p.size : '1024x1024';
@@ -235,52 +308,46 @@ async function image(cfg, params) {
 
     // edits：带参考图，告诉模型"保留现场身份"；generations：纯文字创作
     let r;
+    let degraded = '';   // 网关没有 edits，退到 generations 的 image 字段
     if (src) {
         const form = new FormData();
-        form.append('model', String(c.model).trim());
+        form.append('model', model);
         form.append('prompt', prompt);
         form.append('size', size);
         form.append('n', '1');
         form.append('image', new Blob([src.buffer], { type: src.mime }), 'source.' + (src.mime.split('/')[1] || 'png'));
-        const url = endpoint(c.baseUrl, 'edits');
-        const ms = Math.max(3000, Math.min(300000, timeout));
-        const ac = typeof AbortController === 'function' ? new AbortController() : null;
-        const timer = ac ? setTimeout(() => ac.abort(), ms) : null;
-        try {
-            const res = await fetch(url, {
-                method: 'POST',
-                // 只带 Authorization + 自定义头；绝不带 Content-Type（headers() 里那个 json 头要剔掉），
-                // 否则 fetch 不会生成 multipart boundary，服务端解析不到 form 字段。
-                headers: authHeaders(c),
-                body: form,
-                signal: ac ? ac.signal : undefined
-            });
-            const text = await res.text();
-            let data = null;
-            try { data = text ? JSON.parse(text) : null; } catch (_) { data = null; }
-            if (!res.ok) {
-                const msg = (data && (data.error && (data.error.message || data.error.type) || data.message)) || clip(text, 300);
-                return { ok: false, status: res.status, error: 'HTTP ' + res.status + (msg ? '：' + msg : '') };
-            }
-            r = { ok: true, status: res.status, data };
-        } catch (e) {
-            const aborted = e && (e.name === 'AbortError' || /abort/i.test(String(e.message || '')));
-            return { ok: false, status: 0, error: aborted ? '请求超时' : '请求失败：' + (e && e.message ? e.message : String(e)) };
-        } finally { if (timer) clearTimeout(timer); }
+        r = await requestForm(endpoint(c.baseUrl, 'edits'), c, form, timeout);
+        // 404/405 说明这条路根本不存在（请求没执行、不会重复计费），可以安全地退一步：
+        // 火山方舟的 seedream、硅基流动和一部分中转把图生图放在同一个 generations 端点，
+        // 靠 JSON 里的 image 字段传参考图。
+        if (!r.ok && (r.status === 404 || r.status === 405)) {
+            const alt = await request(endpoint(c.baseUrl, 'images'), c,
+                { model, prompt, size, n: 1, image: String(p.source) }, timeout);
+            if (alt.ok) { r = alt; degraded = 'no-edits'; }
+            else if (alt.status === 404 || alt.status === 405) {
+                return {
+                    ok: false, status: alt.status, code: 'no-images-api',
+                    error: '这个地址下没有图像接口：/images/edits 和 /images/generations 都返回 ' + alt.status + '。'
+                        + '它多半只能对话，换一个能出图的网关。'
+                };
+            } else r = alt;
+        }
     } else {
-        const body = { model: String(c.model).trim(), prompt, size, n: 1 };
-        r = await request(endpoint(c.baseUrl, 'images'), c, body, timeout);
+        r = await request(endpoint(c.baseUrl, 'images'), c, { model, prompt, size, n: 1 }, timeout);
     }
     if (!r.ok) return r;
     const picked = pickImage(r.data);
     if (!picked) return { ok: false, status: r.status, error: '图像接口没返回可用的图（' + clip(JSON.stringify(r.data), 200) + '）' };
+    // 退化的路径要说出来：不支持参考图的网关照样会出一张图，但那只是照着文字画的
+    const path = src ? (degraded ? 'generations-img' : 'edits') : 'generations';
+    const note = degraded ? '这个网关没开 edits，已改用 generations 的 image 字段重试' : '';
     if (picked.type === 'b64') {
-        return { ok: true, image: 'data:image/png;base64,' + String(picked.value || '').replace(/\s/g, ''), revised: picked.revised, path: src ? 'edits' : 'generations' };
+        return { ok: true, image: 'data:image/png;base64,' + String(picked.value || '').replace(/\s/g, ''), revised: picked.revised, path, note };
     }
-    if (picked.type === 'data') return { ok: true, image: picked.value, revised: picked.revised, path: src ? 'edits' : 'generations' };
+    if (picked.type === 'data') return { ok: true, image: picked.value, revised: picked.revised, path, note };
     const got = await fetchAsDataUrl(picked.value, c, timeout);
     if (!got.ok) return got;
-    return { ok: true, image: got.data, revised: picked.revised, path: src ? 'edits' : 'generations', sourceUrl: picked.value };
+    return { ok: true, image: got.data, revised: picked.revised, path, note, sourceUrl: picked.value };
 }
 
-module.exports = { chat, models, image, endpoint, normBase, decodeDataUrl, pickImage, normalizeContent, DEFAULT_BASE };
+module.exports = { chat, models, image, endpoint, normBase, decodeDataUrl, pickImage, normalizeContent, textOnlyGateway, looksLikeImageModel, DEFAULT_BASE };
