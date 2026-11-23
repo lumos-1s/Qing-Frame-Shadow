@@ -45,15 +45,20 @@
     let genMode = 'free';
     // AI 破框正在跑：挡住重复点击，也用来防「生成中又切照片」把结果挂到别的图上。
     let breaking = false;
-    // 发布开关：AI 破框还没在真实 Key 下验过保脸和各家网关，先不进这一版的界面。
+    // 发布开关：整个 AI 窗口本版不发布；窗口里的破框还要再等真实 Key 验过。
     // 只认 QfsFeatures 的默认值，别在这里再写一份，否则发版时容易漏改一处。
+    function aiPanelOn() {
+        return !!(window.QfsFeatures && window.QfsFeatures.on('aiPanel'));
+    }
     function aiBreakOn() {
         return !!(window.QfsFeatures && window.QfsFeatures.on('aiBreak'));
     }
-    // 关掉时要把入口、设置项、提示行一起收干净：只藏按钮会留下「图像模型」
-    // 和「还差一个图像模型」这类指向不存在功能的字。
+    // 关掉时要把入口、设置项、提示行一起收干净：只藏窗口按钮会留下工具栏上的
+    // 一个可疑位置，只藏破框按钮会留下「图像模型」和「还差一个图像模型」。
     function applyFeatureGates() {
-        const on = aiBreakOn();
+        const panelOn = aiPanelOn();
+        const entry = $('btnFramePanel'); if (entry) entry.hidden = !panelOn;
+        const on = panelOn && aiBreakOn();
         const btn = $('btnFrameBreak'); if (btn) btn.hidden = !on;
         const field = $('frameImageModel');
         const wrap = field && field.closest ? field.closest('.frame-api-field') : null;
@@ -1883,6 +1888,8 @@
 
     // ── 生命周期 ──
     async function open() {
+        // 窗口没发布：连直接调用都不放行，不只是藏工具栏按钮。
+        if (!aiPanelOn()) return false;
         if (!modal) return; modal.style.display = 'flex';
         applyFeatureGates();
         refreshSamplePhotos();
@@ -2249,5 +2256,8 @@
         } catch (_) {}
     }
 
-    window.QfsFramePanel = { init, open, close, syncFromCanvas };
+    window.QfsFramePanel = { init, open, close, syncFromCanvas, syncFeatureGates: applyFeatureGates };
+    // 脚本在 </body> 前加载，DOM 已就绪：先按开关把工具栏入口摆好，别等第一次点击。
+    // 测试临时改开关后也用它重新应用，不必重开页面。
+    applyFeatureGates();
 })();

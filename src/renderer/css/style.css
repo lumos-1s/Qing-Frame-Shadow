@@ -195,6 +195,7 @@ body {
 .ub-btn.ghost { background: transparent; color: var(--text-2); padding: calc(5px * var(--font-scale)) var(--sp-2); }
 .ub-btn:disabled { opacity: .55; cursor: default; }
 .tbtn:hover { background: var(--surface-alt); color: var(--text); }
+.tbtn[hidden] { display: none; }
 .tbtn.icon { font-size: var(--fs-12); }
 .tbtn:active { background: var(--surface-2); }
 #btnTheme { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 26px; padding: 0; }

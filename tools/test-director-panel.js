@@ -88,8 +88,14 @@ app.whenReady().then(async () => {
     })()`);
     await sleep(500);
 
-    // 打开面板（离屏，不弹窗）
-    await exec(`(() => { window.QfsFramePanel.init(window.App); window.QfsFramePanel.open(); return true; })()`);
+    // 打开面板（离屏，不弹窗）。AI 窗口本版默认不发布，测试里显式放行。
+    await exec(`(() => {
+        window.QfsFeatures.override('aiPanel', true);
+        window.QfsFramePanel.syncFeatureGates();
+        window.QfsFramePanel.init(window.App);
+        window.QfsFramePanel.open();
+        return true;
+    })()`);
     await sleep(400);
     const opened = await exec(`(() => {
         const link = document.getElementById('btnFrameDirector');

@@ -206,6 +206,21 @@ app.whenReady().then(async () => {
     // 目录里预置一份上一轮的旧方案（普通预设）：本轮生成不能把它混进 4 宫格
     fs.writeFileSync(frameFile('z-old.json'), JSON.stringify({ templateName: '旧方案', photoFrameStyle: 'CARD_3D' }), 'utf8');
 
+    // 整个 AI 窗口本版默认不发布：先验入口是收起的，再按测试开关放出来
+    const gateOff = await exec(`(() => {
+        const b = document.getElementById('btnFramePanel');
+        return { flag: window.QfsFeatures.defaults().aiPanel,
+            hidden: b.hidden, shown: b.offsetParent !== null,
+            modal: getComputedStyle(document.getElementById('frameModal')).display };
+    })()`);
+    check(gateOff.flag === false && gateOff.hidden === true && gateOff.shown === false
+        && gateOff.modal === 'none', '默认发版状态：AI 窗口入口收起、窗口不出现', JSON.stringify(gateOff));
+    await exec(`(() => {
+        window.QfsFeatures.override('aiPanel', true);
+        window.QfsFramePanel.syncFeatureGates();
+        return true;
+    })()`);
+
     // 1) 打开面板，空态引导出现
     await exec(`document.getElementById('btnFramePanel').click(); true`);
     await sleep(400);

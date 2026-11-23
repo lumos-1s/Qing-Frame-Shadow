@@ -60,28 +60,37 @@ app.whenReady().then(async () => {
     })()`);
     await sleep(400);
 
-    await exec(`(() => { window.QfsFramePanel.init(window.App); window.QfsFramePanel.open(); return true; })()`);
-    await sleep(400);
-
-    // ⓪ 发版默认状态：开关关着，界面上不该出现任何「AI 破框」的痕迹。
-    // 只藏按钮不够——设置里的「图像模型」和提示行会指向一个看不见的功能。
+    // ⓪ 发版默认状态：整个 AI 窗口关着，工具栏入口、窗口、破框入口都不该出现。
+    // 只藏一个按钮不够——设置里的「图像模型」和提示行会指向一个看不见的功能。
     const gateOff = await exec(`(() => {
+        const entry = document.getElementById('btnFramePanel');
         const b = document.getElementById('btnFrameBreak');
         const f = document.getElementById('frameImageModel');
         const wrap = f && f.closest('.frame-api-field');
-        return { flag: window.QfsFeatures.defaults().aiBreak,
+        return { panelFlag: window.QfsFeatures.defaults().aiPanel,
+            breakFlag: window.QfsFeatures.defaults().aiBreak,
+            entryHidden: entry.hidden, entryShown: entry.offsetParent !== null,
+            modal: getComputedStyle(document.getElementById('frameModal')).display,
             btnHidden: b.hidden, btnShown: b.offsetParent !== null,
             fieldHidden: wrap ? wrap.hidden : null,
             hintHidden: document.getElementById('frameImageHint').hidden };
     })()`);
-    check(gateOff.flag === false && gateOff.btnHidden === true && gateOff.btnShown === false,
-        '默认发版状态：破框入口是收起的', JSON.stringify(gateOff));
+    check(gateOff.panelFlag === false && gateOff.entryHidden === true && gateOff.entryShown === false
+        && gateOff.modal === 'none', '默认发版状态：AI 窗口入口收起，窗口不出现', JSON.stringify(gateOff));
+    check(gateOff.breakFlag === false && gateOff.btnHidden === true && gateOff.btnShown === false,
+        '窗口里的破框入口也收起', JSON.stringify(gateOff));
     check(gateOff.fieldHidden === true && gateOff.hintHidden === true,
         '「图像模型」设置项与提示行也一起收起', JSON.stringify(gateOff));
 
     // 发版时把 app-features.js 里的默认值改成 true 即可；这里用测试开关临时打开，
     // 后面几段按「功能已上线」来验，免得开关关着就把整条链的覆盖丢掉。
-    await exec(`(() => { window.QfsFeatures.override('aiBreak', true); return window.QfsFramePanel.open(); })()`);
+    await exec(`(() => {
+        window.QfsFeatures.override('aiPanel', true);
+        window.QfsFeatures.override('aiBreak', true);
+        window.QfsFramePanel.init(window.App);
+        window.QfsFramePanel.open();
+        return true;
+    })()`);
     await sleep(400);
 
     const hasBtn = await exec(`(() => { const b = document.getElementById('btnFrameBreak');
@@ -325,6 +334,27 @@ app.whenReady().then(async () => {
     check(gateBack.fieldHidden === true, '设置里的图像模型也一起收起', String(gateBack.fieldHidden));
     check(gateBack.calls === 0 && /还没放出/.test(gateBack.status),
         '即使被程序触发，隐藏的按钮也不会打图像接口', gateBack.calls + ' · ' + gateBack.status);
+
+    // ⑩ 整个窗口关掉：工具栏入口收起，直接调 open() 也打不开
+    await exec(`(() => {
+        window.QfsFramePanel.close();
+        window.QfsFeatures.override('aiPanel', null);
+        window.QfsFramePanel.syncFeatureGates();
+        return true;
+    })()`);
+    await sleep(300);
+    const gatePanel = await exec(`(async () => {
+        window.__imgCalls = [];
+        const entry = document.getElementById('btnFramePanel');
+        entry.click();
+        const opened = await window.QfsFramePanel.open();
+        return { entryHidden: entry.hidden, entryShown: entry.offsetParent !== null,
+            opened, modal: getComputedStyle(document.getElementById('frameModal')).display };
+    })()`);
+    check(gatePanel.entryHidden === true && gatePanel.entryShown === false,
+        'AI 窗口入口重新收起，工具栏不留按钮', JSON.stringify(gatePanel));
+    check(gatePanel.opened === false && gatePanel.modal === 'none',
+        '直接调用 open 也打不开窗口', gatePanel.opened + ' · ' + gatePanel.modal);
 
     console.log('');
     if (failures.length) { console.log('FAILED ' + failures.length + ' · AI 破框'); app.exit(1); return; }
