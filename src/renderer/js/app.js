@@ -286,6 +286,21 @@ window.App = {
                 this._applyTplFilter();
             });
         }
+        const tplSort = document.getElementById('cbTplSort');
+        if (tplSort) {
+            if (this._tplSort) tplSort.value = this._tplSort;
+            tplSort.addEventListener('change', () => { this._tplSort = tplSort.value; this._applyTplFilter(); });
+        }
+        const tplFav = document.getElementById('btnTplFavOnly');
+        if (tplFav) {
+            tplFav.setAttribute('aria-pressed', this._tplFavOnly ? 'true' : 'false');
+            tplFav.addEventListener('click', () => {
+                this._tplFavOnly = !this._tplFavOnly;
+                tplFav.setAttribute('aria-pressed', this._tplFavOnly ? 'true' : 'false');
+                tplFav.textContent = this._tplFavOnly ? '★ 只看收藏' : '☆ 只看收藏';
+                this._applyTplFilter();
+            });
+        }
         const tplRefresh = document.getElementById('btnRefreshTemplates');
         if (tplRefresh) {
             tplRefresh.addEventListener('click', (e) => {
@@ -3705,6 +3720,7 @@ window.App = {
         bindBtn('btnDeleteActiveIcon', () => this.deleteElement());
         bindBtn('btnClearAllIcons', () => this.clearElements());
         bindBtn('btnSaveTemplate', () => this.saveTemplate());
+        bindBtn('btnSaveTemplateAs', () => this.saveTemplateAs());
         bindBtn('btnExportTemplate', () => this.exportTemplate());
         bindBtn('btnImportTemplate', () => this.importTemplate());
         bindBtn('btnExportConfig', () => this.exportConfig());

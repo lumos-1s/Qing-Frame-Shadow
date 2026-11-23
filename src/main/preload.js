@@ -62,6 +62,7 @@ contextBridge.exposeInMainWorld('qingframe', {
     listMarks: () => ipcRenderer.invoke('list-marks'),
     saveTemplate: (name, data) => ipcRenderer.invoke('save-template', { name, data }),
     listTemplates: () => ipcRenderer.invoke('list-templates'),
+    listTemplateMeta: () => ipcRenderer.invoke('list-template-meta'),
     loadTemplate: (name) => ipcRenderer.invoke('load-template', name),
     deleteTemplate: (name) => ipcRenderer.invoke('delete-template', name),
     renameTemplate: (oldName, newName) => ipcRenderer.invoke('rename-template', { oldName, newName }),

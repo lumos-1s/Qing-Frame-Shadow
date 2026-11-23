@@ -15,6 +15,8 @@ window.App = Object.assign(window.App || {}, {
         // 搜索词属于用户当前操作，保存/重命名/删除后重读列表时不能把它清空。
         if (input) this._tplQuery = input.value;
         const names = (await window.qingframe.listTemplates()) || [];
+        const metas = (window.qingframe.listTemplateMeta) ? (await window.qingframe.listTemplateMeta()) : [];
+        const mtimeOf = new Map(metas.map(m => [m.name, m.mtime || 0]));
         this._savedTemplates = names;
         if (!this._tplCache) this._renderTplLoading(box);
         const cache = await Promise.all(names.map(async (n) => {
@@ -25,6 +27,7 @@ window.App = Object.assign(window.App || {}, {
                     name: n,
                     disp: String(data.templateName || n),
                     tag: String(data.templateTag || ''),
+                    mtime: mtimeOf.get(n) || 0,
                     tpl: data,
                 };
             } catch (e) { return null; /* 跳过损坏模板 */ }
@@ -41,9 +44,21 @@ window.App = Object.assign(window.App || {}, {
 
     _filteredTplRows() {
         const q = String(this._tplQuery || '').trim().toLowerCase();
-        const src = this._tplCache || [];
-        if (!q) return src.slice();
-        return src.filter(r => [r.disp, r.tag, r.name].some(v => String(v || '').toLowerCase().includes(q)));
+        let src = (this._tplCache || []).slice();
+        if (q) src = src.filter(r => [r.disp, r.tag, r.name].some(v => String(v || '').toLowerCase().includes(q)));
+        const favs = this.getFavTemplates();
+        if (this._tplFavOnly) src = src.filter(r => favs.indexOf(r.name) >= 0);
+        const mode = (this.$('cbTplSort') && this.$('cbTplSort').value) || this._tplSort || 'name';
+        if (mode === 'mtime') {
+            src.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+        } else if (mode === 'recent') {
+            const rec = this.getRecentTemplates();
+            const rank = (n) => { const i = rec.indexOf(n); return i < 0 ? 1e9 : i; };
+            src.sort((a, b) => rank(a.name) - rank(b.name) || (b.mtime || 0) - (a.mtime || 0));
+        } else {
+            src.sort((a, b) => a.disp.localeCompare(b.disp, 'zh'));
+        }
+        return src;
     },
 
     _applyTplFilter() {
@@ -127,8 +142,8 @@ window.App = Object.assign(window.App || {}, {
         }
         const pending = [];
         order.forEach((g) => {
-            const groupRows = groups.get(g).slice()
-                .sort((a, b) => a.disp.localeCompare(b.disp, 'zh'));
+            // rows 已按当前排序模式排好，组内保持这个顺序，别再按名字重排一遍
+            const groupRows = groups.get(g);
             const open = !!q || this._tplOpen.has(g);
             const gEl = document.createElement('div');
             gEl.className = 'tpl-group' + (open ? ' open' : '');
@@ -229,6 +244,7 @@ window.App = Object.assign(window.App || {}, {
         const x = Math.max(8, rect.right - 170);
         this.openCtx(x, rect.bottom + 4, [
             ['应用样式', () => { this.applySavedTemplate(r); }],
+            [this.getFavTemplates().indexOf(r.name) >= 0 ? '☆ 取消收藏' : '★ 收藏', () => { this.toggleFavTemplate(r.name); }],
             ['重命名', () => { this.renameTemplateItem(r); }],
             ['删除', () => { this._deleteTpl(r); }],
         ]);
@@ -302,7 +318,16 @@ window.App = Object.assign(window.App || {}, {
         const hint = document.createElement('span');
         hint.className = 'tpl-hint';
         hint.textContent = '单击应用';
-        meta.append(activeTag, hint);
+        const when = document.createElement('span');
+        when.className = 'tpl-mtime';
+        when.textContent = this._tplTimeText(r.mtime);
+        when.title = r.mtime ? new Date(r.mtime).toLocaleString() : '';
+        const star = document.createElement('span');
+        star.className = 'tpl-fav-star';
+        star.textContent = '★';
+        star.title = '已收藏';
+        star.hidden = this.getFavTemplates().indexOf(r.name) < 0;
+        meta.append(activeTag, hint, when, star);
         info.append(nameSpan, meta);
         main.append(thumb, info);
         main.addEventListener('click', () => { this.applySavedTemplate(r); });
@@ -349,6 +374,45 @@ window.App = Object.assign(window.App || {}, {
         }
     },
 
+    // 样式列表的排序/收藏：与内置预设的 favorites/recent 分开存，避免串味
+    _tplFavOnly: false,
+    _tplSort: 'name',
+    getRecentTemplates() {
+        try { return JSON.parse(localStorage.getItem('qfs_recent_templates') || '[]'); } catch (e) { return []; } // eslint-disable-line no-empty
+    },
+    pushRecentTemplate(name) {
+        if (!name) return;
+        const list = this.getRecentTemplates().filter(x => x !== name);
+        list.unshift(name);
+        try { localStorage.setItem('qfs_recent_templates', JSON.stringify(list.slice(0, 40))); } catch (e) { return; }
+    },
+    getFavTemplates() {
+        try { return JSON.parse(localStorage.getItem('qfs_fav_templates') || '[]'); } catch (e) { return []; } // eslint-disable-line no-empty
+    },
+    setFavTemplates(arr) {
+        try { localStorage.setItem('qfs_fav_templates', JSON.stringify(arr)); } catch (e) { return; }
+    },
+    toggleFavTemplate(name) {
+        if (!name) return;
+        const list = this.getFavTemplates();
+        const i = list.indexOf(name);
+        if (i >= 0) list.splice(i, 1); else list.push(name);
+        this.setFavTemplates(list);
+        this._applyTplFilter();
+        this.setStatus(i >= 0 ? '已取消收藏' : '已收藏样式「' + name + '」');
+    },
+    _tplTimeText(ms) {
+        if (!ms) return '';
+        const d = Date.now() - ms;
+        if (d < 0) return '';
+        if (d < 60e3) return '刚刚';
+        if (d < 3600e3) return Math.floor(d / 60e3) + ' 分钟前';
+        if (d < 86400e3) return Math.floor(d / 3600e3) + ' 小时前';
+        if (d < 7 * 86400e3) return Math.floor(d / 86400e3) + ' 天前';
+        const dt = new Date(ms);
+        return (dt.getMonth() + 1) + '-' + dt.getDate();
+    },
+
     _tplQuery: '',
     _tplOpen: new Set(),
     _tplGroupsReady: false,
@@ -359,11 +423,16 @@ window.App = Object.assign(window.App || {}, {
     _tplThumbCache: new Map(),
 
     _tplThumbKey(r) {
-        // 模板对象每次 refreshTemplates 都是重新读盘的新对象,不能用对象身份当键;
-        // 用 JSON 文本 + 长度当内容指纹,内容一改自然换键。
+        // 模板对象每次 refreshTemplates 都是重新读盘的新对象，不能用对象身份当键；
+        // 用「长度 + FNV-1a 内容指纹」，比把整份 JSON 塞进 Map 键省两个数量级内存。
         let s;
         try { s = JSON.stringify(r.tpl); } catch (e) { s = 'x'; }
-        return (r.name || '') + '#' + s.length + '#' + s;
+        let h = 0x811c9dc5;
+        for (let i = 0; i < s.length; i++) {
+            h ^= s.charCodeAt(i);
+            h = Math.imul(h, 0x01000193);
+        }
+        return (r.name || '') + '#' + s.length + '#' + ((h >>> 0).toString(36));
     },
 
     // 单张缩略图渲染:临时借用主编辑器状态,渲染完立刻还原。不要跨 await 持有这份状态，
@@ -464,22 +533,46 @@ window.App = Object.assign(window.App || {}, {
         return im;
     },
 
-    async saveTemplate() {
+    // 真正落盘：只写目标文件，不碰别的样式（另存为靠这个保证原样式还在）
+    async _writeTemplate(name) {
         const $ = this.$;
-        const name = ($('tfTemplateName') ? $('tfTemplateName').value : '').trim();
-        if (!name) { this.setStatus('请输入样式名称'); return; }
-        // 从回显字段刷新模板(名称/标签)
         if (this.template) {
             this.template.templateName = name;
             this.template.templateTag = $('tfTemplateTag') ? $('tfTemplateTag').value.trim() : '';
         }
         this.syncModelFromUI();
         const r = await window.qingframe.saveTemplate(name, this.cloneTemplate());
-        this.setStatus(r.ok ? `已保存模板「${name}」` : '保存失败：' + (r.error || ''));
+        this.setStatus(r.ok ? `已保存样式「${name}」` : '保存失败：' + (r.error || ''));
         if (r.ok) {
             await this.refreshTemplates();
             this._revealTplAfterChange(name);
+            if (typeof this.pushRecentTemplate === 'function') this.pushRecentTemplate(name);
         }
+        return !!r.ok;
+    },
+
+    async saveTemplate() {
+        const name = (this.$('tfTemplateName') ? this.$('tfTemplateName').value : '').trim();
+        if (!name) { this.setStatus('请输入样式名称'); return; }
+        // 同名直接覆盖太危险：先拦一道，并告诉用户还有「另存为」这条路
+        const list = (await window.qingframe.listTemplates()) || [];
+        if (list.some(n => n === name) && !window.confirm(
+            '已经有一个叫「' + name + '」的样式，保存会把它整个覆盖。\n\n'
+            + '想留一份旧的，请点「另存为」并换个名字。\n\n仍然覆盖？')) return;
+        await this._writeTemplate(name);
+    },
+
+    // 另存为：写一个新文件，原来的样式一个字都不动
+    async saveTemplateAs() {
+        const cur = (this.$('tfTemplateName') && this.$('tfTemplateName').value.trim())
+            || this._currentTplName() || '我的样式';
+        const typed = await this.promptText('另存为新样式（原来的样式会保留）', cur + ' 副本');
+        if (!typed) return;
+        const name = String(typed).trim().replace(/[\\:*?"<>|/]/g, '_');
+        if (!name) return;
+        const list = (await window.qingframe.listTemplates()) || [];
+        if (list.some(n => n === name) && !window.confirm('已有同名样式「' + name + '」，要覆盖它吗？')) return;
+        await this._writeTemplate(name);
     },
 
     async loadTemplateByName(name) {
@@ -487,7 +580,10 @@ window.App = Object.assign(window.App || {}, {
         const data = await window.qingframe.loadTemplate(name);
         if (!data) { this.setStatus('加载样式失败'); return false; }
         this.onSettingCommit();
-        this.template = JSON.parse(JSON.stringify(data));
+        // 和内置 91 款预设走同一条合并口径：用户的拼图/字幕、Logo、贴纸、
+        // 自由文字与签名属于「正在编辑的内容」，换一套外观不该把它们清掉。
+        // 以前这里直接整个替换 template，点一次自己的样式拼图就没了。
+        this.template = this.mergePreset(this.template, data);
         this.normalizeTemplate();
         if (typeof this._onTemplateChanged === 'function') this._onTemplateChanged();
         this.saveCurrentTemplate();
@@ -495,6 +591,7 @@ window.App = Object.assign(window.App || {}, {
         this.scheduleRender(true);
         this.setStatus(`已应用样式「${data.templateName || name}」`);
         this._markActiveTplRows();
+        if (typeof this.pushRecentTemplate === 'function') this.pushRecentTemplate(name);
         return true;
     },
 

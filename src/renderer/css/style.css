@@ -2066,6 +2066,16 @@ html.dark .icon-pool .icon-cell {
 }
 .tpl-search-clear:hover { color: var(--text); background: var(--border-strong); }
 .tpl-search-clear[hidden] { display: none; }
+.tpl-tools { display: flex; align-items: center; gap: 6px; margin-top: var(--sp-1-5); }
+.tpl-sort { flex: 1; min-width: 0; }
+.tpl-fav-only {
+    flex: 0 0 auto; padding: 3px 7px; border: 1px solid var(--border-strong); border-radius: 5px;
+    background: transparent; color: var(--text-3); font-size: var(--fs-10); cursor: pointer;
+}
+.tpl-fav-only[aria-pressed="true"] { color: var(--brand-gold); border-color: var(--brand-gold); background: var(--primary-soft); }
+.tpl-mtime { flex: 0 0 auto; color: var(--text-3); }
+.tpl-fav-star { flex: 0 0 auto; color: var(--brand-gold); font-size: var(--fs-11); }
+.tpl-fav-star[hidden] { display: none; }
 
 .tpl-count {
     flex: 0 0 auto; padding: calc(1px * var(--font-scale)) calc(6px * var(--font-scale)); border-radius: 999px;

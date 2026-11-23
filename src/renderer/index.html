@@ -1222,6 +1222,14 @@
                                 <input type="text" id="tfTemplateSearch" class="ctl-tx tpl-search" placeholder="搜索样式名称 / 标签…" aria-label="搜索已保存的样式" autocomplete="off" />
                                 <button id="btnClearTplSearch" class="tpl-search-clear" type="button" title="清空搜索" aria-label="清空搜索" hidden>×</button>
                             </div>
+                            <div class="tpl-tools">
+                                <select id="cbTplSort" class="ctl-sel tpl-sort" aria-label="样式排序">
+                                    <option value="name">按名称</option>
+                                    <option value="mtime">最近修改</option>
+                                    <option value="recent">最近使用</option>
+                                </select>
+                                <button id="btnTplFavOnly" class="tpl-fav-only" type="button" title="只看收藏的样式" aria-pressed="false">☆ 只看收藏</button>
+                            </div>
                             <div id="lvPresets" class="tpl-list" role="region" aria-label="已保存的样式列表"></div>
                             <div class="tpl-footnote">单击卡片应用 · <b>⋯</b> 重命名 / 删除</div>
                         </div>
@@ -1233,6 +1241,7 @@
                             </div>
                             <div class="btn-row btn-2">
                                 <button class="mini-btn primary" id="btnSaveTemplate">保存</button>
+                                <button class="mini-btn" id="btnSaveTemplateAs" title="用新名字存一份，原来的样式保留">另存为</button>
                             </div>
                             <div class="btn-row btn-2">
                                 <button class="mini-btn" id="btnExportTemplate">导出 .qfs</button>

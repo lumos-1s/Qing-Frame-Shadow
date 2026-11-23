@@ -1158,6 +1158,20 @@ handleIpc('list-templates', () => {
     } catch (e) { return []; }
 });
 
+// 仅供样式列表显示修改时间用；保留 list-templates 原样，免得影响别的调用方
+handleIpc('list-template-meta', () => {
+    try {
+        ensureTemplatesDir();
+        return fs.readdirSync(TEMPLATES_DIR)
+            .filter(f => f.endsWith('.json'))
+            .map(f => {
+                let mtime = 0;
+                try { mtime = fs.statSync(path.join(TEMPLATES_DIR, f)).mtimeMs; } catch (_) { /* 文件刚被删/改名 */ }
+                return { name: f.replace(/\.json$/, ''), mtime: mtime };
+            });
+    } catch (e) { return []; }
+});
+
 handleIpc('load-template', (_e, name) => {
     try {
         const safe = safeLeafName(name, '');
