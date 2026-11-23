@@ -266,7 +266,7 @@
                     <div class="side-subhead">
                         <button id="btnPhotoLibAdd" class="side-title-action" type="button" title="导入更多照片到胶片条">导入照片</button>
                     </div>
-                    <div class="photo-side-hint">点照片放进选中格；Ctrl/Shift + 点可勾选多张，再点布局按勾选顺序铺满。</div>
+                    <div class="photo-side-hint">点照片放进选中格；Ctrl/Shift + 点可勾选多张，再用「一键铺满」按勾选顺序填入。</div>
                     <div id="photoLibGrid" class="photo-lib-grid" role="region" aria-label="照片库"></div>
                 </div>
                 <div id="sidebarResizer" class="side-resizer" title="拖动调整素材栏宽度，双击恢复默认"></div>
@@ -1256,7 +1256,7 @@
                             <div class="pg-title collapsible">拼图布局</div>
                             <div class="el-status" id="lblPuzzleSlot">当前格子：未启用</div>
                             <div class="btn-row btn-12" id="puzzleLayouts"></div>
-                            <div class="pz-hint">点画布选中格子，再点下方照片放入；勾选多张后用「一键铺满」按勾选顺序填入。</div>
+                            <div class="pz-hint">点画布选中格子，再点左侧照片放入；勾选多张后用「一键铺满」按勾选顺序填入。</div>
                             <div class="pz-style-label">风格</div>
                             <div class="btn-row btn-3" id="puzzleStyles"></div>
                             <div class="btn-row btn-2">
@@ -1325,8 +1325,8 @@
                                 </select>
                             </div>
                             <div class="param-row"><label>底色</label><input type="color" id="cpPuzzleBorder" class="ctl-cl" value="#ffffff" title="白色模式下这是整张画布的底色；模糊照片底模式下不生效" /></div>
-                            <div class="param-row"><label>图片偏移 X</label><input type="range" id="slSlotOffsetX" class="ctl-rng" min="-50" max="50" value="0" /><span class="pval" id="lblSlotOffsetX"></span></div>
-                            <div class="param-row"><label>图片偏移 Y</label><input type="range" id="slSlotOffsetY" class="ctl-rng" min="-50" max="50" value="0" /><span class="pval" id="lblSlotOffsetY"></span></div>
+                            <div class="param-row"><label>图片偏移 X</label><input type="range" id="slSlotOffsetX" class="ctl-rng" min="-100" max="100" value="0" /><span class="pval" id="lblSlotOffsetX"></span></div>
+                            <div class="param-row"><label>图片偏移 Y</label><input type="range" id="slSlotOffsetY" class="ctl-rng" min="-100" max="100" value="0" /><span class="pval" id="lblSlotOffsetY"></span></div>
                             <div class="param-row"><label>图片缩放</label><input type="range" id="slSlotZoom" class="ctl-rng" min="100" max="400" value="100" /><span class="pval" id="lblSlotZoom"></span></div>
                             <div class="param-row">
                                 <label>裁剪方式</label>

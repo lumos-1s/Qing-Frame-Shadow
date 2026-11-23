@@ -2030,10 +2030,14 @@ function renderPuzzle(app, compare, noSelection) {
         const im = used[i] || null;
         const rx = r[0], ry = r[1], rw = r[2], rh = r[3];
         if (!im || !photoSrc(im)) {
+            // 导出(noSelection)不画灰块：以前灰块会原样进成品，只有打开文件才发现
+            // 9 宫格多出几个色块。空格直接留底色（模糊底模式则露出虚化背景），
+            // 版式缺角由导出前的确认提示说清，而不是画一块根本不存在的灰。
+            if (noSelection) return;
             ctx.fillStyle = 'rgba(224,224,224,1)';
             ctx.fillRect(rx, ry, rw, rh);
-            // 预览里给空格一个明确入口；导出(noSelection)不画提示
-            if (!noSelection) drawEmptyPuzzleSlot(ctx, rx + gapPx, ry + gapPx, Math.max(1, rw - gapPx * 2), Math.max(1, rh - gapPx * 2), i + 1);
+            // 预览里给空格一个明确入口
+            drawEmptyPuzzleSlot(ctx, rx + gapPx, ry + gapPx, Math.max(1, rw - gapPx * 2), Math.max(1, rh - gapPx * 2), i + 1);
             // 空格也画选中框:点它往往是为了把照片放进这一格
             if (app._activePuzzleSlot === i) drawSlotSel(rx + gapPx, ry + gapPx, Math.max(1, rw - gapPx * 2), Math.max(1, rh - gapPx * 2));
             return;

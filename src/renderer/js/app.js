@@ -3190,14 +3190,33 @@ window.App = {
         this.removeImages(list);
     },
 
-    // 打开图片加入胶片条并设为当前图
+    // 打开图片加入胶片条并设为当前图。
+    // 拼图进行中不切主图：拼图模板挂在当前这张照片上，selectImage 会把整块拼图
+    // 「切走」（模板其实还在原来那张上，只是界面换成新图的默认模板，看着像丢了）。
+    // 这时只追加进胶片条，并顺手补进第一个空格 —— 和点照片库/胶片条是同一套规则。
     async openImage() {
         const res = await window.qingframe.openImage();
         if (!res) return;
         const idx = await this.appendImageFromPick(res);
         if (idx < 0) { this.setStatus('图片加载失败'); return; }
-        this.buildThumbnails();
-        this.selectImage(idx);
+        // 示例图刚被顶替时当前图会为空，拼图得落到这张新图上（与 openSlotImage 一致）
+        if (!this.image && this.images[idx]) { this.image = this.images[idx]; this.currentIdx = idx; }
+        const pk = this.tplPuzzle();
+        if (!pk) { this.buildThumbnails(); this.selectImage(idx); return; }
+        const n = this.puzzleSlotCount(pk.layout || 'single');
+        let slot = null;
+        for (let i = 0; i < n; i++) {
+            const sc = pk.slots[i] || {};
+            if (sc.imageIndex == null && sc.imagePath == null) { slot = i; break; }
+        }
+        if (slot == null) {
+            this.buildThumbnails();
+            this.saveCurrentTemplate();
+            this.scheduleRender(true);
+            this.setStatus('已加入胶片条；格子已放满，点画布选中要替换的格子再点这张照片');
+            return;
+        }
+        this.assignSlotImage(pk, slot, idx);
     },
 
     // 多选导入:第一张成为当前主图,其余按所选顺序追加进胶片条

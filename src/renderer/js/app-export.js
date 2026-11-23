@@ -93,7 +93,8 @@ window.App = Object.assign(window.App || {}, {
             const tpl = this.exportTemplateFor(im, idx, this.currentIdx, this.template);
             const puzzle = !!(tpl && tpl.puzzle && tpl.puzzle.enabled);
             // blank:未设过边框(默认空模板),多图导出时会被静默当成“原图直出”,与预览预期不符
-            jobs.push({ im, puzzle, blank: !this.hasBorderSettings(tpl), useBase: false });
+            jobs.push({ im, puzzle, blank: !this.hasBorderSettings(tpl), useBase: false,
+                emptySlots: puzzle ? this.puzzleEmptySlotCount(tpl) : 0 });
         });
         if (!jobs.length) { this.setStatus('请先导入照片'); return; }
 
@@ -105,6 +106,14 @@ window.App = Object.assign(window.App || {}, {
             const more = blanks.length > 3 ? `…等 ${blanks.length} 张` : `共 ${blanks.length} 张`;
             const ok = window.confirm(`${names}${more}还没有设置边框,默认会按原图导出。\n\n是否改为沿用当前边框设计导出这些照片?`);
             if (ok) blanks.forEach(j => { j.blank = false; j.useBase = true; useBaseCount++; });
+        }
+
+        // 拼图空格:导出已不再画灰块(空格留底色),但版式会缺角。与其等打开文件
+        // 才发现少一块,不如先说清楚,并指出补救入口。取消就从这里退出,不选保存位置。
+        const emptySlots = jobs.reduce((a, j) => a + (j.puzzle ? (j.emptySlots || 0) : 0), 0);
+        if (emptySlots) {
+            const ok = window.confirm(`拼图里还有 ${emptySlots} 个格子没放照片，导出后这几格会留成底色。\n\n继续导出？也可以先点拼图面板的「一键铺满」补齐再导。`);
+            if (!ok) { this.setStatus('已取消导出：拼图还有空格'); return; }
         }
 
         // ① 先在画布外准备好文件名(不触发任何渲染),单文件时作为默认名
@@ -1381,6 +1390,23 @@ window.App = Object.assign(window.App || {}, {
     // 否则当前主图(ownerIdx,导出开始时的图)用 liveTemplate,其余用默认空模板
     exportTemplateFor(im, idx, ownerIdx, liveTemplate) {
         return this.getTpl(im) || (idx === ownerIdx ? liveTemplate : this.defaultTemplate());
+    },
+
+    // 拼图空格数:导出时这些格子会留成底色。判定口径与 engine 的 used[] 一致
+    // (imageIndex 优先,imagePath 按文件名找),否则提醒的数字会和成品对不上。
+    puzzleEmptySlotCount(tpl) {
+        const pk = tpl && tpl.puzzle;
+        if (!pk || !pk.enabled) return 0;
+        const n = this.puzzleSlotCount(pk.layout || 'single');
+        const slots = pk.slots || {};
+        let empty = 0;
+        for (let i = 0; i < n; i++) {
+            const sc = slots[i] || {};
+            if (sc.imageIndex != null && this.images[sc.imageIndex]) continue;
+            if (sc.imagePath && this.images.some(x => x.name === sc.imagePath)) continue;
+            empty++;
+        }
+        return empty;
     },
 
     // 导出进度:进度条 + 底部“第 n / N 张”标签
