@@ -3748,6 +3748,7 @@ bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
         const gridRenderEl = document.getElementById('selGridRender');
         if (gridRenderEl) gridRenderEl.addEventListener('change', () => {
             if (typeof this.invalidateGridCache === 'function') this.invalidateGridCache();
+            if (typeof this.updateGridPadLabel === 'function') this.updateGridPadLabel();
             if (typeof this.saveGridPrefs === 'function') this.saveGridPrefs();
         });
         ['inpGridCols', 'inpGridRows'].forEach(id => {
@@ -3765,10 +3766,19 @@ bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
         });
         const padEl = document.getElementById('slGridPad');
         if (padEl) padEl.addEventListener('input', () => {
-            const lbl = document.getElementById('lblGridPad');
-            if (lbl) lbl.textContent = padEl.value;
+            if (typeof this.updateGridPadLabel === 'function') this.updateGridPadLabel();
             if (typeof this.invalidateGridCache === 'function') this.invalidateGridCache();
             if (typeof this.saveGridPrefs === 'function') this.saveGridPrefs();
+        });
+        // 构图偏移：只影响切块，不进撤销栈；改了就作废旧预览
+        ['slGridOffsetX', 'slGridOffsetY'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', () => {
+                if (typeof this.invalidateGridCache === 'function') this.invalidateGridCache();
+                if (typeof this.updateGridOffsetLabels === 'function') this.updateGridOffsetLabels();
+                if (typeof this.saveGridPrefs === 'function') this.saveGridPrefs();
+            });
         });
         const subEl = document.getElementById('cbGridSubdir');
         if (subEl) subEl.addEventListener('change', () => { if (typeof this.saveGridPrefs === 'function') this.saveGridPrefs(); });
@@ -3778,9 +3788,14 @@ bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
             const cell = e.target.closest('.grid-preview-cell');
             if (!cell || !cell._cv) return;
             const img = document.getElementById('gridPreviewZoomImg');
-            img.src = cell._cv.toDataURL('image/jpeg', 0.92);
+            // 放大看的是真实导出格式与质量，不再拿 JPEG 0.8 缩略图糊弄 —— 细线条会被误判
+            const fmt = (this.dom.selFormat && this.dom.selFormat.value) || 'jpeg';
+            const mime = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[fmt] || 'image/jpeg';
+            const q = (fmt === 'jpeg' || fmt === 'webp')
+                ? Math.min(1, Math.max(0.6, (parseInt(this.dom.slExportQuality.value, 10) || 92) / 100)) : 1;
+            img.src = cell._cv.toDataURL(mime, q);
             const cap = document.getElementById('gridPreviewZoomCap');
-            if (cap) cap.textContent = '第 ' + cell._idx + ' 块 · ' + cell._cv.width + '×' + cell._cv.height + 'px';
+            if (cap) cap.textContent = '第 ' + cell._idx + ' 块 · ' + cell._cv.width + '×' + cell._cv.height + 'px · ' + fmt.toUpperCase() + ' 导出画质';
             const zoom = document.getElementById('gridPreviewZoom');
             if (zoom) zoom.style.display = 'block';
             const hint = document.getElementById('gridPreviewHint');

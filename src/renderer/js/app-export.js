@@ -420,14 +420,23 @@ window.App = Object.assign(window.App || {}, {
     // 预览缓存失效:改了规格/留白/渲染长边后,导出不能继续用旧切块
     invalidateGridCache() { this._gridBlocks = null; this._gridCacheKey = ''; },
 
+    // 画面本身变了（调色/边框/字幕/撤销），预览里的切块同样过期。
+    // 缓存键只含行列/留白，不会自己发现这点，所以由提交侧显式递增一个版本。
+    bumpGridArtVersion() {
+        this._gridArtVersion = (this._gridArtVersion || 0) + 1;
+        this.invalidateGridCache();
+    },
+
     // 切图渲染长边:3000/4000/6000/原图(封顶 12000 防爆内存)
-    gridRenderMax() {
+    // im:批量切图时传当前那张，「原图分辨率」要按它自己的长边算
+    gridRenderMax(im) {
         const el = document.getElementById('selGridRender');
         const v = (el && el.value) || '3000';
         if (v === 'original') {
-            const im = this.image;
-            const len = im && im.el ? Math.max(im.el.naturalWidth || 0, im.el.naturalHeight || 0) : 3000;
-            return Math.max(3000, Math.min(len, 12000));
+            const src = im || this.image;
+            const len = src && src.el ? Math.max(src.el.naturalWidth || 0, src.el.naturalHeight || 0) : 0;
+            // 原图档就是原图长边：小图不再被强行抬到 3000（抬了大图反而被截成 3000）
+            return Math.max(1, Math.min(len || 3000, 12000));
         }
         return Math.max(1000, Math.min(parseInt(v, 10) || 3000, 12000));
     },
@@ -435,20 +444,55 @@ window.App = Object.assign(window.App || {}, {
     // 块间留白 px(每块四周白边,拼贴无缝)
     gridPad() { return parseInt((document.getElementById('slGridPad') && document.getElementById('slGridPad').value) || '0', 10) || 0; },
 
+    // 构图偏移（%）：正=画面内容右移/下移（裁掉左/上），负=左移/上移
+    gridOffset() {
+        const read = (id) => {
+            const el = document.getElementById(id);
+            const n = parseInt(el && el.value, 10);
+            return Number.isFinite(n) ? Math.max(-40, Math.min(40, n)) : 0;
+        };
+        return { x: read('slGridOffsetX'), y: read('slGridOffsetY') };
+    },
+
+    updateGridOffsetLabels() {
+        const o = this.gridOffset();
+        const fmt = (v, pos, neg) => v > 0 ? pos + ' ' + v + '%' : v < 0 ? neg + ' ' + (-v) + '%' : '不偏移';
+        const x = document.getElementById('lblGridOffsetX');
+        const y = document.getElementById('lblGridOffsetY');
+        if (x) x.textContent = fmt(o.x, '右移', '左移');
+        if (y) y.textContent = fmt(o.y, '下移', '上移');
+    },
+
+    // 留白是绝对像素，同样的 12 在 1200px 与 4000px 图上差三倍；
+    // 标签补上相对渲染长边的百分比，让这个数字有尺度感。
+    updateGridPadLabel() {
+        const el = document.getElementById('slGridPad');
+        const lbl = document.getElementById('lblGridPad');
+        if (!el || !lbl) return;
+        const pad = parseInt(el.value, 10) || 0;
+        const pct = (pad * 2 / Math.max(1, this.gridRenderMax()) * 100).toFixed(1);
+        lbl.textContent = pad + 'px · ' + pct + '%';
+    },
+
     // 分文件夹导出开关
     gridSubdir() { const cb = document.getElementById('cbGridSubdir'); return !!(cb && cb.checked); },
 
     // 渲染一帧切图用画布(长边由 gridRenderMax 决定;JPG 垫白底防透明区转黑)
-    async _renderGridFrame() {
-        const prevMax = this.displayMax, prevDpr = this.uiDprOverride;
-        this.displayMax = this.gridRenderMax();
+    // im:当前要切的照片；批量时每张各自传，免得「原图分辨率」按错图算
+    async _renderGridFrame(im) {
+        const prevMax = this.displayMax, prevDpr = this.uiDprOverride, prevScale = this.exportScale;
+        const maxSide = this.gridRenderMax(im);
+        this.displayMax = maxSide;
         this.uiDprOverride = 1;
+        // setupCanvas 只认 exportScale 才能把小图**放大**到所选长边；
+        // displayMax 只能缩小，旧实现只设它 → 3000/4000/6000/原图四档输出全是原尺寸。
+        // 显式覆盖还顺手清掉上一次主导出残留的 exportScale（曾导致界面选 3000、
+        // 实际写出 4000 的怪事）。
+        this.exportScale = maxSide;
         try {
-            // 同上：切图导出的是成品像素，引擎取源不能是 1600px 的低采样版。
-            // 逐张补全分辨率烘焙（已烘好的会直接跳过，不重复算）。
-            for (const im of (this.images || [])) {
-                if (window.ensureFullGrade) window.ensureFullGrade(im);
-            }
+            // 批量时只补全当前这张：一次把 20 张全解成全尺寸会白涨一大截内存
+            const cur = im || this.image;
+            if (cur && window.ensureFullGrade) window.ensureFullGrade(cur);
             await this._awaitFrameRender();
             let src = this.dom.canvas;
             if (this.dom.selFormat.value === 'jpeg') {
@@ -463,22 +507,30 @@ window.App = Object.assign(window.App || {}, {
         } finally {
             if (prevMax === undefined) delete this.displayMax; else this.displayMax = prevMax;
             if (prevDpr === undefined) delete this.uiDprOverride; else this.uiDprOverride = prevDpr;
+            if (prevScale === undefined) delete this.exportScale; else this.exportScale = prevScale;
         }
     },
 
-    // 把 src 切成 rows×cols,返回每块 canvas(行优先 1..rows*cols;最后一行/列取剩余尺寸防漏缝;
+    // 把 src 的「切分区域」切成 rows×cols,返回每块 canvas(行优先 1..rows*cols;最后一行/列取剩余尺寸防漏缝;
     // pad>0 时每块四周加 pad px 白边,拼贴无缝)
-    _sliceGrid(src, rows, cols, pad) {
+    // offX/offY(%):正=内容右移/下移,等效于裁掉左/上那一边；切分区域始终留在画布内。
+    _sliceGrid(src, rows, cols, pad, offX, offY) {
         const cw = src.width, ch = src.height;
         const rn = Math.max(1, Math.min(12, rows | 0 || 1));
         const cn = Math.max(1, Math.min(12, cols | 0 || 1));
         const p = pad || 0;
+        const ox = Math.max(-40, Math.min(40, Number(offX) || 0)) / 100;
+        const oy = Math.max(-40, Math.min(40, Number(offY) || 0)) / 100;
+        const sx = Math.round((ox > 0 ? ox : 0) * cw);
+        const sy = Math.round((oy > 0 ? oy : 0) * ch);
+        const sw = Math.max(1, cw - Math.round(Math.abs(ox) * cw));
+        const sh = Math.max(1, ch - Math.round(Math.abs(oy) * ch));
         const out = [];
         for (let r = 0; r < rn; r++) {
-            const y = Math.round(r * ch / rn), y2 = Math.round((r + 1) * ch / rn);
+            const y = sy + Math.round(r * sh / rn), y2 = sy + Math.round((r + 1) * sh / rn);
             const h = Math.max(1, y2 - y);
             for (let c = 0; c < cn; c++) {
-                const x = Math.round(c * cw / cn), x2 = Math.round((c + 1) * cw / cn);
+                const x = sx + Math.round(c * sw / cn), x2 = sx + Math.round((c + 1) * sw / cn);
                 const w = Math.max(1, x2 - x);
                 const cv = document.createElement('canvas');
                 const g = cv.getContext('2d');
@@ -500,7 +552,8 @@ window.App = Object.assign(window.App || {}, {
 
     // 按当前导出格式/质量把缓存切块转成可写盘文件
     // im:这些切块源自哪张照片(切图是同源裁切,EXIF 仍跟随它的主照片)
-    _gridFiles(baseName, subdir, im) {
+    // pick:预览里勾选的 0-based 块号；不传=全部。文件名沿用原块号，和预览对得上。
+    _gridFiles(baseName, subdir, im, pick) {
         baseName = this.safeExportBase(baseName);
         const fmt = this.dom.selFormat.value;
         const mime = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[fmt] || 'image/jpeg';
@@ -508,14 +561,21 @@ window.App = Object.assign(window.App || {}, {
         const ex = this._exportExifFor(im);
         const label = this.gridLabel();
         const cs = this.exportColorSpace();
-        return this._gridBlocks.map((cv, i) => Object.assign({
-            data: this.applyExportColorSpace(cv).toDataURL(mime, quality).split(',')[1],
-            colorSpace: cs,
-            filename: baseName + '_' + label + '_' + (i + 1) + '.' + this._gridExt(),
-            stem: baseName + '_' + label + '_' + (i + 1),
-            ext: this._gridExt(),
-            subdir: subdir || ''
-        }, ex));
+        const all = this._gridBlocks || [];
+        const idxs = (pick && pick.length) ? pick : all.map((_, i) => i);
+        return idxs.map(i => {
+            const cv = all[i];
+            if (!cv) return null;
+            const n = i + 1;
+            return Object.assign({
+                data: this.applyExportColorSpace(cv).toDataURL(mime, quality).split(',')[1],
+                colorSpace: cs,
+                filename: baseName + '_' + label + '_' + n + '.' + this._gridExt(),
+                stem: baseName + '_' + label + '_' + n,
+                ext: this._gridExt(),
+                subdir: subdir || ''
+            }, ex);
+        }).filter(Boolean);
     },
 
     // 预览:渲染一帧 → 切块 → 弹缩略图 modal(缓存供导出复用)
@@ -524,10 +584,11 @@ window.App = Object.assign(window.App || {}, {
         if (this._gridBusy) return;
         this._gridBusy = true;
         const { rows, cols } = this.gridSpec();
+        const off = this.gridOffset();
         this.setStatus('正在渲染切图…');
         try {
-            const src = await this._renderGridFrame();
-            const blocks = this._sliceGrid(src, rows, cols, this.gridPad());
+            const src = await this._renderGridFrame(this.image);
+            const blocks = this._sliceGrid(src, rows, cols, this.gridPad(), off.x, off.y);
             const box = document.getElementById('gridPreviewGrid');
             if (!box) { return; }
             // 自定义网格的列数不固定:用行内网格列数,替代原来的 n2/n3/n4 固定类
@@ -540,6 +601,15 @@ window.App = Object.assign(window.App || {}, {
                 const cell = document.createElement('div');
                 cell.className = 'grid-preview-cell';
                 cell._cv = cv; cell._idx = i + 1;
+                // 勾选框压在缩略图上：九宫格常常只想导出其中几块
+                const pick = document.createElement('input');
+                pick.type = 'checkbox';
+                pick.className = 'grid-pick';
+                pick.checked = true;
+                pick.title = '只导出勾选的块';
+                pick.addEventListener('click', (e) => { e.stopPropagation(); });
+                pick.addEventListener('change', () => this.updateGridPickUI());
+                cell.appendChild(pick);
                 const img = document.createElement('img');
                 img.src = cv.toDataURL('image/jpeg', 0.8);
                 const cap = document.createElement('div');
@@ -550,13 +620,15 @@ window.App = Object.assign(window.App || {}, {
             });
             const label = this.gridLabel();
             const hint = document.getElementById('gridPreviewHint');
-            if (hint) hint.textContent = '共 ' + blocks.length + ' 格（' + cols + ' 列 × ' + rows + ' 行）· 每格约 ' + blocks[0].width + '×' + blocks[0].height + 'px · 导出文件名 ' + baseName + '_' + label + '_1..' + blocks.length + '.' + ext;
+            if (hint) hint.textContent = '共 ' + blocks.length + ' 格（' + cols + ' 列 × ' + rows + ' 行）· 每格约 ' + blocks[0].width + '×' + blocks[0].height
+                + 'px · 文件名 ' + baseName + '_' + label + '_1..' + blocks.length + '.' + ext + ' · 可取消勾选只导出其中几块';
             const title = document.getElementById('gridPreviewTitle');
             if (title) title.textContent = '切图预览 · ' + cols + ' 列 × ' + rows + ' 行';
             const expBtn = document.getElementById('btnGridPreviewExport');
             if (expBtn) expBtn.textContent = '导出这 ' + blocks.length + ' 张';
+            this.updateGridPickUI();
             this._gridBlocks = blocks;
-            this._gridCacheKey = rows + 'x' + cols + '@' + this.gridPad();
+            this._gridCacheKey = rows + 'x' + cols + '@' + this.gridPad() + ':' + off.x + ',' + off.y;
             document.getElementById('gridPreviewModal').style.display = 'flex';
             this.setStatus('已生成切图预览,确认后导出');
         } catch (e) {
@@ -564,6 +636,31 @@ window.App = Object.assign(window.App || {}, {
             this.setStatus('切图预览失败');
         } finally { this._gridBusy = false; }
         this.resetProgress(); this.updateStatusBar();
+    },
+
+    // 预览里勾选了哪几块：全选返回 null（沿用原路径），否则返回 0-based 索引
+    gridPickedIndexes() {
+        const cells = Array.from(document.querySelectorAll('#gridPreviewGrid .grid-preview-cell'));
+        if (!cells.length) return null;
+        const idxs = [];
+        cells.forEach((c, i) => {
+            const cb = c.querySelector('.grid-pick');
+            if (!cb || cb.checked) idxs.push(i);
+        });
+        return idxs.length === cells.length ? null : idxs;
+    },
+
+    updateGridPickUI() {
+        const cells = document.querySelectorAll('#gridPreviewGrid .grid-preview-cell');
+        const picked = Array.from(cells).filter(c => {
+            const cb = c.querySelector('.grid-pick');
+            return cb && cb.checked;
+        }).length;
+        const btn = document.getElementById('btnGridPreviewExport');
+        if (btn) btn.textContent = (picked === cells.length)
+            ? ('导出这 ' + cells.length + ' 张')
+            : ('导出选中的 ' + picked + ' 张');
+        return picked;
     },
 
     hideGridPreview() {
@@ -599,8 +696,9 @@ window.App = Object.assign(window.App || {}, {
         const { rows, cols } = this.gridSpec();
         const gridCount = rows * cols;
         const pad = this.gridPad();
+        const off = this.gridOffset();
         const gridLabel = this.gridLabel();
-        const cacheKey = rows + 'x' + cols + '@' + pad;
+        const cacheKey = rows + 'x' + cols + '@' + pad + ':' + off.x + ',' + off.y;
         let offWrite = null;
         try {
             if (targets.length > 1) {
@@ -638,8 +736,8 @@ window.App = Object.assign(window.App || {}, {
                         this.template = srcTpl ? JSON.parse(JSON.stringify(srcTpl)) : baseTemplate;
                         this.normalizeTemplate && this.normalizeTemplate();
                         this.showExportProgress(k, targetIdxs.length, im.name);
-                        const src = await this._renderGridFrame();
-                        const blocks = this._sliceGrid(src, rows, cols, pad);
+                        const src = await this._renderGridFrame(im);
+                        const blocks = this._sliceGrid(src, rows, cols, pad, off.x, off.y);
                         if (blocks[0]) { lastW = blocks[0].width; lastH = blocks[0].height; }
                         this._gridBlocks = blocks;
                         const baseName = this.safeExportBase(im.name || ('photo' + (idx + 1)));
@@ -666,14 +764,16 @@ window.App = Object.assign(window.App || {}, {
             if (!blocks) {
                 this.setStatus('正在渲染切图…');
                 this.showExportProgress(0, 1, this.image.name);
-                const src = await this._renderGridFrame();
-                blocks = this._sliceGrid(src, rows, cols, pad);
+                const src = await this._renderGridFrame(this.image);
+                blocks = this._sliceGrid(src, rows, cols, pad, off.x, off.y);
                 this._gridBlocks = blocks;
                 this._gridCacheKey = cacheKey;
             }
 
             const baseName = this.safeExportBase(this.image.name || 'photo');
-            const files = this._gridFiles(baseName, this.gridSubdir() ? baseName : '', this.image);
+            // 预览里取消勾选的块不写盘；没开过预览就按全部导出
+            const picked = this.gridPickedIndexes();
+            const files = this._gridFiles(baseName, this.gridSubdir() ? baseName : '', this.image, picked);
             const loc = await window.qingframe.pickExportLocation({ count: files.length, hintName: baseName + '_' + gridLabel });
             if (!loc || loc.canceled) { this.setStatus('已取消切图'); this.scheduleRender(true); return; }
             {
@@ -717,8 +817,8 @@ window.App = Object.assign(window.App || {}, {
             const chk = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.checked = !!v; };
             set('selGridSize', p.size); set('selGridRender', p.render); set('slGridPad', p.pad); chk('cbGridSubdir', p.subdir);
             set('inpGridCols', p.cols); set('inpGridRows', p.rows);
-            const lbl = document.getElementById('lblGridPad');
-            if (lbl) lbl.textContent = (document.getElementById('slGridPad') && document.getElementById('slGridPad').value) || '0';
+            set('slGridOffsetX', p.offX); set('slGridOffsetY', p.offY);
+            this.updateGridPadLabel(); this.updateGridOffsetLabels();
             this.syncGridCustomUI();
         } catch (e) { console.warn('loadGridPrefs:', e); }
     },
@@ -729,7 +829,8 @@ window.App = Object.assign(window.App || {}, {
             const chk = (id) => { const el = document.getElementById(id); return el ? el.checked : undefined; };
             localStorage.setItem('qfs-grid-prefs', JSON.stringify({
                 size: g('selGridSize'), render: g('selGridRender'), pad: g('slGridPad'), subdir: chk('cbGridSubdir'),
-                cols: g('inpGridCols'), rows: g('inpGridRows')
+                cols: g('inpGridCols'), rows: g('inpGridRows'),
+                offX: g('slGridOffsetX'), offY: g('slGridOffsetY')
             }));
         } catch (e) { console.warn('saveGridPrefs:', e); }
     },

@@ -1389,6 +1389,8 @@
                                 </select>
                             </div>
                             <div class="param-row"><label>块间留白</label><input type="range" id="slGridPad" class="ctl-rng" min="0" max="12" value="0" /><span class="pval" id="lblGridPad"></span></div>
+                            <div class="param-row"><label>水平偏移</label><input type="range" id="slGridOffsetX" class="ctl-rng" min="-40" max="40" value="0" title="正值 = 画面内容右移（从左侧裁掉）；负值 = 内容左移。用来把主体从切分线上挪开" /><span class="pval" id="lblGridOffsetX"></span></div>
+                            <div class="param-row"><label>垂直偏移</label><input type="range" id="slGridOffsetY" class="ctl-rng" min="-40" max="40" value="0" title="正值 = 画面内容下移（从顶部裁掉）；负值 = 内容上移" /><span class="pval" id="lblGridOffsetY"></span></div>
                             <div class="param-row chk-row">
                                 <label>分文件夹导出</label>
                                 <input type="checkbox" id="cbGridSubdir" class="ctl-chk" />
@@ -1398,7 +1400,7 @@
                                 <button class="mini-btn" id="btnGridPreview">切分预览</button>
                                 <button class="mini-btn primary" id="btnGridExport">导出切图</button>
                             </div>
-                            <div class="hint-box">单张：先预览全部切块再导出；胶片条 Ctrl/Shift 多选：跳过预览，批量每张按同一规格切。切分规格支持 2×2 / 3×3 / 4×4，也可自定义列 × 行（各 1–12，横竖不必相同）。留白让每块自带白边，适合直接发拼图。</div>
+                            <div class="hint-box">单张：先预览全部切块再导出，预览里可取消勾选只导出其中几块；胶片条 Ctrl/Shift 多选：跳过预览，批量每张按同一规格切。切分规格支持 2×2 / 3×3 / 4×4，也可自定义列 × 行（各 1–12，横竖不必相同）。留白让每块自带白边；偏移把主体从切分线上挪开，正值是内容右移/下移。</div>
                         </div>
                     </div>
 

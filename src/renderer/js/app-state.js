@@ -54,6 +54,8 @@ window.App = Object.assign(window.App || {}, {
     onSettingCommit() {
         if (!this._gesture) this.pushUndo();
         this._commit();
+        // 画面提交了就作废切图预览缓存：它的键只含行列/留白，发现不了画面变了
+        if (this.bumpGridArtVersion) this.bumpGridArtVersion();
     },
 
     // 手势开始:滑块 pointerdown / 文本框 focus / 数值框首次输入时压入手势前快照
@@ -170,6 +172,7 @@ window.App = Object.assign(window.App || {}, {
         const nowPuzzle = !!(this.template && this.template.puzzle && this.template.puzzle.enabled);
         if (hadPuzzle && !nowPuzzle) this.setStatus('已撤销：拼图已撤掉，按 Ctrl+Y 可恢复');
         else this.setStatus('已撤销');
+        if (this.bumpGridArtVersion) this.bumpGridArtVersion();
     },
 
     redo() {
@@ -186,6 +189,7 @@ window.App = Object.assign(window.App || {}, {
         this.refreshUI();
         this.scheduleRender(true);
         this.setStatus('已重做');
+        if (this.bumpGridArtVersion) this.bumpGridArtVersion();
     },
 
     updateHistoryButtons() {

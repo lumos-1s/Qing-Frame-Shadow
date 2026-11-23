@@ -2480,7 +2480,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 .grid-preview-card { width: 560px; max-width: 92vw; max-height: 86vh; overflow: auto; }
 .grid-preview-hint { color: var(--text-3); font-size: var(--fs-12); margin-bottom: var(--sp-2-5); }
 .grid-preview-grid { display: grid; gap: var(--sp-2); grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.grid-preview-cell { background: var(--bg); border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; }
+.grid-preview-cell { background: var(--bg); border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; position: relative; }
+.grid-pick { position: absolute; top: 5px; left: 5px; z-index: 2; width: 15px; height: 15px; margin: 0; accent-color: var(--brand-gold); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
 .grid-preview-cell img { width: 100%; display: block; }
 .grid-preview-cap { padding: 5px var(--sp-1-5); font-size: var(--fs-11); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-2-5); margin-top: 14px; }
