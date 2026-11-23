@@ -181,12 +181,24 @@ function decodeDataUrl(s) {
     return { mime: m[1].toLowerCase(), buffer: Buffer.from(m[2], 'base64') };
 }
 
+// 取回模型给的图片地址。有的网关直接返回预签名 URL（不需要鉴权），有的是自家
+// 需要 Bearer 的接口。只在与 baseUrl 同源时带上 Key 与自定义头——否则等于把
+// 凭据发给一个响应里随便写的地址，那是最典型的凭据外泄路径。
+function sameOrigin(a, b) {
+    try { return new URL(String(a)).origin === new URL(normBase(b)).origin; }
+    catch (_) { return false; }
+}
+
 async function fetchAsDataUrl(url, cfg, timeoutMs) {
     const ms = Math.max(3000, Math.min(120000, Number(timeoutMs) || 30000));
     const ac = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ac ? setTimeout(() => ac.abort(), ms) : null;
     try {
-        const res = await fetch(String(url), { headers: extraHeaders(cfg), signal: ac ? ac.signal : undefined });
+        const trust = sameOrigin(url, cfg && cfg.baseUrl);
+        const h = trust ? extraHeaders(cfg) : {};
+        const key = String((cfg && cfg.apiKey) || '').trim();
+        if (key && trust) h.Authorization = 'Bearer ' + key;
+        const res = await fetch(String(url), { headers: h, signal: ac ? ac.signal : undefined });
         if (!res.ok) return { ok: false, error: '取图失败 HTTP ' + res.status };
         const buf = Buffer.from(await res.arrayBuffer());
         const mime = String((res.headers && res.headers.get && res.headers.get('content-type')) || 'image/png').split(';')[0];
