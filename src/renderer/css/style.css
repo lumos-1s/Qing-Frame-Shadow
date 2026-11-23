@@ -321,11 +321,24 @@ html.dark .inline-select { color-scheme: dark; }
     letter-spacing: .3px; color: var(--text);
 }
 .side-search { padding: var(--sp-1) var(--sp-3) var(--sp-3); }
-.side-search input {
-    width: 100%; border: 1px solid var(--border); border-radius: 10px;
+.side-search-row { display: flex; align-items: center; gap: 6px; }
+.side-search-row input {
+    flex: 1; min-width: 0; width: 100%; border: 1px solid var(--border); border-radius: 10px;
     background: var(--surface-alt); padding: calc(7px * var(--font-scale)) calc(11px * var(--font-scale)); font-size: var(--fs-12); color: var(--text);
     outline: none; transition: all .15s;
 }
+/* 「我的样式」是跳到右侧样式页签的入口，收进搜索框同一行，别再单独占一行悬着 */
+.side-search-action {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px;
+    padding: calc(6px * var(--font-scale)) calc(8px * var(--font-scale));
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface-alt); color: var(--text-2);
+    font: inherit; font-size: var(--fs-11); white-space: nowrap; cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+}
+.side-search-action .sa-arrow { color: var(--text-3); font-size: var(--fs-13); line-height: 1; }
+.side-search-action:hover { border-color: var(--primary); color: var(--primary-text); background: var(--primary-soft); }
+.side-search-action:hover .sa-arrow { color: var(--primary-text); }
 .side-search input::placeholder { color: var(--text-3); }
 .side-search input:focus { border-color: var(--primary); background: var(--surface); box-shadow: 0 0 0 3px var(--primary-soft); }
 #sideBorderBody .side-search { padding-bottom: var(--sp-2); }
