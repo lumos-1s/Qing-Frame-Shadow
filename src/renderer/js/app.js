@@ -741,6 +741,13 @@ window.App = {
             const btn = e.target.closest('.tab[data-tab]');
             if (btn) this.switchTab(btn.dataset.tab);
         });
+        const canvasSubTabs = this.$('canvasSubTabs');
+        if (canvasSubTabs) {
+            canvasSubTabs.addEventListener('click', e => {
+                const btn = e.target.closest('[data-subtab]');
+                if (btn) this.setCanvasSubTab(btn.dataset.subtab);
+            });
+        }
         const myTemplates = this.$('btnMyTemplates');
         if (myTemplates) myTemplates.addEventListener('click', () => this.switchTab('template'));
         // 对比原图:Pointer 统一鼠标/触屏;另支持 空格 按住短按。
@@ -2150,6 +2157,8 @@ window.App = {
     // 否则用户到了画布页签还是看不到目标，等于没跳。
     gotoBlurTextGroup() {
         this.switchTab('canvas');
+        // 边框子页里没有这组滑块，先回到「画布与照片」再滚。
+        this.setCanvasSubTab('basic');
         const grp = document.getElementById('grpBlurText');
         if (!grp) return;
         grp.classList.remove('collapsed');

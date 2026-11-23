@@ -335,6 +335,7 @@
                         <div class="ph-formats">支持 JPG / PNG / WebP / BMP / HEIC 与 RAW，可拖入整个文件夹</div>
                     </div>
                 </div>
+                <!-- 胶片条挂在画布卡片外，拼图铺满时不压格子：stage 高度预留了底部空间。 -->
                 <div id="thumbStrip" class="thumb-strip"></div>
                 <div id="dropOverlay" class="drop-overlay"><div>松手导入照片</div></div>
                 <div id="importProgress" class="import-progress" style="display:none">
@@ -356,7 +357,8 @@
                     <button class="tab" data-tab="text" role="tab" aria-selected="false">文字</button>
                     <button class="tab" data-tab="grade" role="tab" aria-selected="false" title="调色：像素调色（曝光/曲线/锐化/校准/混色器）+ 氛围（暗角/漏光/颗粒）">调色</button>
                     <button class="tab" data-tab="logo" role="tab" aria-selected="false">Logo</button>
-                    <!-- 拼图/切图是干活入口，提到主位用图标页签省宽度；边框参数这种低频调参收进「更多」 -->
+                    <!-- 拼图/切图是干活入口，提到主位用图标页签省宽度。
+                         边框参数并回「画布」页里的子页签，不再藏两级菜单。 -->
                     <button class="tab tab-icon" data-tab="puzzle" role="tab" aria-selected="false" aria-label="拼图" title="拼图：把多张照片拼成一张成品">
                         <svg class="tab-ico" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
                     </button>
@@ -366,7 +368,6 @@
                     <div class="tab-more-wrap" id="tabMoreWrap">
                         <button class="tab tab-more" id="btnTabMore" type="button" aria-haspopup="true" aria-expanded="false" title="更多页签与工具">更多 ▾</button>
                         <div class="tab-more-menu" id="tabMoreMenu" hidden>
-                            <button class="tab tab-overflow" data-tab="border" role="tab" aria-selected="false" title="边框参数：可编辑边框的填充、描边、圆角、阴影">边框参数</button>
                             <button class="tab tab-overflow" data-tab="template" role="tab" aria-selected="false" title="我的样式：保存 / 导入 / 管理模板">样式</button>
                             <div class="tab-more-sep" role="separator"></div>
                             <button type="button" class="tab-more-action" id="btnMenuFoldReset" title="把低频参数组恢复成默认收起">恢复默认折叠</button>
@@ -383,120 +384,252 @@
 
                     <!-- ══ Tab1 画布 / 照片 ══ -->
                     <div class="tab-panel active" id="panel-canvas">
-                        <div class="param-empty-note">导入照片后即可调节画布与照片</div>
-                        <div class="param-group">
-                            <div class="pg-title collapsible">画布与照片</div>
-                            <div class="photo-meta" id="photoMeta"><span id="photoMetaText">未导入照片</span></div>
-                            <div class="param-row">
-                                <label>画布比例</label>
-                                <select id="cbCanvasRatio" class="ctl-sel">
-                                    <option value="original">原始</option>
-                                    <option value="1:1">1:1</option>
-                                    <option value="4:3">4:3</option>
-                                    <option value="3:4">3:4</option>
-                                    <option value="16:9">16:9</option>
-                                    <option value="9:16">9:16</option>
-                                    <option value="2.35:1">2.35:1</option>
-                                </select>
+                        <div class="canvas-subtabs" id="canvasSubTabs" role="tablist" aria-label="画布设置">
+                            <button class="canvas-subtab active" type="button" data-subtab="basic" role="tab" aria-selected="true">画布与照片</button>
+                            <button class="canvas-subtab" type="button" data-subtab="border" role="tab" aria-selected="false" title="可编辑边框：填充、描边、圆角、阴影、发光">边框</button>
+                        </div>
+                        <div class="canvas-sub active" id="canvasSubBasic">
+                            <div class="param-empty-note">导入照片后即可调节画布与照片</div>
+                            <div class="param-group">
+                                <div class="pg-title collapsible">画布与照片</div>
+                                <div class="photo-meta" id="photoMeta"><span id="photoMetaText">未导入照片</span></div>
+                                <div class="param-row">
+                                    <label>画布比例</label>
+                                    <select id="cbCanvasRatio" class="ctl-sel">
+                                        <option value="original">原始</option>
+                                        <option value="1:1">1:1</option>
+                                        <option value="4:3">4:3</option>
+                                        <option value="3:4">3:4</option>
+                                        <option value="16:9">16:9</option>
+                                        <option value="9:16">9:16</option>
+                                        <option value="2.35:1">2.35:1</option>
+                                    </select>
+                                </div>
+                                <div class="param-row chk-row" id="rowCanvasSync">
+                                    <label>照片同步画幅</label>
+                                    <input type="checkbox" id="cbCanvasSync" class="ctl-chk" title="选非「原始」画布比例时，照片自动按画布比例裁切填满（不留空白，照片超出部分裁掉）；关闭则照片保持完整，四周可能留白" />
+                                </div>
+                                <div class="param-row" id="rowGlobalMargin">
+                                    <label>边距大小</label>
+                                    <input type="range" id="slGlobalMargin" class="ctl-rng" min="10" max="300" step="1" value="100" />
+                                    <span class="pval" id="lblGlobalMargin"></span>
+                                </div>
+                                <div class="hint-box">同时放大或缩小照片四周的边距；100% 为该边框的默认边距。</div>
+                                <div class="param-row" id="rowImgScale">
+                                    <label>图片缩放</label>
+                                    <input type="range" id="slImgScale" class="ctl-rng" min="10" max="150" step="1" value="100" />
+                                    <span class="pval" id="lblImgScale"></span>
+                                </div>
+                                <div class="param-row" id="rowCornerRadius">
+                                    <label>照片圆角</label>
+                                    <input type="range" id="slCornerRadius" class="ctl-rng" min="0" max="500" value="0" />
+                                    <span class="pval" id="lblCornerRadius"></span>
+                                </div>
+                                <!-- 裁切属于"对照片本身动手"，和上面的缩放/圆角同一族；顶部工具栏留给文件级操作 -->
+                                <button id="btnCrop" class="mini-btn block" type="button"
+                                        title="裁切照片：拖动框与手柄，方向键微调，Enter 应用 / Esc 取消">裁切照片…</button>
+                                <button id="btnRestoreOriginal" class="mini-btn block" type="button" hidden
+                                        title="回到裁切 / 旋转之前的原图">还原原图</button>
                             </div>
-                            <div class="param-row chk-row" id="rowCanvasSync">
-                                <label>照片同步画幅</label>
-                                <input type="checkbox" id="cbCanvasSync" class="ctl-chk" title="选非「原始」画布比例时，照片自动按画布比例裁切填满（不留空白，照片超出部分裁掉）；关闭则照片保持完整，四周可能留白" />
+
+                            <div class="param-group">
+                                <div class="pg-title collapsible">背景模糊</div>
+                                <div class="param-row chk-row" id="rowBgBlur" style="display:none;">
+                                    <label>背景模糊</label>
+                                    <input type="checkbox" id="chkBgBlur" class="ctl-chk" />
+                                    <button type="button" class="mini-btn chk-default-btn" id="btnBgBlurDefault" aria-pressed="false" title="未设置：跟随各边框自带的背景模糊开关。点击记住为“默认开启”">默认跟随</button>
+                                </div>
+                                <div class="param-row" id="rowBgBlurInt" style="display:none;">
+                                    <label>模糊程度</label>
+                                    <input type="range" id="slBgBlurInt" class="ctl-rng" min="10" max="100" step="5" value="50" />
+                                    <span class="pval" id="lblBgBlurInt"></span>
+                                </div>
+                                <!-- 「背景模糊·经典 / 日期」专属的背景观感。
+                                     显隐由 updatePersonalVisibility 按 photoFrameStyle 控制；
+                                     不动滑块时模板里没有这些字段，旧预设渲染保持不变。
+                                     主体大小不再单列：它与上方通用的「图片缩放」在引擎里是同一个乘数，
+                                     留着两个 94% 只会让用户不知道该拖哪个。
+                                     底部两行字的位置与间距另起一组（见下方 grpBlurText）：
+                                     那三根管的是几何，和这里的明暗/取景/阴影不是一码事。 -->
+                                <div class="param-row" id="rowBlurBackdropDim" style="display:none;">
+                                    <label>背景明暗</label>
+                                    <input type="range" id="slBlurBackdropDim" class="ctl-rng" min="0" max="80" step="2" value="40" title="模糊底上叠多少黑：0 = 不压暗（明亮），越大越深；默认 40" />
+                                    <span class="pval" id="lblBlurBackdropDim"></span>
+                                </div>
+                                <div class="param-row" id="rowBlurBackdropZoom" style="display:none;">
+                                    <label>背景取景</label>
+                                    <input type="range" id="slBlurBackdropZoom" class="ctl-rng" min="100" max="200" step="5" value="100" title="把模糊底再放大，改变虚化色块的取景范围；100% = 默认铺满" />
+                                    <span class="pval" id="lblBlurBackdropZoom"></span>
+                                </div>
+                                <div class="param-row" id="rowBlurSubjectShadow" style="display:none;">
+                                    <label>主体阴影</label>
+                                    <input type="range" id="slBlurSubjectShadow" class="ctl-rng" min="0" max="200" step="10" value="100" title="中间照片外侧的悬浮阴影：0 = 不要阴影，100 = 预设原样，拖大则加深投影并补一圈环绕暗晕，照片更立体" />
+                                    <span class="pval" id="lblBlurSubjectShadow"></span>
+                                </div>
+                                <div class="hint-box" id="hintBlurAdvanced" style="display:none;">这些项只作用于「背景模糊·经典 / 日期」，会随预设和工程一起保存；中间照片的大小用上方通用的「图片缩放」调节。</div>
                             </div>
-                            <div class="param-row" id="rowGlobalMargin">
-                                <label>边距大小</label>
-                                <input type="range" id="slGlobalMargin" class="ctl-rng" min="10" max="300" step="1" value="100" />
-                                <span class="pval" id="lblGlobalMargin"></span>
+
+                            <!-- 底部文字排版：照片下方那两行字（品牌+型号 / 参数或日期）的位置与间距。
+                                 单独成组：它管的是几何，不是背景观感；默认把「照片底边 → 画布底边」的
+                                 空白连同两行字均分成三份。
+                                 留在画布栏而不是文字栏：参照系是照片底边，而那条边由上面的边距大小 /
+                                 图片缩放决定，同一屏调才不用来回切页签；文字栏只放一个「去调」的入口。 -->
+                            <div class="param-group" id="grpBlurText">
+                                <div class="pg-title collapsible">底部文字排版</div>
+                                <div class="param-row" id="rowBlurTextOffset" style="display:none;">
+                                    <label>上下位置</label>
+                                    <input type="range" id="slBlurTextOffset" class="ctl-rng" min="-100" max="100" step="5" value="0" title="品牌+型号那一行在底部参数带里的上下位置：0 = 空白三份均分，负值上移、正值下移" />
+                                    <span class="pval" id="lblBlurTextOffset"></span>
+                                </div>
+                                <div class="param-row" id="rowBlurTextGap" style="display:none;">
+                                    <label>行间距</label>
+                                    <input type="range" id="slBlurTextGap" class="ctl-rng" min="0" max="300" step="5" value="100" title="型号行与参数 / 日期行的上下间距：100% = 把照片底边到底边的空白均分三份，0 = 两行贴在一起" />
+                                    <span class="pval" id="lblBlurTextGap"></span>
+                                </div>
+                                <div class="param-row" id="rowBlurBrandGap" style="display:none;">
+                                    <label>品牌间距</label>
+                                    <input type="range" id="slBlurBrandGap" class="ctl-rng" min="0" max="300" step="5" value="100" title="品牌与型号之间的水平间距：100% = 默认的一小段距离，0 = 贴在一起" />
+                                    <span class="pval" id="lblBlurBrandGap"></span>
+                                </div>
+                                <button id="btnBlurReset" class="mini-btn block" type="button" style="display:none;"
+                                        title="把「背景模糊」与这组共六项恢复成预设默认：背景明暗 / 取景 / 阴影 / 上下位置 / 行间距 / 品牌间距">恢复模糊默认</button>
                             </div>
-                            <div class="hint-box">同时放大或缩小照片四周的边距；100% 为该边框的默认边距。</div>
-                            <div class="param-row" id="rowImgScale">
-                                <label>图片缩放</label>
-                                <input type="range" id="slImgScale" class="ctl-rng" min="10" max="150" step="1" value="100" />
-                                <span class="pval" id="lblImgScale"></span>
+
+                            <!-- 样式私有参数:行由 style-params.js 声明表动态生成,不手写 .param-row。
+                                 当前样式没有声明参数时整组隐藏,不会出现「拖了没反应」的滑块。 -->
+                            <div class="param-group" id="grpStyleParams" style="display:none;">
+                                <div class="pg-title collapsible" id="styleParamsTitle">样式参数</div>
+                                <div id="styleParamsRows"></div>
+                                <button id="btnStyleParamsReset" class="mini-btn block" type="button"
+                                        title="删掉本样式调过的参数,回到预设默认">恢复样式默认</button>
+                                <div class="hint-box">这些项只作用于当前预设,随预设和工程一起保存;没拖过时模板里不写字段,旧工程渲染保持不变。</div>
                             </div>
-                            <div class="param-row" id="rowCornerRadius">
-                                <label>照片圆角</label>
-                                <input type="range" id="slCornerRadius" class="ctl-rng" min="0" max="500" value="0" />
-                                <span class="pval" id="lblCornerRadius"></span>
-                            </div>
-                            <!-- 裁切属于"对照片本身动手"，和上面的缩放/圆角同一族；顶部工具栏留给文件级操作 -->
-                            <button id="btnCrop" class="mini-btn block" type="button"
-                                    title="裁切照片：拖动框与手柄，方向键微调，Enter 应用 / Esc 取消">裁切照片…</button>
-                            <button id="btnRestoreOriginal" class="mini-btn block" type="button" hidden
-                                    title="回到裁切 / 旋转之前的原图">还原原图</button>
                         </div>
 
-                        <div class="param-group">
-                            <div class="pg-title collapsible">背景模糊</div>
-                            <div class="param-row chk-row" id="rowBgBlur" style="display:none;">
-                                <label>背景模糊</label>
-                                <input type="checkbox" id="chkBgBlur" class="ctl-chk" />
-                                <button type="button" class="mini-btn chk-default-btn" id="btnBgBlurDefault" aria-pressed="false" title="未设置：跟随各边框自带的背景模糊开关。点击记住为“默认开启”">默认跟随</button>
+                        <!-- ══ 画布子页：边框 ══ -->
+                        <div class="canvas-sub" id="panel-border" hidden>
+                            <!-- 预设自带边框（相框样式 / 卡片模糊底）时，下面 5 个图层组全部不适用。
+                                 不把整页留空：说明为什么为空，给出可逐项编辑的预设数量与换用建议。 -->
+                            <div class="border-preset-state" id="borderPresetState" hidden>
+                                <div class="bps-kicker">预设边框</div>
+                                <div class="bps-title" id="borderPresetTitle"></div>
+                                <div class="bps-text" id="borderPresetText"></div>
+                                <div class="bps-acts">
+                                    <button class="mini-btn primary" id="btnBorderBackWall" type="button">去风格墙挑选</button>
+                                </div>
+                                <div class="bps-note">全部 <span id="borderPresetTotal">91</span> 款预设中，有 <span id="borderEditableCount">21</span> 款支持逐项编辑；换成这类图层边框预设后，这里会出现填充、描边、圆角、阴影与发光。</div>
                             </div>
-                            <div class="param-row" id="rowBgBlurInt" style="display:none;">
-                                <label>模糊程度</label>
-                                <input type="range" id="slBgBlurInt" class="ctl-rng" min="10" max="100" step="5" value="50" />
-                                <span class="pval" id="lblBgBlurInt"></span>
-                            </div>
-                            <!-- 「背景模糊·经典 / 日期」专属的背景观感。
-                                 显隐由 updatePersonalVisibility 按 photoFrameStyle 控制；
-                                 不动滑块时模板里没有这些字段，旧预设渲染保持不变。
-                                 主体大小不再单列：它与上方通用的「图片缩放」在引擎里是同一个乘数，
-                                 留着两个 94% 只会让用户不知道该拖哪个。
-                                 底部两行字的位置与间距另起一组（见下方 grpBlurText）：
-                                 那三根管的是几何，和这里的明暗/取景/阴影不是一码事。 -->
-                            <div class="param-row" id="rowBlurBackdropDim" style="display:none;">
-                                <label>背景明暗</label>
-                                <input type="range" id="slBlurBackdropDim" class="ctl-rng" min="0" max="80" step="2" value="40" title="模糊底上叠多少黑：0 = 不压暗（明亮），越大越深；默认 40" />
-                                <span class="pval" id="lblBlurBackdropDim"></span>
-                            </div>
-                            <div class="param-row" id="rowBlurBackdropZoom" style="display:none;">
-                                <label>背景取景</label>
-                                <input type="range" id="slBlurBackdropZoom" class="ctl-rng" min="100" max="200" step="5" value="100" title="把模糊底再放大，改变虚化色块的取景范围；100% = 默认铺满" />
-                                <span class="pval" id="lblBlurBackdropZoom"></span>
-                            </div>
-                            <div class="param-row" id="rowBlurSubjectShadow" style="display:none;">
-                                <label>主体阴影</label>
-                                <input type="range" id="slBlurSubjectShadow" class="ctl-rng" min="0" max="200" step="10" value="100" title="中间照片外侧的悬浮阴影：0 = 不要阴影，100 = 预设原样，拖大则加深投影并补一圈环绕暗晕，照片更立体" />
-                                <span class="pval" id="lblBlurSubjectShadow"></span>
-                            </div>
-                            <div class="hint-box" id="hintBlurAdvanced" style="display:none;">这些项只作用于「背景模糊·经典 / 日期」，会随预设和工程一起保存；中间照片的大小用上方通用的「图片缩放」调节。</div>
-                        </div>
 
-                        <!-- 底部文字排版：照片下方那两行字（品牌+型号 / 参数或日期）的位置与间距。
-                             单独成组：它管的是几何，不是背景观感；默认把「照片底边 → 画布底边」的
-                             空白连同两行字均分成三份。
-                             留在画布栏而不是文字栏：参照系是照片底边，而那条边由上面的边距大小 /
-                             图片缩放决定，同一屏调才不用来回切页签；文字栏只放一个「去调」的入口。 -->
-                        <div class="param-group" id="grpBlurText">
-                            <div class="pg-title collapsible">底部文字排版</div>
-                            <div class="param-row" id="rowBlurTextOffset" style="display:none;">
-                                <label>上下位置</label>
-                                <input type="range" id="slBlurTextOffset" class="ctl-rng" min="-100" max="100" step="5" value="0" title="品牌+型号那一行在底部参数带里的上下位置：0 = 空白三份均分，负值上移、正值下移" />
-                                <span class="pval" id="lblBlurTextOffset"></span>
+                            <div class="param-group ctl-grp-layers">
+                                <div class="pg-title collapsible">填充</div>
+                                <div class="param-row">
+                                    <label>填充类型</label>
+                                    <select id="cbFillType" class="ctl-sel">
+                                        <option value="solid">纯色</option>
+                                        <option value="gradient">渐变</option>
+                                        <option value="texture">纹理</option>
+                                        <option value="transparent">透明</option>
+                                    </select>
+                                </div>
+                                <div class="param-row">
+                                    <label>填充颜色</label>
+                                    <input type="color" id="cpFillColor" class="ctl-cl" value="#eeeeee" />
+                                </div>
+                                <div class="param-row">
+                                    <label>填充透明度</label>
+                                    <input type="range" id="slFillOpacity" class="ctl-rng" min="0" max="100" value="100" />
+                                    <span class="pval" id="lblFillOpacity"></span>
+                                </div>
                             </div>
-                            <div class="param-row" id="rowBlurTextGap" style="display:none;">
-                                <label>行间距</label>
-                                <input type="range" id="slBlurTextGap" class="ctl-rng" min="0" max="300" step="5" value="100" title="型号行与参数 / 日期行的上下间距：100% = 把照片底边到底边的空白均分三份，0 = 两行贴在一起" />
-                                <span class="pval" id="lblBlurTextGap"></span>
-                            </div>
-                            <div class="param-row" id="rowBlurBrandGap" style="display:none;">
-                                <label>品牌间距</label>
-                                <input type="range" id="slBlurBrandGap" class="ctl-rng" min="0" max="300" step="5" value="100" title="品牌与型号之间的水平间距：100% = 默认的一小段距离，0 = 贴在一起" />
-                                <span class="pval" id="lblBlurBrandGap"></span>
-                            </div>
-                            <button id="btnBlurReset" class="mini-btn block" type="button" style="display:none;"
-                                    title="把「背景模糊」与这组共六项恢复成预设默认：背景明暗 / 取景 / 阴影 / 上下位置 / 行间距 / 品牌间距">恢复模糊默认</button>
-                        </div>
 
-                        <!-- 样式私有参数:行由 style-params.js 声明表动态生成,不手写 .param-row。
-                             当前样式没有声明参数时整组隐藏,不会出现「拖了没反应」的滑块。 -->
-                        <div class="param-group" id="grpStyleParams" style="display:none;">
-                            <div class="pg-title collapsible" id="styleParamsTitle">样式参数</div>
-                            <div id="styleParamsRows"></div>
-                            <button id="btnStyleParamsReset" class="mini-btn block" type="button"
-                                    title="删掉本样式调过的参数,回到预设默认">恢复样式默认</button>
-                            <div class="hint-box">这些项只作用于当前预设,随预设和工程一起保存;没拖过时模板里不写字段,旧工程渲染保持不变。</div>
+                            <div class="param-group ctl-grp-layers">
+                                <div class="pg-title collapsible">填充(高级)</div>
+                                <div class="param-row">
+                                    <label>渐变类型</label>
+                                    <select id="cbGradientType" class="ctl-sel">
+                                        <option value="linear">线性</option>
+                                        <option value="radial">径向</option>
+                                    </select>
+                                </div>
+                                <div class="param-row">
+                                    <label>渐变角度</label>
+                                    <input type="range" id="slGradientAngle" class="ctl-rng" min="0" max="360" value="45" />
+                                    <span class="pval" id="lblGradientAngle"></span>
+                                </div>
+                                <div class="param-row">
+                                    <label>纹理缩放</label>
+                                    <input type="range" id="slTextureScale" class="ctl-rng" min="10" max="300" step="5" value="100" />
+                                    <span class="pval" id="lblTextureScale"></span>
+                                </div>
+                                <div class="param-row">
+                                    <label>纹理混合</label>
+                                    <select id="cbTextureBlend" class="ctl-sel">
+                                        <option value="normal">正常</option>
+                                        <option value="multiply">正片叠底</option>
+                                        <option value="screen">滤色</option>
+                                        <option value="overlay">叠加</option>
+                                    </select>
+                                </div>
+                                <div class="btn-row">
+                                    <button class="mini-btn" id="btnBuiltinTexture">内置纹理</button>
+                                    <button class="mini-btn" id="btnSelectTexture">选择纹理</button>
+                                </div>
+                            </div>
+
+                            <div class="param-group ctl-grp-layers">
+                                <div class="pg-title collapsible">描边</div>
+                                <div class="param-row">
+                                    <label>描边粗细</label>
+                                    <input type="range" id="slStrokeWidth" class="ctl-rng" min="0" max="50" value="0" />
+                                    <span class="pval" id="lblStrokeWidth"></span>
+                                </div>
+                                <div class="param-row">
+                                    <label>描边位置</label>
+                                    <select id="cbStrokePos" class="ctl-sel">
+                                        <option value="inside">内</option>
+                                        <option value="center">居中</option>
+                                        <option value="outside">外</option>
+                                    </select>
+                                </div>
+                                <div class="param-row">
+                                    <label>描边颜色</label>
+                                    <input type="color" id="cpStrokeColor" class="ctl-cl" value="#000000" />
+                                </div>
+                                <div class="param-row">
+                                    <label>描边透明度</label>
+                                    <input type="range" id="slStrokeOpacity" class="ctl-rng" min="0" max="100" value="100" />
+                                    <span class="pval" id="lblStrokeOpacity"></span>
+                                </div>
+                                <div class="param-row">
+                                    <label>虚线</label>
+                                    <input type="text" id="tfStrokeDash" class="ctl-tx" placeholder="实线,留空" />
+                                    <span class="chk-hint">如 5,3</span>
+                                </div>
+                            </div>
+
+                            <div class="param-group ctl-grp-layers">
+                                <div class="pg-title collapsible">边框圆角</div>
+                                <div class="param-row">
+                                    <label>边框圆角</label>
+                                    <input type="range" id="slLayerCornerRadius" class="ctl-rng" min="0" max="500" value="0" />
+                                    <span class="pval" id="lblLayerCornerRadius"></span>
+                                </div>
+                            </div>
+
+                            <div class="param-group ctl-grp-layers">
+                                <div class="pg-title collapsible">阴影 / 发光</div>
+                                <div class="param-row"><label>偏移 X</label><input type="range" id="slShadowX" class="ctl-rng" min="-60" max="60" value="0" /><span class="pval" id="lblShadowX"></span></div>
+                                <div class="param-row"><label>偏移 Y</label><input type="range" id="slShadowY" class="ctl-rng" min="-60" max="60" value="8" /><span class="pval" id="lblShadowY"></span></div>
+                                <div class="param-row"><label>模糊</label><input type="range" id="slShadowBlur" class="ctl-rng" min="0" max="120" value="20" /><span class="pval" id="lblShadowBlur"></span></div>
+                                <div class="param-row"><label>阴影颜色</label><input type="color" id="cpShadowColor" class="ctl-cl" value="#000000" /></div>
+                                <div class="param-row"><label>阴影透明度</label><input type="range" id="slShadowOpacity" class="ctl-rng" min="0" max="100" value="35" /><span class="pval" id="lblShadowOpacity"></span></div>
+                                <div class="param-row"><label>发光颜色</label><input type="color" id="cpGlowColor" class="ctl-cl" value="#ffffff" /></div>
+                                <div class="param-row"><label>发光模糊</label><input type="range" id="slGlowBlur" class="ctl-rng" min="0" max="120" value="30" /><span class="pval" id="lblGlowBlur"></span></div>
+                                <div class="param-row"><label>发光透明度</label><input type="range" id="slGlowOpacity" class="ctl-rng" min="0" max="100" value="60" /><span class="pval" id="lblGlowOpacity"></span></div>
+                            </div>
+
+                            <!-- 撕边分组已删：强度/密度两个滑块引擎零读取（拖动画面无变化），
+                                 齿孔（filmPerforation）由预设驱动、本来就没有 UI。 -->
                         </div>
                     </div>
 
@@ -983,133 +1116,7 @@
                         </div>
                     </div>
 
-                    <!-- ══ Tab3 边框 ══ -->
-                    <div class="tab-panel" id="panel-border">
-                        <!-- 预设自带边框（相框样式 / 卡片模糊底）时，下面 5 个图层组全部不适用。
-                             不把整页留空：说明为什么为空，给出可逐项编辑的预设数量与换用建议。 -->
-                        <div class="border-preset-state" id="borderPresetState" hidden>
-                            <div class="bps-kicker">预设边框</div>
-                            <div class="bps-title" id="borderPresetTitle"></div>
-                            <div class="bps-text" id="borderPresetText"></div>
-                            <div class="bps-acts">
-                                <button class="mini-btn primary" id="btnBorderBackWall" type="button">去风格墙挑选</button>
-                            </div>
-                            <div class="bps-note">全部 <span id="borderPresetTotal">91</span> 款预设中，有 <span id="borderEditableCount">21</span> 款支持逐项编辑；换成这类图层边框预设后，这里会出现填充、描边、圆角、阴影与发光。</div>
-                        </div>
 
-                        <div class="param-group ctl-grp-layers">
-                            <div class="pg-title collapsible">填充</div>
-                            <div class="param-row">
-                                <label>填充类型</label>
-                                <select id="cbFillType" class="ctl-sel">
-                                    <option value="solid">纯色</option>
-                                    <option value="gradient">渐变</option>
-                                    <option value="texture">纹理</option>
-                                    <option value="transparent">透明</option>
-                                </select>
-                            </div>
-                            <div class="param-row">
-                                <label>填充颜色</label>
-                                <input type="color" id="cpFillColor" class="ctl-cl" value="#eeeeee" />
-                            </div>
-                            <div class="param-row">
-                                <label>填充透明度</label>
-                                <input type="range" id="slFillOpacity" class="ctl-rng" min="0" max="100" value="100" />
-                                <span class="pval" id="lblFillOpacity"></span>
-                            </div>
-                        </div>
-
-                        <div class="param-group ctl-grp-layers">
-                            <div class="pg-title collapsible">填充(高级)</div>
-                            <div class="param-row">
-                                <label>渐变类型</label>
-                                <select id="cbGradientType" class="ctl-sel">
-                                    <option value="linear">线性</option>
-                                    <option value="radial">径向</option>
-                                </select>
-                            </div>
-                            <div class="param-row">
-                                <label>渐变角度</label>
-                                <input type="range" id="slGradientAngle" class="ctl-rng" min="0" max="360" value="45" />
-                                <span class="pval" id="lblGradientAngle"></span>
-                            </div>
-                            <div class="param-row">
-                                <label>纹理缩放</label>
-                                <input type="range" id="slTextureScale" class="ctl-rng" min="10" max="300" step="5" value="100" />
-                                <span class="pval" id="lblTextureScale"></span>
-                            </div>
-                            <div class="param-row">
-                                <label>纹理混合</label>
-                                <select id="cbTextureBlend" class="ctl-sel">
-                                    <option value="normal">正常</option>
-                                    <option value="multiply">正片叠底</option>
-                                    <option value="screen">滤色</option>
-                                    <option value="overlay">叠加</option>
-                                </select>
-                            </div>
-                            <div class="btn-row">
-                                <button class="mini-btn" id="btnBuiltinTexture">内置纹理</button>
-                                <button class="mini-btn" id="btnSelectTexture">选择纹理</button>
-                            </div>
-                        </div>
-
-                        <div class="param-group ctl-grp-layers">
-                            <div class="pg-title collapsible">描边</div>
-                            <div class="param-row">
-                                <label>描边粗细</label>
-                                <input type="range" id="slStrokeWidth" class="ctl-rng" min="0" max="50" value="0" />
-                                <span class="pval" id="lblStrokeWidth"></span>
-                            </div>
-                            <div class="param-row">
-                                <label>描边位置</label>
-                                <select id="cbStrokePos" class="ctl-sel">
-                                    <option value="inside">内</option>
-                                    <option value="center">居中</option>
-                                    <option value="outside">外</option>
-                                </select>
-                            </div>
-                            <div class="param-row">
-                                <label>描边颜色</label>
-                                <input type="color" id="cpStrokeColor" class="ctl-cl" value="#000000" />
-                            </div>
-                            <div class="param-row">
-                                <label>描边透明度</label>
-                                <input type="range" id="slStrokeOpacity" class="ctl-rng" min="0" max="100" value="100" />
-                                <span class="pval" id="lblStrokeOpacity"></span>
-                            </div>
-                            <div class="param-row">
-                                <label>虚线</label>
-                                <input type="text" id="tfStrokeDash" class="ctl-tx" placeholder="实线,留空" />
-                                <span class="chk-hint">如 5,3</span>
-                            </div>
-                        </div>
-
-                        <div class="param-group ctl-grp-layers">
-                            <div class="pg-title collapsible">边框圆角</div>
-                            <div class="param-row">
-                                <label>边框圆角</label>
-                                <input type="range" id="slLayerCornerRadius" class="ctl-rng" min="0" max="500" value="0" />
-                                <span class="pval" id="lblLayerCornerRadius"></span>
-                            </div>
-                        </div>
-
-                        <div class="param-group ctl-grp-layers">
-                            <div class="pg-title collapsible">阴影 / 发光</div>
-                            <div class="param-row"><label>偏移 X</label><input type="range" id="slShadowX" class="ctl-rng" min="-60" max="60" value="0" /><span class="pval" id="lblShadowX"></span></div>
-                            <div class="param-row"><label>偏移 Y</label><input type="range" id="slShadowY" class="ctl-rng" min="-60" max="60" value="8" /><span class="pval" id="lblShadowY"></span></div>
-                            <div class="param-row"><label>模糊</label><input type="range" id="slShadowBlur" class="ctl-rng" min="0" max="120" value="20" /><span class="pval" id="lblShadowBlur"></span></div>
-                            <div class="param-row"><label>阴影颜色</label><input type="color" id="cpShadowColor" class="ctl-cl" value="#000000" /></div>
-                            <div class="param-row"><label>阴影透明度</label><input type="range" id="slShadowOpacity" class="ctl-rng" min="0" max="100" value="35" /><span class="pval" id="lblShadowOpacity"></span></div>
-                            <div class="param-row"><label>发光颜色</label><input type="color" id="cpGlowColor" class="ctl-cl" value="#ffffff" /></div>
-                            <div class="param-row"><label>发光模糊</label><input type="range" id="slGlowBlur" class="ctl-rng" min="0" max="120" value="30" /><span class="pval" id="lblGlowBlur"></span></div>
-                            <div class="param-row"><label>发光透明度</label><input type="range" id="slGlowOpacity" class="ctl-rng" min="0" max="100" value="60" /><span class="pval" id="lblGlowOpacity"></span></div>
-                        </div>
-
-                        <!-- 撕边分组已删：强度/密度两个滑块引擎零读取（拖动画面无变化），
-                             齿孔（filmPerforation）由预设驱动、本来就没有 UI。 -->
-                    </div>
-
-                    <!-- ══ Tab4 光影 ══ -->
                     <!-- ══ Tab5 Logo ══ -->
                     <div class="tab-panel" id="panel-logo">
                         <div class="param-group">

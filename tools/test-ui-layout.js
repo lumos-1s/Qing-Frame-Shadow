@@ -41,8 +41,10 @@ const RUN = `(async () => {
     const inMenu = tabs.filter(t => !!t.closest('#tabMoreMenu')).map(t => t.dataset.tab);
     add(primary.indexOf('puzzle') >= 0 && primary.indexOf('grid') >= 0,
         '拼图/切图升到主页签', primary.join(','));
-    add(inMenu.indexOf('border') >= 0 && primary.indexOf('border') < 0,
-        '边框参数收进「更多」', inMenu.join(','));
+    add(inMenu.indexOf('template') >= 0 && inMenu.indexOf('border') < 0,
+        '「更多」只留样式，边框不再藏在两级菜单', inMenu.join(','));
+    add(!!document.querySelector('#canvasSubTabs [data-subtab="border"]'),
+        '边框参数并进画布页的子页签', 'canvasSubTabs');
     add(document.querySelector('#inspTabs .tab-icon[data-tab="puzzle"]')
         && document.querySelector('#inspTabs .tab-icon[data-tab="grid"]'),
         '两个主页签用紧凑图标，不挤占宽度', 'ok');
@@ -73,6 +75,42 @@ const RUN = `(async () => {
     A.setStatus('已进入工作台，从左侧工具栏导入照片开始');
     add($('stMsg').textContent === '', '有照片后启动引导语不再挂着', $('stMsg').textContent);
     add(/输出/.test($('stSize').textContent), '尺寸段始终在', $('stSize').textContent);
+
+    // ④ 画布子页 / 左栏跟随页签 / 胶片条外置
+    A.switchTab('border');
+    add($('panel-canvas').classList.contains('active') && !$('panel-border').hidden
+        && $('canvasSubBasic').hidden,
+        'switchTab(border) 落到画布页的边框子页',
+        JSON.stringify({ canvas: $('panel-canvas').classList.contains('active'),
+            border: !$('panel-border').hidden, basic: !$('canvasSubBasic').hidden }));
+    document.querySelector('#canvasSubTabs [data-subtab="basic"]').click();
+    add(!$('canvasSubBasic').hidden && $('panel-border').hidden,
+        '点子页签回到画布与照片',
+        JSON.stringify({ basic: !$('canvasSubBasic').hidden, border: !$('panel-border').hidden }));
+
+    A.switchTab('grade');
+    add($('sideTabGrade').classList.contains('active') && !$('sideGradeBody').hidden,
+        '进调色页，左栏自动切到调色预设',
+        JSON.stringify({ active: $('sideTabGrade').classList.contains('active'), hidden: $('sideGradeBody').hidden }));
+    A.switchTab('canvas');
+    add($('sideTabBorder').classList.contains('active') && !$('sideBorderBody').hidden,
+        '离开调色页，左栏还原素材库',
+        JSON.stringify({ active: $('sideTabBorder').classList.contains('active'), hidden: $('sideBorderBody').hidden }));
+
+    A.switchTab('grid');
+    add(document.body.classList.contains('sidebar-collapsed') && !$('btnSidebarRail').hidden,
+        '切图页自动收起左栏，把宽度让给切割预览',
+        JSON.stringify({ collapsed: document.body.classList.contains('sidebar-collapsed'),
+            rail: !$('btnSidebarRail').hidden }));
+    A.switchTab('canvas');
+    add(!document.body.classList.contains('sidebar-collapsed'),
+        '离开切图页恢复左栏', document.body.className);
+
+    const sr = document.querySelector('.stage').getBoundingClientRect();
+    const tr = $('thumbStrip').getBoundingClientRect();
+    add(tr.top >= sr.bottom - 1,
+        '胶片条落在画布卡片下方的预留带，不遮画面',
+        'strip.top=' + Math.round(tr.top) + ' stage.bottom=' + Math.round(sr.bottom));
 
     A.setStatus('已导入 3 张图片，跳过 1 个不支持的文件');
     add($('stMsg').textContent === '已导入 3 张图片，跳过 1 个不支持的文件'

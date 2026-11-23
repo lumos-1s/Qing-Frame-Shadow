@@ -80,13 +80,15 @@ const PROBE = `(async () => {
     // 「弹层没 hidden」不等于「用户看得见」：页签栏为了单行曾加 overflow-x:auto，
     // 祖先带 overflow 会把这层绝对定位的菜单整块裁掉（菜单高 169px、栏高 46px），
     // 点开就是一片空白。用命中测试断言它真的画在最上层。
-    const mr = menu.getBoundingClientRect();
+    // 用菜单项中心做命中测试：菜单变矮后，整块菜单的几何中心可能正好落在分隔线上
+    // （分隔线 pointer-events:none），那样会误报「菜单没画出来」。
+    const mr = menu.querySelector('[data-tab="template"]').getBoundingClientRect();
     const hitEl = document.elementFromPoint(
         Math.round(mr.left + mr.width / 2), Math.round(mr.top + mr.height / 2));
     const menuPaint = {
         inMenu: !!hitEl && !!hitEl.closest('#tabMoreMenu'),
         hit: hitEl ? (hitEl.id || hitEl.className || hitEl.tagName) : null,
-        h: Math.round(mr.height)
+        h: Math.round(menu.getBoundingClientRect().height)
     };
     menu.querySelector('[data-tab="template"]').click();
     await wait(60);
@@ -218,9 +220,9 @@ async function main() {
     if (res) {
         if (res.missing) check(false, '模块已加载', 'QfsPanelDensity 未定义');
         check(res.primary.join(',') === 'canvas,text,grade,logo,puzzle,grid'
-            && res.inMenu.join(',') === 'border,template' && !res.sep
+            && res.inMenu.join(',') === 'template' && !res.sep
             && res.tabRows === 1 && res.tabsH < 60,
-            '页签收成一行：拼图/切图提为主位图标，边框参数收进更多，高度不再占两排',
+            '页签收成一行：拼图/切图提为主位图标，「更多」只保留样式，高度不再占两排',
             JSON.stringify({ primary: res.primary, inMenu: res.inMenu, sep: res.sep, h: res.tabsH, rows: res.tabRows }));
         check(res.menuPaint && res.menuPaint.inMenu,
             '「更多」弹层真的画出来了（不被页签栏 overflow 裁掉）',

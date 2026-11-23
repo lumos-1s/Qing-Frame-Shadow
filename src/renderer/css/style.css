@@ -995,6 +995,31 @@ html.dark .import-progress { background: rgba(30,32,40,.94); }
 .insp-body { flex: 1; overflow-y: auto; padding: var(--sp-2) var(--sp-3) calc(18px * var(--font-scale)); }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
+
+/* 画布页内的子页签：画布参数 / 边框参数。
+   边框是核心能力，原先藏在「更多」里要两级点击；并回画布页后一级可达，
+   同时仍把长列表拆成两段，画布页不会一屏塞 20 多个控件。 */
+.canvas-subtabs {
+    display: flex; gap: 4px;
+    margin: 2px 0 var(--sp-2-5);
+    padding: 3px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+}
+.canvas-subtab {
+    flex: 1 1 0; min-width: 0;
+    padding: calc(5px * var(--font-scale)) var(--sp-2);
+    border: none; border-radius: 7px; background: transparent;
+    color: var(--text-2); font-size: var(--fs-11); cursor: pointer;
+    transition: color .15s, background-color .15s;
+}
+.canvas-subtab:hover { color: var(--text); }
+.canvas-subtab.active {
+    color: var(--primary-text); font-weight: 600;
+    background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .2);
+}
+.canvas-sub[hidden] { display: none; }
 .empty { color: var(--text-3); text-align: center; margin-top: 36px; }
 
 /* ── 参数控件 ── */

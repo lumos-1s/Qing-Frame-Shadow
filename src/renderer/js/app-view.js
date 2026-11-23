@@ -61,13 +61,78 @@ window.App = Object.assign(window.App || {}, {
         }
     },
 
+    // 画布页的两个子页：'basic'（画布与照片）/ 'border'（边框）。
+    // 边框原先在「更多」菜单里，是核心能力却要两级点击；现在并回画布页。
+    setCanvasSubTab(sub) {
+        const s = sub === 'border' ? 'border' : 'basic';
+        this._canvasSubTab = s;
+        const tabs = document.getElementById('canvasSubTabs');
+        if (tabs) {
+            tabs.querySelectorAll('[data-subtab]').forEach(b => {
+                const on = b.dataset.subtab === s;
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+        }
+        const basic = document.getElementById('canvasSubBasic');
+        const border = document.getElementById('panel-border');
+        if (basic) basic.hidden = s !== 'basic';
+        if (border) border.hidden = s !== 'border';
+    },
+
+    // 左栏跟随右栏页签：调色页自动切到调色预设，切图页自动收起素材栏。
+    // 只还原「自动切过去」的那一次；用户自己点过左栏就不硬抢。
+    updateSideModeForTab(name) {
+        // 拼图有自己的「进入切照片库 / 离开还原」逻辑，先让它落地，
+        // 后面的调色还原才能看到真实的上一模式。
+        if (typeof this.updatePuzzleSideMode === 'function') this.updatePuzzleSideMode(name);
+        const setMode = (m) => {
+            if (typeof this.setSideMode === 'function') this.setSideMode(m, { activateTab: false });
+        };
+        if (name === 'grade') {
+            if (this._sideMode !== 'grade') {
+                this._sideModeBeforeGrade = this._sideMode === 'photo' ? 'border' : (this._sideMode || 'border');
+                setMode('grade');
+            }
+        } else if (this._sideMode === 'grade' && this._sideModeBeforeGrade) {
+            const back = this._sideModeBeforeGrade;
+            this._sideModeBeforeGrade = null;
+            setMode(back);
+        }
+        // 切图页把左栏宽度让给切割预览；只收一次，用户手动展开后不再强行收。
+        const body = document.body;
+        if (name === 'grid') {
+            if (!body.classList.contains('sidebar-collapsed')) {
+                body.classList.add('sidebar-collapsed');
+                if (this.dom.sidebarRail) this.dom.sidebarRail.hidden = false;
+                this._sidebarAutoByGrid = true;
+                if (this._followFit && this.image) setTimeout(() => this.fitZoom(), 40);
+            }
+        } else if (this._sidebarAutoByGrid) {
+            this._sidebarAutoByGrid = false;
+            // 用轨道按钮手动维持过收起时，localStorage 里的显式选择优先。
+            let manual = '';
+            try { manual = localStorage.getItem('qfs_sidebar_collapsed') || ''; } catch (_) { /* 隐私模式 */ }
+            if (manual !== '1') {
+                body.classList.remove('sidebar-collapsed');
+                if (this.dom.sidebarRail) this.dom.sidebarRail.hidden = true;
+                if (this._followFit && this.image) setTimeout(() => this.fitZoom(), 40);
+            }
+        }
+    },
+
     switchTab(name) {
+        // 边框不再是独立主页签，而是「画布」页里的第二个子页。
+        // 旧调用方（测试 / 元素跳转）仍可 switchTab('border')，这里统一转到子页。
+        let wantSub = null;
+        if (name === 'border') { name = 'canvas'; wantSub = 'border'; }
         this.dom.tabs.querySelectorAll('.tab[data-tab]').forEach(t => {
             const on = t.dataset.tab === name;
             t.classList.toggle('active', on);
             t.setAttribute('aria-selected', on ? 'true' : 'false');
         });
         this.dom.panels.forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+        if (name === 'canvas') this.setCanvasSubTab(wantSub || this._canvasSubTab || 'basic');
         // 蒙版编辑层盖在画布上并接管 pointer 事件。离开调色页签时必须退出蒙版编辑，
         // 否则去 Logo/文字页拖元素时，点击会先被透明蒙版层吃掉（看起来像画布点不动）。
         if (name !== 'grade' && this._activeMaskId) this.setActiveMask(null);
@@ -76,7 +141,7 @@ window.App = Object.assign(window.App || {}, {
         // 照片库只在拼图页签露出；进/出拼图自动接管并还原左侧素材栏
         const photoTab = document.getElementById('sideTabPhoto');
         if (photoTab) photoTab.hidden = name !== 'puzzle';
-        if (typeof this.updatePuzzleSideMode === 'function') this.updatePuzzleSideMode(name);
+        if (typeof this.updateSideModeForTab === 'function') this.updateSideModeForTab(name);
         // 切图切的是原图，不是拼图成品：带着拼图切会把拼好的格子切碎。
         // 进切图页签先把拼图收起来，版式/字幕/每格照片都留在模板里，
         // 切回拼图页签再原样恢复 —— 用户手动点「退出拼图」不走这条恢复路径。
