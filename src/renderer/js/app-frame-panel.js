@@ -196,6 +196,16 @@
             sel.appendChild(o);
         });
     }
+    // 换照片（含 AI 生成后主图变了）：缓存作废，已经出的卡片按新源图重画。
+    // 不重画的话，主画布已经换成新图，面板里那几张卡还停在旧照片上。
+    function refreshPhotoPreviews() {
+        previewCache.clear();
+        refreshBrief();
+        if (!gallery.length) { if (view !== 'current') renderGallery(); return; }
+        const img = photoSource();
+        gallery.forEach((g) => { g.dataUrl = renderFrameToUrl(g.preset, img); });
+        renderGallery();
+    }
     // 选中的示例照片对象（默认当前主图）
     function photoImage() {
         const sel = $('frameSamplePhoto');
@@ -909,15 +919,37 @@
     // 换色都在）；这里输出的是一张位图，进来就作为新照片入库，能继续调色/加字/
     // 导出，但没有图层，也不能回头改那几笔「溢出」。
     // 这也是为什么它必须写在按钮上：一次几十秒，且模型不保证原样保留人物细节。
-    const BREAK_PROMPT = [
-        '把这张照片做成「3D 破框」立体装裱效果：照片嵌在一个竖版矩形相框里，',
-        '相框立在一张温暖的米白色纸面上，纸面有细腻的轻微纹理，构图留白均衡。',
-        '画面中的主体元素（树枝、花丛、人物轮廓等）自然延伸出相框边界，落到纸面上，',
-        '并在纸面投下方向一致的柔和阴影，形成真实可信的三维纵深，不要过度夸张、不要生硬。',
-        '严格保留原图的人物身份、面部特征、表情、姿势、服装、原始环境、色彩与光线特征；',
-        '不得修改、重新诠释或替换参考照片中的任何关键元素。',
-        '风格：高级编辑摄影、极简奢华、温暖中性色调、照片级真实渲染、竖版画幅。'
-    ].join('');
+
+    // 常见图像网关只认这三档尺寸（gpt-image-1 就只收这三个）。按照片的宽高比
+    // 选一档：横图硬塞竖版，模型会把画面横向压扁再补边，人一看就歪了。
+    function breakSizeOf(w, h) {
+        const r = (w && h) ? w / h : 0.75;
+        if (r > 1.05) return { size: '1536x1024', orient: '横版', ratio: '3:2' };
+        if (r < 0.95) return { size: '1024x1536', orient: '竖版', ratio: '2:3' };
+        return { size: '1024x1024', orient: '方版', ratio: '1:1' };
+    }
+
+    // 描述分三段：装裱效果 / 保真红线 / 风格。方向与补充要求接在末尾——
+    // 输入框里打的字（比如「纸面再黄一点」）会作为补充要求一起发过去，
+    // 不用改代码就能调，否则每次微调都得找开发者。
+    function breakPrompt(box, extra) {
+        const base = [
+            '把这张照片做成「3D 破框」立体装裱效果：照片嵌在一个矩形相框里，',
+            '相框立在一张温暖的米白色纸面上，纸面有细腻轻微的纸纹，构图留白均衡，',
+            '呈现精致的杂志编辑美学。',
+            '画面中的主体与部分前景元素（树枝、花丛、人物轮廓等）自然延伸出相框边界，',
+            '落到纸面上，仿佛从照片里进入观看者所在的现实空间；相框与溢出元素在纸面',
+            '投下方向一致、柔和的自然光阴影，形成真实可信的三维纵深，不要生硬、虚假或过度夸张。',
+            '严格保留原图的人物身份、面部特征、表情、姿势、服装、原始环境、色彩与光线特征；',
+            '不得修改、重新诠释或替换参考照片中的任何关键元素。',
+            '风格：高级编辑摄影、极简奢华、温暖中性色调、照片级真实渲染和出色的细节表现，',
+            box.orient + ' ' + box.ratio + ' 画幅。'
+        ].join('');
+        const add = String(extra || '').replace(/\s+/g, ' ').trim();
+        // 截到 120 字：输入框里可能是给「生成 4 款」写的一整句风格描述，
+        // 全塞进图像 prompt 会稀释掉上面那几条硬约束。
+        return add ? base + '补充要求：' + add.slice(0, 120) : base;
+    }
 
     // 交给图像接口的源图：长边 1280 的 JPEG。原图 6000px 直接传会把请求体撑到
     // 十几 MB，网关多半 413；1280 对「重绘一张成片」这个用途已经够用。
@@ -941,7 +973,7 @@
 
     // 生成结果变成一张新照片：走和「导入照片」一样的入库路径——push 进 images、
     // 排缩略图、选中它。之后调色/裁切/导出全都照常，和普通照片没有区别。
-    async function addGeneratedPhoto(dataUrl, name) {
+    async function addGeneratedPhoto(dataUrl, name, from) {
         const A = window.App;
         if (!A || !Array.isArray(A.images)) throw new Error('主程序还没准备好');
         const img = (typeof window.qfsImage === 'function') ? window.qfsImage() : new Image();
@@ -954,12 +986,28 @@
         if (!img.naturalWidth || !img.naturalHeight) throw new Error('生成的图是空的');
         const im = {
             el: img, name: name || 'AI 生成', path: null, sample: false,
-            w: img.naturalWidth, h: img.naturalHeight, exif: {}, customSettings: null
+            w: img.naturalWidth, h: img.naturalHeight, exif: {}, customSettings: null,
+            // 标记来源：图上再点一次「AI 破框」会变成框中框，得先知道自己在干什么；
+            // aiFrom 记着它出自哪张，导出与排错时能对上。
+            aiGenerated: true, aiFrom: from || ''
         };
         A.images.push(im);
         if (typeof A.queueThumb === 'function') A.queueThumb(im);
         if (typeof A.buildThumbnails === 'function') A.buildThumbnails();
         if (typeof A.selectImage === 'function') A.selectImage(A.images.length - 1);
+        return im;
+    }
+
+    // 网关差异大，404/401 这类裸状态码对用户没有意义。原文照留，只在后面补一句
+    // 「大概是什么原因」，别让人对着 HTTP 404 猜。
+    function breakErrorText(r) {
+        const e = String((r && r.error) || '未知原因');
+        if (/HTTP 404/.test(e)) return e + '（这个网关多半没开带参考图的 edits 接口）';
+        if (/HTTP 413/.test(e)) return e + '（请求体过大，源图再压小一点）';
+        if (/HTTP 401|HTTP 403/.test(e)) return e + '（Key 无效，或没有这个图像模型的权限）';
+        if (/HTTP 429/.test(e)) return e + '（限流或额度用尽，过一会儿再试）';
+        if (/请求超时/.test(e)) return e + '（模型没在 3 分钟内出图）';
+        return e;
     }
 
     async function aiBreakFrame() {
@@ -971,19 +1019,34 @@
             openAiSetup(false);
             return;
         }
+        const cur = photoImage();
+        const src = photoSource();
+        const nw = src && (src.naturalWidth || src.width);
+        const nh = src && (src.naturalHeight || src.height);
         const source = breakSourceDataUrl();
-        if (!source) { setStatus('这张照片取不出来，换一张再试', 'bad'); return; }
+        if (!source || !nw || !nh) { setStatus('这张照片取不出来，换一张再试', 'bad'); return; }
+
+        const box = breakSizeOf(nw, nh);
+        const prompt = breakPrompt(box, ($('framePrompt') && $('framePrompt').value) || '');
         breaking = true;
         const btn = $('btnFrameBreak');
         if (btn) btn.disabled = true;
         progress(true, 'AI 正在重绘，通常 30–90 秒');
-        setStatus('已提交，等模型出图…');
+        setStatus(cur && cur.aiGenerated
+            ? '源图本身是 AI 成片，这会在它外面再套一层框…'
+            : '已提交（' + box.orient + ' ' + box.ratio + '），等模型出图…');
         try {
-            const r = await P.image({ prompt: BREAK_PROMPT, source: source, size: '1024x1536' });
-            if (!r || !r.ok) { setStatus('生成失败：' + ((r && r.error) || '未知原因'), 'bad'); return; }
+            const r = await P.image({ prompt: prompt, source: source, size: box.size });
+            if (!r || !r.ok) { setStatus('生成失败：' + breakErrorText(r), 'bad'); return; }
             if (!r.image) { setStatus('接口说成功了，但里面没有图', 'bad'); return; }
-            await addGeneratedPhoto(r.image, 'AI 破框');
-            setStatus('已生成一张「AI 破框」，在胶片条里，可以接着调色或导出');
+            const made = await addGeneratedPhoto(r.image, 'AI 破框', (cur && cur.name) || '');
+            // 面板顶部的照片下拉是独立于主界面的：新图入了库但下拉里没有它，
+            // 面板就会一直预览旧图，和主画布对不上。这里重建一次，跟到新图上。
+            refreshSamplePhotos();
+            refreshPhotoPreviews();
+            // 成片像素通常只有原图的几分之一，导出前就该知道，别等打出来才发现。
+            setStatus('已生成「AI 破框」' + (made.w ? ' ' + made.w + '×' + made.h : '')
+                + '，在胶片条里，可以接着调色或导出');
         } catch (e) {
             setStatus('生成出错：' + (e && e.message ? e.message : String(e)), 'bad');
         } finally {
@@ -1969,12 +2032,7 @@
         $('btnFrameAgain').addEventListener('click', () => { if (lastRequest) generate(lastRequest); });
         $('frameSamplePhoto').addEventListener('change', () => {
             // 换示例照片：用同一批方案即时重渲染，用户能比较不同照片的效果
-            previewCache.clear();
-            refreshBrief();
-            if (!gallery.length) { if (view !== 'current') renderGallery(); return; }
-            const img = photoSource();
-            gallery.forEach((g) => { g.dataUrl = renderFrameToUrl(g.preset, img); });
-            renderGallery();
+            refreshPhotoPreviews();
             setStatus('已换成所选照片预览', 'ok');
         });
         document.querySelectorAll('.frame-tab').forEach((b) => {
