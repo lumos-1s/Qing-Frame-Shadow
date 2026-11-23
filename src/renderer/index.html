@@ -2649,7 +2649,8 @@
                 <div id="loginFormView">
                     <div class="login-field">
                         <label for="loginUsername">名称</label>
-                        <input type="text" id="loginUsername" class="ctl-tx" placeholder="显示在签名旁的名字" maxlength="20" />
+                        <input type="text" id="loginUsername" class="ctl-tx" placeholder="本机标识，最多 20 字" maxlength="20" />
+                        <div class="login-field-hint">本机标识：用来区分资料，不会显示在照片上。</div>
                     </div>
                     <div class="login-field">
                         <label>头像（选填）</label>
@@ -2661,9 +2662,10 @@
                     </div>
                     <div class="login-field">
                         <label for="loginNickname">昵称（选填）</label>
-                        <input type="text" id="loginNickname" class="ctl-tx" placeholder="显示名称" maxlength="30" />
+                        <input type="text" id="loginNickname" class="ctl-tx" placeholder="显示名，最多 30 字" maxlength="30" />
+                        <div class="login-field-hint">显示名：显示在按钮上，留空则用名称。照片上的签名请在「签名 / 头像」里单独填写。</div>
                     </div>
-                    <div class="login-hint">仅保存在本机，没有账号、不上传。只用于「签名 / 头像」参数。</div>
+                    <div class="login-hint">仅保存在本机，没有账号、不上传。头像供「签名 / 头像」参数使用；昵称只用于本机显示。</div>
                     <div class="btn-row">
                         <button id="loginSubmit" class="mini-btn primary">保存</button>
                     </div>
@@ -2677,8 +2679,9 @@
                         </div>
                     </div>
                     <div class="btn-row">
+                        <button id="btnEditProfile" class="mini-btn" title="回到表单修改名称和昵称，头像会保留">编辑昵称</button>
                         <button id="btnChangeAvatar" class="mini-btn">更换头像</button>
-                        <button id="loginLogout" class="mini-btn danger" title="清除本机保存的名称和昵称；头像会保留，可在「签名 / 头像」参数里使用">清除资料</button>
+                        <button id="loginLogout" class="mini-btn danger" title="清除名称与昵称，头像保留">清除名称与昵称</button>
                     </div>
                     <input type="file" id="fileChangeAvatar" accept="image/*" style="display:none;" />
                 </div>

@@ -62,7 +62,7 @@ app.whenReady().then(async () => {
     });
 
     const win = new BrowserWindow({
-        width: 1400, height: 900, show: true,
+        width: 1400, height: 900, show: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload-about.js'),
             contextIsolation: true, nodeIntegration: false, sandbox: false, backgroundThrottling: false
@@ -171,8 +171,54 @@ app.whenReady().then(async () => {
     }))()`);
     check(sD.form === 'none' && sD.profile !== 'none', '有资料时点开直接进资料页', JSON.stringify(sD));
     check(sD.name === '阿岚', '资料页显示名字', sD.name);
+    const sF = await exec(`(() => ({
+        clear: document.getElementById('loginLogout').textContent.trim(),
+        title: document.getElementById('loginLogout').title,
+        hints: Array.from(document.querySelectorAll('#loginFormView .login-field-hint')).map(x => x.textContent),
+        note: document.querySelector('#loginFormView .login-hint').textContent
+    }))()`);
+    check(/清除名称与昵称/.test(sF.clear) && /头像保留/.test(sF.title), '清除按钮与提示文案统一', JSON.stringify(sF));
+    check(sF.hints.length === 2 && /本机标识/.test(sF.hints[0]) && /显示名/.test(sF.hints[1]),
+        '名称/昵称两个字段各有用途说明', JSON.stringify(sF.hints));
+    check(/昵称只用于本机显示/.test(sF.note), '弹窗不再暗示昵称会印在照片上', sF.note);
     check(!/^@/.test(sD.sub) && /仅保存在本机/.test(sD.sub),
         '资料页说明是「仅保存在本机」而不是 @用户名', sD.sub);
+
+    // ── C2：资料页「编辑昵称」回表单，预填当前值，保存后头像不动 ──
+    await exec(`(() => {
+        try { localStorage.setItem('qfs_user_avatar', 'data:image/jpeg;base64,AAAA'); } catch (_) {}
+        document.getElementById('btnEditProfile').click();
+        return true;
+    })()`);
+    await sleep(180);
+    const sC2 = await exec(`(() => ({
+        form: getComputedStyle(document.getElementById('loginFormView')).display,
+        profile: getComputedStyle(document.getElementById('loginProfileView')).display,
+        username: document.getElementById('loginUsername').value,
+        nickname: document.getElementById('loginNickname').value,
+        submit: document.getElementById('loginSubmit').textContent
+    }))()`);
+    check(sC2.form !== 'none' && sC2.profile === 'none' && sC2.username === '阿岚' && sC2.nickname === '阿岚',
+        '「编辑昵称」回到表单并预填当前名称与昵称', JSON.stringify(sC2));
+    check(/保存修改/.test(sC2.submit), '编辑态按钮写「保存修改」', sC2.submit);
+    await exec(`(() => {
+        document.getElementById('loginNickname').value = '阿岚工作室';
+        document.getElementById('loginSubmit').click();
+        return true;
+    })()`);
+    await sleep(300);
+    const sC3 = await exec(`(() => ({
+        nick: window.App.user && window.App.user.nickname,
+        avatar: localStorage.getItem('qfs_user_avatar'),
+        btn: document.getElementById('btnEditUserProfile').textContent.trim()
+    }))()`);
+    check(sC3.nick === '阿岚工作室' && /阿岚工作室/.test(sC3.btn), '昵称改好了且按钮回显', JSON.stringify(sC3));
+    check(sC3.avatar === 'data:image/jpeg;base64,AAAA', '改昵称后头像没丢', String(sC3.avatar).slice(0, 30));
+    await exec(`(() => { document.getElementById('btnEditUserProfile').click(); return true; })()`);
+    await sleep(150);
+    const sC4 = await exec(`document.getElementById('loginDisplayName').textContent`);
+    check(sC4 === '阿岚工作室', '再打开资料页显示改后的昵称', sC4);
+    await exec(`document.getElementById('loginModalClose').click()`);
 
     // ── D：清除资料 → 按钮回到默认文案 ──
     await exec(`document.getElementById('loginLogout').click()`);
@@ -185,7 +231,7 @@ app.whenReady().then(async () => {
     // userStashNull 不在页面里，用主进程侧状态判定更直接
     check(sE && sE.user === null, '清除后 App.user 归零', JSON.stringify(sE && { user: sE.user }));
     check(sE && /^昵称与头像…?$/.test(sE.btn), '按钮回到「昵称与头像…」', sE && sE.btn);
-    check(sE && /已清除名称/.test(sE.status), '状态栏反馈清除', sE && sE.status);
+    check(sE && /已清除名称与昵称，头像保留/.test(sE.status), '状态栏文案统一为「清除名称与昵称，头像保留」', sE && sE.status);
     check(userStub === null, '主进程侧资料也清掉了', JSON.stringify(userStub));
 
     console.log(failures.length ? `\n${failures.length} FAILED` : '\nALL PASS');

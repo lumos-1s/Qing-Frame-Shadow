@@ -771,6 +771,8 @@ window.App = {
         // 入口跟着那组参数走，工作台里不再出现一个像账号系统的头像环。
         const btnUserProfile = document.getElementById('btnEditUserProfile');
         if (btnUserProfile) btnUserProfile.addEventListener('click', () => this.openLoginModal());
+        const btnEditProfile = document.getElementById('btnEditProfile');
+        if (btnEditProfile) btnEditProfile.addEventListener('click', () => this.openLoginModal(true));
         d.loginModalClose.addEventListener('click', () => this.closeLoginModal());
         d.loginModal.addEventListener('mousedown', e => { if (e.target === d.loginModal) this.closeLoginModal(); });
         d.loginSubmit.addEventListener('click', () => this.doLogin());

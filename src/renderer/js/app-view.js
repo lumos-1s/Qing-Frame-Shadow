@@ -473,19 +473,22 @@ window.App = Object.assign(window.App || {}, {
         this.refreshLoginStatus();
     },
 
-    openLoginModal() {
+    // edit=true：从资料页回到表单改名字，头像保存在 localStorage 里、完全不碰
+    openLoginModal(edit) {
         const d = this.dom;
         d.loginModal.style.display = 'flex';
-        if (this.user) {
+        const editing = !!(edit && this.user);
+        if (this.user && !editing) {
             d.loginFormView.style.display = 'none';
             d.loginProfileView.style.display = 'block';
             this.renderProfile();
         } else {
             d.loginFormView.style.display = 'block';
             d.loginProfileView.style.display = 'none';
-            d.loginUsername.value = '';
-            d.loginNickname.value = '';
-            setTimeout(() => d.loginUsername.focus(), 60);
+            d.loginUsername.value = this.user ? (this.user.username || '') : '';
+            d.loginNickname.value = this.user ? (this.user.nickname || this.user.username || '') : '';
+            if (d.loginSubmit) d.loginSubmit.textContent = editing ? '保存修改' : '保存';
+            setTimeout(() => (editing ? d.loginNickname : d.loginUsername).focus(), 60);
         }
     },
 
@@ -500,14 +503,16 @@ window.App = Object.assign(window.App || {}, {
         if (av) { d.loginAvatar.style.background = 'url(' + av + ') center/cover'; d.loginAvatar.textContent = ''; }
         else { d.loginAvatar.style.background = 'var(--avatar-bg)'; d.loginAvatar.textContent = ''; }
         d.loginDisplayName.textContent = name;
-        d.loginUsernameDisplay.textContent = '仅保存在本机 · 用于签名 / 头像';
+        d.loginUsernameDisplay.textContent = '仅保存在本机 · 昵称用于界面显示';
     },
 
     async doLogin() {
         const username = this.dom.loginUsername.value.trim();
         if (!username) { this.setStatus('请输入名称'); return; }
         const nickname = this.dom.loginNickname.value.trim() || username;
-        this.user = { username, nickname, createdAt: Date.now() };
+        // 改名字时保留原来的创建时间与头像，不能把资料当新建处理
+        const createdAt = (this.user && this.user.createdAt) ? this.user.createdAt : Date.now();
+        this.user = { username, nickname, createdAt };
         try {
             await window.qingframe.saveUser(this.user);
             this.closeLoginModal();
@@ -527,7 +532,7 @@ window.App = Object.assign(window.App || {}, {
             // 旧版遗留键一并清掉，避免下次启动又读出一个已经不存在的名字
             localStorage.removeItem('qfs_username');
             localStorage.removeItem('qfs_nickname');
-            this.setStatus('已清除名称');
+            this.setStatus('已清除名称与昵称，头像保留');
             this.updateTopBar();
         } catch (e) {
             this.setStatus('清除失败：' + e.message);
