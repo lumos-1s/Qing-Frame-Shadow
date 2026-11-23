@@ -288,6 +288,8 @@ window.App = Object.assign(window.App || {}, {
         if (!pk.slots) pk.slots = {};
         if (pk.axisVals == null) pk.axisVals = {};
         if (!pk.gapCaptions) pk.gapCaptions = {};
+        // 旧模板没有这个字段：0 = 自动，行为与以前一致（字幕带 = 两倍间距）
+        if (pk.capBand == null) pk.capBand = 0;
         if (Array.isArray(pk.slots)) {
             const arr = pk.slots;
             pk.slots = {};
@@ -337,6 +339,8 @@ window.App = Object.assign(window.App || {}, {
         const $ = this.$;
         pk.gap = $('slPuzzleGap') ? parseInt($('slPuzzleGap').value, 10) : pk.gap;
         pk.cornerRadius = $('slPuzzleCorner') ? parseInt($('slPuzzleCorner').value, 10) : (pk.cornerRadius == null ? 3 : pk.cornerRadius);
+        // 字幕带高度：0 = 自动。与「格子间距」分开，想给标题留一条高带子不必加宽所有缝隙
+        pk.capBand = $('slCapBand') ? parseInt($('slCapBand').value, 10) : (pk.capBand || 0);
         pk.bgMode = $('cbPuzzleBg') ? parseInt($('cbPuzzleBg').value, 10) : 0;
         pk.canvasRatio = $('cbPuzzleCanvas') ? $('cbPuzzleCanvas').value : 'auto';
         pk.borderColor = $('cpPuzzleBorder') ? $('cpPuzzleBorder').value.replace('#', '') : 'ffffff';
@@ -431,6 +435,10 @@ window.App = Object.assign(window.App || {}, {
         this.updateLabel('lblPuzzleGap', pk.gap != null ? pk.gap : 6);
         if ($('slPuzzleCorner')) $('slPuzzleCorner').value = pk.cornerRadius != null ? pk.cornerRadius : 3;
         this.updateLabel('lblPuzzleCorner', (pk.cornerRadius != null ? pk.cornerRadius : 3) + '%');
+        // 字幕带高度：0 = 自动（两倍间距 与「底部那条字幕自身需要的高度」取大者）
+        const bandVal = pk.capBand != null ? pk.capBand : 0;
+        if ($('slCapBand')) $('slCapBand').value = bandVal;
+        this.updateLabel('lblCapBand', bandVal ? bandVal : '自动');
         if ($('cbPuzzleBg')) $('cbPuzzleBg').value = String(pk.bgMode || 0);
         if ($('cbPuzzleCanvas')) $('cbPuzzleCanvas').value = pk.canvasRatio || 'auto';
         if ($('cpPuzzleBorder')) $('cpPuzzleBorder').value = '#' + (pk.borderColor || 'ffffff');
@@ -447,7 +455,7 @@ window.App = Object.assign(window.App || {}, {
             for (let i = 0; i < n; i++) {
                 const o = document.createElement('option');
                 o.value = 's' + i;
-                o.textContent = mark(!!(pk.captions && pk.captions[i])) + `格子 ${i + 1}`;
+                o.textContent = mark(!!(pk.captions && pk.captions[i])) + this.captionPlaceLabel('s' + i);
                 pick.appendChild(o);
             }
             const axes = window.__clampPuzzleAxes ? window.__clampPuzzleAxes(pk.layout || 'single', pk.axisVals) : { v: [], h: [] };
@@ -457,13 +465,13 @@ window.App = Object.assign(window.App || {}, {
             for (let i = 0; i < capRowN; i++) {
                 const o = document.createElement('option');
                 o.value = 'h' + i;
-                o.textContent = mark(!!(pk.gapCaptions && pk.gapCaptions['h' + i])) + `横间隙 ${i + 1}`;
+                o.textContent = mark(!!(pk.gapCaptions && pk.gapCaptions['h' + i])) + this.captionPlaceLabel('h' + i);
                 pick.appendChild(o);
             }
             vAxes.forEach((_, i) => {
                 const o = document.createElement('option');
                 o.value = 'v' + i;
-                o.textContent = mark(!!(pk.gapCaptions && pk.gapCaptions['v' + i])) + `竖间隙 ${i + 1}`;
+                o.textContent = mark(!!(pk.gapCaptions && pk.gapCaptions['v' + i])) + this.captionPlaceLabel('v' + i);
                 pick.appendChild(o);
             });
             const isNone = this._puzzleSlot == null || this._puzzleSlot === '';
@@ -525,6 +533,20 @@ window.App = Object.assign(window.App || {}, {
         this.updateLabel('lblSlotOffsetY', (sc && sc.offsetY) || 0);
     },
 
+    // 门牌号 → 人话。'H2' / 'S3' 这种内部键名不该出现在界面上：
+    // 用户能对上的是「第 2 行下方」「底部标题带」「格子 3」。
+    captionPlaceLabel(key) {
+        const pk = this.template.puzzle || {};
+        const m = /^([hvs])(\d+)$/.exec(String(key || ''));
+        if (!m) return '';
+        const i = parseInt(m[2], 10);
+        if (m[1] === 's') return `格子 ${i + 1}`;
+        if (m[1] === 'v') return `第 ${i + 1} 列右侧`;
+        const axes = window.__clampPuzzleAxes ? window.__clampPuzzleAxes(pk.layout || 'single', pk.axisVals) : { h: [] };
+        const rowsN = (axes.h || []).length + 1;
+        return i >= rowsN - 1 ? '底部标题带' : `第 ${i + 1} 行下方`;
+    },
+
     loadCaptionFromModel() {
         const $ = this.$;
         const pk = this.template.puzzle || {};
@@ -533,35 +555,68 @@ window.App = Object.assign(window.App || {}, {
         let cap = null;
         if (isGap) cap = (pk.gapCaptions && pk.gapCaptions[key]) || null;
         else if (key) { const idx = parseInt(key.substring(1), 10); cap = (pk.captions && pk.captions[idx]) || null; }
-        // 记录正在编辑的门牌号:仅当该位置已绑定字幕(或刚通过「添加/编辑字幕」显式新建)时打开编辑器,
-        // 仅在下拉里选择空位置不弹出空编辑器,避免误以为是添加字幕入口
-        this._editingGap = key && cap ? key.toUpperCase() : null;
+        // 选中哪个位置就直接编辑哪一条：空位置也把编辑器打开，输入即新建。
+        // 以前是「选下拉 → 点添加/编辑字幕 → 才出现输入框」，三步才打得开一个字。
+        this._editingGap = key ? key.toUpperCase() : null;
         const lblEdit = $('lblEditingCap');
-        if (lblEdit) {
-            const nLabel = isGap ? (key.charAt(0) === 'h' ? '横间隙 ' : '竖间隙 ') : (/^s\d+$/.test(key) ? '格子 ' : '');
-            lblEdit.textContent = this._editingGap ? `正在编辑：${nLabel}${this._editingGap}` : '';
-        }
+        if (lblEdit) lblEdit.textContent = this._editingGap ? `正在编辑：${this.captionPlaceLabel(key)}` : '';
+        // 竖排两者都能用；「位置」只对格子字幕有意义 —— 间隙字幕本来就钉在那条缝里
         const cbV = $('cbCapVertical');
-        if (cbV) { cbV.disabled = !isGap; cbV.checked = !!(isGap && cap && cap.direction === 'vertical'); }
+        if (cbV) { cbV.disabled = !key; cbV.checked = !!(cap && cap.direction === 'vertical'); }
+        const selV = $('cbCapVAlign');
+        if (selV) { selV.disabled = !key || isGap; selV.value = (cap && cap.vAlign) || 'bottom'; }
+        const rowV = $('rowCapVAlign');
+        if (rowV) rowV.classList.toggle('is-disabled', !key || isGap);
+        const selA = $('cbCapAlign');
+        if (selA) { selA.disabled = !key; selA.value = (cap && cap.align) || 'center'; }
         const set = (id, v) => { const e = $(id); if (e) e.value = v == null ? '' : v; };
         if (cap) {
             set('tfCapLine1', cap.line1); set('tfCapLine2', cap.line2);
-            set('slCapSize1', cap.size1 || 28); set('slCapSize2', cap.size2 || 20);
-            set('cbCapFont1', cap.font1 || 'Microsoft YaHei'); set('cbCapFont2', cap.font2 || 'Microsoft YaHei');
+            set('slCapSize1', cap.size1 || 28);
+            set('cbCapFont1', cap.font1 || 'Microsoft YaHei');
+            // 两行各自独立：副标题的字号/字体可以跟主标题完全不同
+            set('slCapSize2', cap.size2 || 20);
+            set('cbCapFont2', cap.font2 || cap.font1 || 'Microsoft YaHei');
             if ($('cpCapColor')) $('cpCapColor').value = '#' + (cap.color || 'ffffff');
             if ($('cbCapBgBar')) $('cbCapBgBar').checked = (cap.bgBar || 0) === 1;
             set('slCapSpacing', cap.spacing != null ? cap.spacing : 0);
-            this.updateLabel('lblCapSize1', cap.size1 || 28); this.updateLabel('lblCapSize2', cap.size2 || 20);
+            this.updateLabel('lblCapSize1', cap.size1 || 28);
+            this.updateLabel('lblCapSize2', cap.size2 || 20);
             this.updateLabel('lblCapSpacing', (cap.spacing != null ? cap.spacing : 0) + '%');
         } else {
             set('tfCapLine1', ''); set('tfCapLine2', '');
-            set('slCapSize1', 28); set('slCapSize2', 20);
-            set('cbCapFont1', 'Microsoft YaHei'); set('cbCapFont2', 'Microsoft YaHei');
+            set('slCapSize1', 28);
+            set('cbCapFont1', 'Microsoft YaHei');
+            set('slCapSize2', 20);
+            set('cbCapFont2', 'Microsoft YaHei');
             if ($('cpCapColor')) $('cpCapColor').value = '#ffffff';
             if ($('cbCapBgBar')) $('cbCapBgBar').checked = false;
             set('slCapSpacing', 0);
             this.updateLabel('lblCapSize1', 28); this.updateLabel('lblCapSize2', 20); this.updateLabel('lblCapSpacing', '0%');
         }
+    },
+
+    // 字幕样式：两行各自的字号/字体，加颜色/对齐/竖排/背景条/行距。
+    // 第一行与第二行完全独立 —— 副标题常常要单独放大或换一种字体做对比。
+    captionStyleFromUI() {
+        const $ = this.$;
+        const size1 = $('slCapSize1') ? parseInt($('slCapSize1').value, 10) : 28;
+        const size2 = $('slCapSize2') ? parseInt($('slCapSize2').value, 10) : 20;
+        const font1 = $('cbCapFont1') ? $('cbCapFont1').value : 'Microsoft YaHei';
+        const font2 = $('cbCapFont2') ? $('cbCapFont2').value : font1;
+        const vSel = $('cbCapVAlign');
+        return {
+            size1,
+            size2: Math.max(6, size2),
+            font1,
+            font2,
+            color: ($('cpCapColor') ? $('cpCapColor').value : '#ffffff').replace('#', ''),
+            bgBar: ($('cbCapBgBar') && $('cbCapBgBar').checked) ? 1 : 0,
+            spacing: $('slCapSpacing') ? parseInt($('slCapSpacing').value, 10) : 0,
+            align: ($('cbCapAlign') && $('cbCapAlign').value) || 'center',
+            direction: ($('cbCapVertical') && $('cbCapVertical').checked) ? 'vertical' : 'horizontal',
+            vAlign: (vSel && !vSel.disabled && vSel.value) ? vSel.value : 'middle',
+        };
     },
 
     // 字幕写入:槽位键 's0'.. → captions[数字];间隙键 'v0'/'h0'.. → gapCaptions[key]
@@ -576,17 +631,9 @@ window.App = Object.assign(window.App || {}, {
         const $ = this.$;
         const line1 = $('tfCapLine1') ? $('tfCapLine1').value.trim() : '';
         const line2 = $('tfCapLine2') ? $('tfCapLine2').value.trim() : '';
-        if (!line1 && !line2) { delete pk.captions[idx]; if (this._editingGap === ('S' + idx)) this._editingGap = null; return; }
-        pk.captions[idx] = {
-            line1, line2, gapId: 'S' + idx,
-            size1: $('slCapSize1') ? parseInt($('slCapSize1').value, 10) : 28,
-            size2: $('slCapSize2') ? parseInt($('slCapSize2').value, 10) : 20,
-            font1: $('cbCapFont1') ? $('cbCapFont1').value : 'Microsoft YaHei',
-            font2: $('cbCapFont2') ? $('cbCapFont2').value : 'Microsoft YaHei',
-            color: ($('cpCapColor') ? $('cpCapColor').value : '#ffffff').replace('#', ''),
-            bgBar: ($('cbCapBgBar') && $('cbCapBgBar').checked) ? 1 : 0,
-            spacing: $('slCapSpacing') ? parseInt($('slCapSpacing').value, 10) : 0,
-        };
+        // 两行都空 = 这条字幕不存在。编辑器不跟着收起：用户接着打字就能重新建回来。
+        if (!line1 && !line2) { delete pk.captions[idx]; return; }
+        pk.captions[idx] = Object.assign({ line1, line2, gapId: 'S' + idx }, this.captionStyleFromUI());
     },
 
     captureGapCaptionToModel(key) {
@@ -596,18 +643,9 @@ window.App = Object.assign(window.App || {}, {
         const $ = this.$;
         const line1 = $('tfCapLine1') ? $('tfCapLine1').value.trim() : '';
         const line2 = $('tfCapLine2') ? $('tfCapLine2').value.trim() : '';
-        if (!line1 && !line2) { delete pk.gapCaptions[key]; if (this._editingGap === key.toUpperCase()) this._editingGap = null; return; }
-        pk.gapCaptions[key] = {
-            line1, line2, gapId: key.toUpperCase(),
-            size1: $('slCapSize1') ? parseInt($('slCapSize1').value, 10) : 28,
-            size2: $('slCapSize2') ? parseInt($('slCapSize2').value, 10) : 20,
-            font1: $('cbCapFont1') ? $('cbCapFont1').value : 'Microsoft YaHei',
-            font2: $('cbCapFont2') ? $('cbCapFont2').value : 'Microsoft YaHei',
-            color: ($('cpCapColor') ? $('cpCapColor').value : '#ffffff').replace('#', ''),
-            bgBar: ($('cbCapBgBar') && $('cbCapBgBar').checked) ? 1 : 0,
-            spacing: $('slCapSpacing') ? parseInt($('slCapSpacing').value, 10) : 0,
-            direction: ($('cbCapVertical') && $('cbCapVertical').checked) ? 'vertical' : 'horizontal',
-        };
+        if (!line1 && !line2) { delete pk.gapCaptions[key]; return; }
+        // 间隙字幕恒定在带内垂直居中，位置由那条缝决定，没有「贴顶/贴底」可选
+        pk.gapCaptions[key] = Object.assign({ line1, line2, gapId: key.toUpperCase() }, this.captionStyleFromUI(), { vAlign: 'middle' });
     },
 
     toggleCaptionEditor(show) {
@@ -619,21 +657,40 @@ window.App = Object.assign(window.App || {}, {
         this.toggleCaptionEditor(this._editingGap != null);
     },
 
-    // 「添加/编辑字幕」:按选中项的门牌号到字幕列表找对应,没有则新建一条并绑定,然后打开编辑
-    addEditGapCaption() {
+    // 样式刷：把当前这条字幕的排版（字号/字体/颜色/对齐/竖排/背景条/行距）
+    // 复制到同类型的其他字幕上，文字一律不动。
+    // 4 个格子各写一行字时不用把字号颜色设四遍。
+    copyCaptionStyle() {
         const $ = this.$;
         const key = $('cbPuzzleGapPick') ? $('cbPuzzleGapPick').value : '';
-        if (!key) { this.setStatus('请先在上方选择一条分割间隙或格子'); return; }
-        const pk = this.template.puzzle || (this.template.puzzle = this.defaultTemplate().puzzle);
+        if (!key) { this.setStatus('先选中一条字幕，再刷样式'); return; }
+        const style = this.captionStyleFromUI();   // 先读，commit 可能触发回读覆盖 UI
         const isGap = /^[vh]\d+$/.test(key);
-        let cap = null;
-        if (isGap) { if (!pk.gapCaptions) pk.gapCaptions = {}; cap = pk.gapCaptions[key]; if (!cap) cap = pk.gapCaptions[key] = { size1: 28, size2: 20, color: 'ffffff', bgBar: 0, spacing: 0, direction: 'horizontal' }; }
-        else { if (!pk.captions) pk.captions = {}; const idx = parseInt(key.substring(1), 10); cap = pk.captions[idx]; if (!cap) cap = pk.captions[idx] = { size1: 28, size2: 20, color: 'ffffff', bgBar: 0, spacing: 0 }; }
-        if (cap && !cap.gapId) cap.gapId = key.toUpperCase();
-        this._editingGap = key.toUpperCase();
-        this.loadCaptionFromModel();
-        this.renderCaptionEditorVisibility();
-        this.setStatus(`已绑定字幕到 ${this._editingGap}，编辑输入即时生效`);
+        this.onSettingCommit();
+        const pk = this.tplPuzzle();
+        if (!pk) return;
+        const has = isGap
+            ? !!(pk.gapCaptions && pk.gapCaptions[key])
+            : !!(pk.captions && pk.captions[parseInt(key.substring(1), 10)]);
+        if (!has) { this.setStatus('这条还没有字幕，先写点字再刷样式'); return; }
+        let n = 0;
+        if (isGap) {
+            for (const k in (pk.gapCaptions || {})) {
+                if (k === key) continue;
+                Object.assign(pk.gapCaptions[k], style, { vAlign: 'middle' });
+                n++;
+            }
+        } else {
+            for (const k in (pk.captions || {})) {
+                if (String(k) === key.substring(1)) continue;
+                // 位置（贴顶/贴底）不跟着刷：刷样式是把字排好看，不是把别人的构图挪走
+                Object.assign(pk.captions[k], style, { vAlign: pk.captions[k].vAlign || 'bottom' });
+                n++;
+            }
+        }
+        this.saveCurrentTemplate();
+        this.scheduleRender(true);
+        this.setStatus(n ? `样式已刷到另外 ${n} 条${isGap ? '间隙字幕' : '格子字幕'}` : '同类型下没有别的字幕可刷');
     },
 
     deleteCaption() {
@@ -853,19 +910,29 @@ window.App = Object.assign(window.App || {}, {
         const rect = canvas.getBoundingClientRect();
         const tol = rect.width > 0 ? Math.max(1, (W / rect.width) * 6) : 10;
         const axes = window.__clampPuzzleAxes ? window.__clampPuzzleAxes(pk.layout, pk.axisVals) : (pk.axisVals || {});
+        // 有底部字幕带时格子整体被压到上方，轴线的屏幕位置也要乘这个比例
+        const ys = this.puzzleYScale(pk);
         // 竖轴(v):垂直线,检测 x
         const vList = (axes.v || []);
         for (let i = 0; i < vList.length; i++) {
             const ax = vList[i] * W;
-            if (Math.abs(x - ax) <= tol && y > 0 && y < H) return { dim: 'v', idx: i, pos: vList[i] };
+            if (Math.abs(x - ax) <= tol && y > 0 && y < H * ys) return { dim: 'v', idx: i, pos: vList[i] };
         }
         // 横轴(h):水平线,检测 y
         const hList = (axes.h || []);
         for (let i = 0; i < hList.length; i++) {
-            const ay = hList[i] * H;
+            const ay = hList[i] * H * ys;
             if (Math.abs(y - ay) <= tol && x > 0 && x < W) return { dim: 'h', idx: i, pos: hList[i] };
         }
         return null;
+    },
+
+    // 格子区被字幕带压缩的比例（无字幕带时恒为 1）
+    puzzleYScale(pk) {
+        if (!window.__puzzleGeometry || !pk) return 1;
+        try {
+            return window.__puzzleGeometry(pk, this.dom.canvas.width, this.dom.canvas.height).yScale || 1;
+        } catch (_) { return 1; }
     },
 
     // 悬停/拖动分隔线时记录状态,画布上画一条淡蓝高亮线(导出不画)
@@ -889,7 +956,9 @@ window.App = Object.assign(window.App || {}, {
         const MIN = 0.12;
         const lo = (d.idx > 0 ? vals[d.idx - 1] : 0) + MIN;
         const hi = (d.idx < vals.length - 1 ? vals[d.idx + 1] : 1) - MIN;
-        const raw = (d.dim === 'v' ? p.x / W : p.y / H) - (d.grabOff || 0);
+        // 轴值存的是「未压缩」的版式坐标，而指针在屏幕上看到的是压缩后的y —— 反算回去再比
+        const ys = d.dim === 'v' ? 1 : this.puzzleYScale(pk);
+        const raw = (d.dim === 'v' ? p.x / W : p.y / H / ys) - (d.grabOff || 0);
         let v = clampNum(raw, Math.max(MIN, lo), Math.min(1 - MIN, hi));
         // 拖到接近默认分割比例时吸附,方便把某条分隔线拖回等高/等宽
         const defs = window.__clampPuzzleAxes ? window.__clampPuzzleAxes(pk.layout, {}) : null;
@@ -932,23 +1001,17 @@ window.App = Object.assign(window.App || {}, {
     // 画布像素→槽位索引(按引擎可见区域内缩 gap,间隙/边框处返回 null)
     puzzleSlotAtPx(x, y) {
         const pk = this.tplPuzzle();
-        if (!pk || !window.__buildPuzzleSlots) return null;
+        if (!pk || !window.__puzzleGeometry) return null;
         const W = this.dom.canvas.width, H = this.dom.canvas.height;
-        const layout = pk.layout || 'single';
-        const axes = window.__clampPuzzleAxes ? window.__clampPuzzleAxes(layout, pk.axisVals) : (pk.axisVals || {});
-        const rects = window.__buildPuzzleSlots(layout, axes);
-        const gapPx = Math.max(0, (pk.gap == null ? 6 : pk.gap) * (Math.min(W, H) / 1000) * 0.5);
-        const shiftX = gapPx / W, shiftY = gapPx / H;
-        const EPS = 1e-6;
-        for (let i = 0; i < rects.length; i++) {
-            const r = rects[i];
-            let x0 = r[0], y0 = r[1], x1 = r[0] + r[2], y1 = r[1] + r[3];
-            if (x0 <= EPS) x0 += shiftX;
-            if (x1 >= 1 - EPS) x1 -= shiftX;
-            if (y0 <= EPS) y0 += shiftY;
-            if (y1 >= 1 - EPS) y1 -= shiftY;
-            const hx0 = x0 * W + gapPx, hy0 = y0 * H + gapPx;
-            const hx1 = x1 * W - gapPx, hy1 = y1 * H - gapPx;
+        // 与 renderPuzzle 共用同一份几何：字幕带一变高，格子会整体上移、被压扁，
+        // 这里若还按原始轴位算，点选就会整体偏下（点第二行选中第一行）。
+        const g = window.__puzzleGeometry(pk, W, H);
+        for (let i = 0; i < g.rects.length; i++) {
+            const r = g.rects[i];
+            const hx0 = r[0] * W + g.gapPx;
+            const hy0 = r[1] * H + g.gapPx;
+            const hx1 = (r[0] + r[2]) * W - g.gapPx;
+            const hy1 = (r[1] + r[3]) * H - g.gapPx;
             if (x >= hx0 && x <= hx1 && y >= hy0 && y <= hy1) return i;
         }
         return null;
@@ -994,11 +1057,12 @@ window.App = Object.assign(window.App || {}, {
     },
 
     slotRectPx(pk, i) {
-        if (!window.__buildPuzzleSlots) return null;
+        if (!window.__puzzleGeometry) return null;
         const W = this.dom.canvas.width, H = this.dom.canvas.height;
-        const axes = window.__clampPuzzleAxes ? window.__clampPuzzleAxes(pk.layout, pk.axisVals) : (pk.axisVals || {});
-        const rects = window.__buildPuzzleSlots(pk.layout, axes);
-        const r = rects[i];
+        // raw = 已含字幕带让位与贴边内缩、但还没减格子内边距的那一层，
+        // 与 slotSlackPx 里再减 gapPx*2 的口径对得上。
+        const g = window.__puzzleGeometry(pk, W, H);
+        const r = g.raw[i];
         if (!r) return null;
         return { x: r[0] * W, y: r[1] * H, w: r[2] * W, h: r[3] * H };
     },

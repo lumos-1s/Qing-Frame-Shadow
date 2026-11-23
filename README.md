@@ -55,6 +55,7 @@
 - **文字 · Logo · EXIF** — 自动读取相机参数，自定义签名与头像排版；文字可在画布上拖动、改字号与颜色。
 - **我的调色** — 存成 Lightroom 可读的 `.xmp`，批量导入、悬停预览、编组搜索，套用到选中或全部照片。
 - **批量出图** — 多图导入、逐张记忆样式、同步到选中、拼图与切图、沉浸照片墙；PNG / JPEG / WebP，最高 8192px。导出可选 sRGB / Display P3 / Adobe RGB：后两者会真的转换像素并嵌入 ICC（WebP 仍按 sRGB）。
+- **拼图字幕** — 每个格子、每条缝（含底部通栏）都能挂一行标题 + 一行副标题，两行字号与字体各自独立；可左中右对齐、贴顶/居中/贴底、逐字竖排。「字幕带高度」与「格子间距」分开：想给标题留一条高带子就调它，不必把整张拼图的缝隙一起加宽，字号也不再被间距压住。
 
 > **English** — 91 built-in preset templates with live frame, light and logo controls; per-photo grading with curves, masks and XMP presets; collage, grid slicing, immersive presentation and batch export up to 8192px. Everything stays local. (The AI studio — director and break-frame — is held back from this release.)
 

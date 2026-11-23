@@ -1273,34 +1273,45 @@
                             <div class="pg-title collapsible">间距与字幕</div>
                             <div class="param-row"><label>格子间距</label><input type="range" id="slPuzzleGap" class="ctl-rng" min="0" max="200" value="6" /><span class="pval" id="lblPuzzleGap"></span></div>
                             <div class="param-row"><label>格子圆角</label><input type="range" id="slPuzzleCorner" class="ctl-rng" min="0" max="30" value="3" /><span class="pval" id="lblPuzzleCorner"></span></div>
+                            <div class="param-row"><label>字幕带高度</label><input type="range" id="slCapBand" class="ctl-rng" min="0" max="300" value="0" title="0 = 自动：两倍间距与「底部这条字幕自己需要的高度」取大者。调大只把格子往上压，不会加宽缝隙" /><span class="pval" id="lblCapBand"></span></div>
                             <div class="param-row"><label>编辑对象</label><select id="cbPuzzleGapPick" class="ctl-sel"></select></div>
                             <div class="btn-row">
-                                <button class="mini-btn" id="btnEditGapCaption">添加/编辑字幕</button>
-                                <button class="mini-btn danger" id="btnDeleteGapCaption">删除字幕</button>
+                                <button class="mini-btn" id="btnCapStyleAll" title="把当前这条字幕的字号/字体/颜色/对齐/竖排/背景条/行距复制到同类型的其他字幕，文字不动">样式刷到同类型</button>
+                                <button class="mini-btn danger" id="btnDeleteGapCaption" title="清掉选中位置的字幕（把两行文字都删空也会自动移除）">清空这条</button>
                             </div>
                         </div>
 
                         <div class="param-group" id="vbCaptionEditor" style="display:none">
                             <div class="pg-title collapsible">字幕条编辑器<span id="lblEditingCap" class="pval"></span></div>
-                            <div class="param-row"><label>第一行</label><input type="text" id="tfCapLine1" class="ctl-tx" placeholder="主标题" /></div>
-                            <div class="param-row"><label>主标题字号</label><input type="range" id="slCapSize1" class="ctl-rng" min="8" max="200" value="28" /><span class="pval" id="lblCapSize1"></span></div>
-                            <div class="param-row"><label>主标题字体</label><select id="cbCapFont1" class="ctl-sel"></select></div>
+                            <div class="param-row"><label>第一行</label><input type="text" id="tfCapLine1" class="ctl-tx" placeholder="主标题，输入即生效" /></div>
+                            <div class="param-row"><label>第一行字号</label><input type="range" id="slCapSize1" class="ctl-rng" min="8" max="200" value="28" /><span class="pval" id="lblCapSize1"></span></div>
+                            <div class="param-row"><label>第一行字体</label><select id="cbCapFont1" class="ctl-sel"></select></div>
                             <div class="param-row"><label>第二行</label><input type="text" id="tfCapLine2" class="ctl-tx" placeholder="副标题" /></div>
-                            <div class="param-row"><label>副标题字号</label><input type="range" id="slCapSize2" class="ctl-rng" min="8" max="200" value="20" /><span class="pval" id="lblCapSize2"></span></div>
-                            <div class="param-row"><label>副标题字体</label><select id="cbCapFont2" class="ctl-sel"></select></div>
+                            <div class="param-row"><label>第二行字号</label><input type="range" id="slCapSize2" class="ctl-rng" min="8" max="200" value="20" /><span class="pval" id="lblCapSize2"></span></div>
+                            <div class="param-row"><label>第二行字体</label><select id="cbCapFont2" class="ctl-sel"></select></div>
                             <div class="param-row"><label>颜色</label><input type="color" id="cpCapColor" class="ctl-cl" value="#ffffff" /></div>
+                            <div class="param-row"><label>对齐</label><select id="cbCapAlign" class="ctl-sel">
+                                <option value="center">居中</option>
+                                <option value="left">左对齐</option>
+                                <option value="right">右对齐</option>
+                            </select></div>
+                            <div class="param-row" id="rowCapVAlign"><label>位置</label><select id="cbCapVAlign" class="ctl-sel">
+                                <option value="bottom">贴底</option>
+                                <option value="middle">居中</option>
+                                <option value="top">贴顶</option>
+                            </select></div>
+                            <div class="param-row chk-row">
+                                <label>竖排</label>
+                                <input type="checkbox" id="cbCapVertical" class="ctl-chk" />
+                                <span class="chk-hint">逐字竖排，字幕与格子都可用</span>
+                            </div>
                             <div class="param-row chk-row">
                                 <label>背景条</label>
                                 <input type="checkbox" id="cbCapBgBar" class="ctl-chk" />
                                 <span class="chk-hint">半透明底条</span>
                             </div>
-                            <div class="param-row chk-row">
-                                <label>竖排</label>
-                                <input type="checkbox" id="cbCapVertical" class="ctl-chk" />
-                                <span class="chk-hint">仅间隙字幕可用</span>
-                            </div>
-                            <div class="param-row"><label>间距</label><input type="range" id="slCapSpacing" class="ctl-rng" min="0" max="300" value="0" /><span class="pval" id="lblCapSpacing"></span></div>
-                                                    </div>
+                            <div class="param-row"><label>行距</label><input type="range" id="slCapSpacing" class="ctl-rng" min="0" max="300" value="0" /><span class="pval" id="lblCapSpacing"></span></div>
+                        </div>
 
                         <div class="param-group">
                             <div class="pg-title collapsible">画面参数</div>

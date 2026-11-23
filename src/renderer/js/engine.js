@@ -1783,46 +1783,142 @@ function puzzleFit(r, iw, ih, mode, zoomPct, offX, offY) {
     return { dx, dy, dw, dh };
 }
 
-// 拼图字幕(横排):文本块(一行或两行)整体在条带内垂直居中,字号按 4000 长边基准缩放,
-// 过高/超宽会自动等比缩小;align='bottom' 用于格子画面字幕(叠印在图片底部)
-function drawPuzzleCaption(ctx, cap, r, align, fs) {
+// 一条字幕的文本块高度(与 drawPuzzleCaption 的排版同一套公式)。
+// 用来回答「这段字至少需要多高」——字幕带高度依据它来留，而不是反过来拿带高压字号。
+function captionBlockHOf(cap, F) {
+    if (!cap) return 0;
+    const s1 = Math.max(6, (cap.size1 || 28) * (F == null ? 1 : F));
+    const s2 = Math.max(6, (cap.size2 || 20) * (F == null ? 1 : F));
+    const spPct = (cap.spacing == null ? 0 : cap.spacing) / 100;
+    if (cap.direction === 'vertical') {
+        // 竖排按字数列算长度:取最长那一行
+        const l1 = String(cap.line1 || '').length * (s1 * 1.3 + s1 * spPct);
+        const l2 = String(cap.line2 || '').length * (s2 * 1.3 + s2 * spPct);
+        return Math.round(Math.max(l1, l2));
+    }
+    // 第二行多留 25%：字的下伸部（descender）不在 lead 里，只按 1.15 行高算会让
+    // 整块看着"贴着底"——带高刚好等于块高时，副标题的下缘会被切掉一两像素。
+    if (cap.line2) return Math.round(s1 * 1.15) + Math.round(s1 * spPct) + Math.round(s2 * 1.25);
+    return Math.round(s1 * 1.2);
+}
+
+// 底部字幕带到底在跟哪一条字幕走:横间隙的最后一条 = 底部通栏带。
+function puzzleBottomCaption(pk) {
+    const p = pk || {};
+    if (!p.gapCaptions) return null;
+    const layout = p.layout || 'single';
+    const axes = clampPuzzleAxes(layout, p.axisVals);
+    const rowsN = (axes.h || []).length + 1;
+    return p.gapCaptions['h' + (rowsN - 1)] || null;
+}
+
+// 底部字幕带的高度比例(0-1)。三档取最大：
+//   ① 两倍间距——原行为，保证「间距」仍然是留白的唯一来源；
+//   ② 用户显式设的字幕带高度（pk.capBand，与 gap 同刻度）；
+//   ③ 底部那条字幕自己需要的高度（字号 × 行数 + 内边距）。
+// 旧实现只有 ①，于是字号被间距绑死：gap=6 时字号 28 与 200 渲染结果完全一样。
+function puzzleCapBandFrac(pk, W, H) {
+    const p = pk || {};
+    const Wn = Math.max(1, W), Hn = Math.max(1, H);
+    const scaler = Math.min(Wn, Hn) / 1000;
+    const gapPx = Math.max(0, (p.gap == null ? 6 : p.gap) * scaler * 0.5);
+    const base = Math.max(Hn / 1000, gapPx * 2);
+    const want = Math.max(0, Number(p.capBand) || 0) * scaler;
+    const cap = puzzleBottomCaption(p);
+    const pad = Math.max(2, 6 * scaler);
+    const need = (cap && (cap.line1 || cap.line2)) ? captionBlockHOf(cap, Math.max(Wn, Hn) / 4000) + pad : 0;
+    const band = Math.max(base, want, need);
+    // 上限 60%：再大就不是留标题带，是把照片挤成一条了
+    return Math.min(band, Hn * 0.6) / Hn;
+}
+
+// 拼图几何(归一化 0-1)：格子矩形已含「贴边内缩」，并为底部字幕带整体让位。
+// 渲染(逻辑坐标)、点选命中与拖拽(设备坐标)必须共用这一份，
+// 否则字幕带一变高，画面和点击区就各算一套、点哪儿都不中。
+function puzzleGeometry(pk, W, H, unit) {
+    const p = pk || {};
+    const Wn = Math.max(1, W), Hn = Math.max(1, H);
+    const layout = p.layout || 'single';
+    const axes = clampPuzzleAxes(layout, p.axisVals);
+    const U = (typeof unit === 'number' && unit > 0) ? unit : Math.min(Wn, Hn);
+    const gapPx = Math.max(0, (p.gap == null ? 6 : p.gap) * (U / 1000) * 0.5);
+    const shiftX = gapPx / Wn, shiftY = gapPx / Hn;
+    const bandFrac = puzzleCapBandFrac(p, Wn, Hn);
+    const baseFrac = Math.min(0.6, Math.max(Hn / 1000, gapPx * 2) / Hn);
+    const extraFrac = Math.max(0, bandFrac - baseFrac);
+    // 最低留 35%：字幕带再高也不能把拼图压没
+    const yScale = Math.max(0.35, 1 - extraFrac);
+    const EPS = 1e-6;
+    let raw = buildPuzzleSlots(layout, axes);
+    if (yScale < 1 - EPS) raw = raw.map(r => [r[0], r[1] * yScale, r[2], r[3] * yScale]);
+    const rects = raw.map(r => {
+        let x0 = r[0], y0 = r[1], x1 = r[0] + r[2], y1 = r[1] + r[3];
+        if (x0 <= EPS) x0 += shiftX;
+        if (x1 >= 1 - EPS) x1 -= shiftX;
+        if (y0 <= EPS) y0 += shiftY;
+        if (y1 >= yScale - EPS) y1 -= shiftY;
+        return [x0, y0, x1 - x0, y1 - y0];
+    });
+    return { rects, raw, bandFrac, yScale, gapPx, gapUnit: U, axes };
+}
+
+// 拼图字幕(横排):文本块整体按 vAlign 在条带内落位;字号按 4000 长边基准缩放,
+// 过高/超宽自动等比缩小。hAlign 取 cap.align(left/center/right)。
+// cap.direction === 'vertical' 时交给竖排绘制(格子字幕也能竖排)。
+function drawPuzzleCaption(ctx, cap, r, vAlign, fs) {
     if (!cap || (!cap.line1 && !cap.line2) || !r || r.h < 1) return;
+    if (cap.direction === 'vertical') {
+        const pad = Math.max(1, Math.min(r.w, r.h) * 0.04);
+        const hAlign = cap.align || 'center';
+        const cx = r.x + r.w * (hAlign === 'left' ? 0.18 : hAlign === 'right' ? 0.82 : 0.5);
+        drawVerticalPuzzleCaption(ctx, cap, cx, r.y + pad, r.y + r.h - pad, Math.max(1, r.w * 0.72), fs);
+        return;
+    }
     const F = (fs == null ? 1 : fs);
     const base1 = Math.max(6, (cap.size1 || 28) * F), base2 = Math.max(6, (cap.size2 || 20) * F);
     const c = parseColor(cap.color || 'ffffff', 100);
     const spPct = (cap.spacing == null ? 0 : cap.spacing) / 100;
+    const hAlign = cap.align || 'center';
     let s1 = base1, s2 = base2;
-    // 高度自适应(双行整块 / 单行行高)
-    if (cap.line2) {
-        const rawH = Math.round(s1 * 1.15) + spPct * s1 + s2;
-        if (rawH > r.h) { const sc = Math.max(0.3, r.h / rawH); s1 = Math.max(6, s1 * sc); s2 = Math.max(6, s2 * sc); }
-    } else if (Math.round(s1 * 1.15) > r.h) { s1 = Math.max(6, r.h / 1.15); }
-    // 宽度自适应(测宽,超宽等比缩)
-    ctx.font = `${s1}px "${cap.font1 || 'Microsoft YaHei'}"`;
-    const w1 = cap.line1 ? ctx.measureText(cap.line1).width : 0;
-    ctx.font = `${s2}px "${cap.font2 || 'Microsoft YaHei'}"`;
-    const w2 = cap.line2 ? ctx.measureText(cap.line2).width : 0;
-    const mw = Math.max(w1, w2);
-    if (mw > r.w && r.w > 0) { const sc = Math.max(0.2, r.w / mw); s1 = Math.max(6, s1 * sc); s2 = Math.max(6, s2 * sc); }
+    const blockOf = (a, b) => cap.direction === 'vertical' ? 0 : (cap.line2 ? Math.round(a * 1.15) + Math.round(a * spPct) + Math.round(b * 1.25) : Math.round(a * 1.2));
+    // 高度自适应:带高一般已按字号留好,这里只兜底(旧模板/极端字号)
+    let blockH = blockOf(s1, s2);
+    if (blockH > r.h && blockH > 0) {
+        const sc = Math.max(0.2, r.h / blockH);
+        s1 = Math.max(6, s1 * sc); s2 = Math.max(6, s2 * sc);
+        blockH = blockOf(s1, s2);
+    }
     const lead1 = Math.round(s1 * 1.15);
     const spacing = cap.line2 ? Math.round(s1 * spPct) : 0;
-    const blockH = cap.line2 ? lead1 + spacing + s2 : lead1;
-    const top = (align === 'bottom') ? Math.max(r.y, r.y + r.h - blockH) : Math.max(r.y, r.y + (r.h - blockH) / 2);
+    // 宽度自适应(测宽,超宽等比缩)。左/右对齐要留出边距，避免字贴死画布边。
+    const padX = hAlign === 'center' ? 0 : Math.max(2, Math.min(r.w, r.h) * 0.05);
+    const availW = Math.max(1, r.w - padX * 2);
+    ctx.font = `${s1}px "${cap.font1 || 'Microsoft YaHei'}"`;
+    const w1 = cap.line1 ? ctx.measureText(cap.line1).width : 0;
+    ctx.font = `${s2}px "${cap.font2 || cap.font1 || 'Microsoft YaHei'}"`;
+    const w2 = cap.line2 ? ctx.measureText(cap.line2).width : 0;
+    const mw = Math.max(w1, w2);
+    if (mw > availW) { const sc = Math.max(0.2, availW / mw); s1 = Math.max(6, s1 * sc); s2 = Math.max(6, s2 * sc); }
+    blockH = blockOf(s1, s2);
+    const top = vAlign === 'top' ? r.y
+        : vAlign === 'bottom' ? Math.max(r.y, r.y + r.h - blockH)
+            : Math.max(r.y, r.y + (r.h - blockH) / 2);
     if (cap.bgBar === 1) {
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
         ctx.fillRect(r.x, top, r.w, Math.min(blockH, r.h));
     }
     ctx.fillStyle = rgba(c);
-    ctx.textAlign = 'center';
+    ctx.textAlign = hAlign === 'left' ? 'left' : hAlign === 'right' ? 'right' : 'center';
     ctx.textBaseline = 'alphabetic';
+    const tx = hAlign === 'left' ? r.x + padX : hAlign === 'right' ? r.x + r.w - padX : r.x + r.w / 2;
     if (cap.line1) {
         ctx.font = `${s1}px "${cap.font1 || 'Microsoft YaHei'}"`;
-        const baseline = cap.line2 ? top + lead1 : (align === 'bottom' ? top + Math.round(s1 * 0.9) : r.y + r.h / 2 + Math.round(s1 * 0.36));
-        ctx.fillText(cap.line1, r.x + r.w / 2, baseline);
+        const baseline = cap.line2 ? top + lead1 : top + Math.round(s1 * 0.9);
+        ctx.fillText(cap.line1, tx, baseline);
     }
     if (cap.line2) {
-        ctx.font = `${s2}px "${cap.font2 || 'Microsoft YaHei'}"`;
-        ctx.fillText(cap.line2, r.x + r.w / 2, Math.min(r.y + r.h - 2, top + lead1 + spacing + s2));
+        ctx.font = `${s2}px "${cap.font2 || cap.font1 || 'Microsoft YaHei'}"`;
+        ctx.fillText(cap.line2, tx, Math.min(r.y + r.h - 2, top + lead1 + spacing + s2));
     }
 }
 
@@ -1840,7 +1936,7 @@ function drawVerticalPuzzleCaption(ctx, cap, x, y0, y1, gw, fs) {
     txts.forEach((raw, ci) => {
         const t = String(raw);
         const size1 = ci === 0 ? (cap.size1 || 28) : (cap.size2 || 20);
-        const font = ci === 0 ? (cap.font1 || 'Microsoft YaHei') : (cap.font2 || 'Microsoft YaHei');
+        const font = ci === 0 ? (cap.font1 || 'Microsoft YaHei') : (cap.font2 || cap.font1 || 'Microsoft YaHei');
         const size = Math.max(6, Math.min(size1 * F, Math.max(1, colW * 0.9) / 1.4));
         const w = Math.max(1, Math.min(size * 1.4, colW - 1));
         const step = size * 1.3 + size * spPct;
@@ -1907,7 +2003,7 @@ function drawEmptyPuzzleSlot(ctx, x, y, w, h, idx) {
             const fs2 = Math.max(8, fs * 0.62);
             ctx.fillStyle = 'rgba(56,78,66,0.5)';
             ctx.font = `${fs2}px "Microsoft YaHei", "PingFang SC", sans-serif`;
-            ctx.fillText('点下方胶片放入', cx, cy + plus * 0.9 + fs * 1.55);
+            ctx.fillText('点左侧照片放入', cx, cy + plus * 0.9 + fs * 1.55);
         }
     }
     if (bw > 90) {
@@ -1953,38 +2049,22 @@ function renderPuzzle(app, compare, noSelection) {
     }
     const ctx = setupCanvas(app, W, H);
 
-    const axes = clampPuzzleAxes(layout, pk.axisVals);
-    let slots0 = buildPuzzleSlots(layout, axes);
-    const rawSlots = slots0.slice(); // 未加间隙的原始格子位置,给模糊背景用
     const Wn = W || 1, Hn = H || 1;
+    // 几何统一走 puzzleGeometry：格子矩形、底部字幕带让位、贴边内缩都在那里算一份，
+    // 点选/拖拽用的是同一个函数，画面和点击区不会各算一套。
+    const geo = puzzleGeometry(pk, Wn, Hn, gapUnit);
+    const axes = geo.axes;
+    const slots0 = geo.rects;
+    const rawSlots = geo.raw; // 未内缩(已含字幕带让位),给模糊背景用
+    const gapPx = geo.gapPx;
+    const yScale = geo.yScale;
     const border = parseColor(pk.borderColor || 'ffffff', 100);
     const b = Math.max(1, Math.round(Wn * 0.003));
     const px = (x) => x * Wn, py = (y) => y * Hn, pw = (w) => w * Wn, ph = (h) => h * Hn;
-    const scaler = gapUnit / 1000;
-    // 格子间距统一只有一种来源:图片每侧内缩 gapPx;贴边格子的外边再内进 gapPx,
-    // 于是内部缝隙 = 2*gapPx = 四周留白 = 字幕条带厚度(gth),格子间距处处一致。
-    const gapG = Math.max(0, Math.round(((pk.gap == null ? 6 : pk.gap) / 100) * 1000));
-    const gapPx = Math.max(0, (pk.gap == null ? 6 : pk.gap) * scaler * 0.5);
-    const EPS = 1e-6;
-    const shift = gapPx;
-    const shiftX = shift / Wn, shiftY = shift / Hn;
-    // 只对"贴边的那些边"额外内进 gapPx(+ 下面统一内缩的 gapPx = 外侧 2*gapPx):
-    // 外侧 2*gapPx = 内部缝隙 2*gapPx = 字幕条带 gth,四处一致。
-    // 以前这里对所有格子四条边无条件内进,于是缝隙变成 4*gapPx(2 倍外边距),
-    // 与 puzzleSlotAtPx 的点选范围、gth 字幕带的宽度都对不上。
-    slots0 = slots0.map(r => {
-        let x0 = r[0], y0 = r[1], x1 = r[0] + r[2], y1 = r[1] + r[3];
-        if (x0 <= EPS) x0 += shiftX;
-        if (x1 >= 1 - EPS) x1 -= shiftX;
-        if (y0 <= EPS) y0 += shiftY;
-        if (y1 >= 1 - EPS) y1 -= shiftY;
-        return [x0, y0, x1 - x0, y1 - y0];
-    });
-    // 字幕字号:画布长边基准 + 受字幕带高度(gth)约束,gap 小则字号自动缩小,避免行间重叠
-    const gthBase = Math.max(2, gapPx * 2);
-    const capFsRaw = Math.max(Wn, Hn) / 4000;
-    // 字号上限:字幕带高度的 0.45(单行)/0.75(双行),保证文字在带内不溢出
-    const capFs = Math.min(capFsRaw, gthBase / 28 * 0.9);
+    // 字号只按画布长边缩放，不再被字幕带高度反压：
+    // 旧实现 capFs = min(长边/4000, 2*gap/28*0.9)，默认 gap=6 时上限只有 0.19，
+    // 字号从 28 拖到 200 渲染出来一模一样。现在带高跟着字号走（见 puzzleCapBandFrac）。
+    const capFs = Math.max(Wn, Hn) / 4000;
 
     if (pk.bgMode === 1 && used[0]) {
         drawDetailBlurBackground(ctx, used, rawSlots, Wn, Hn);
@@ -2007,9 +2087,15 @@ function renderPuzzle(app, compare, noSelection) {
 
     // 间隙字幕:行内全宽通栏带;h 间隙按"行"计数(行数 = 横轴数 + 1,最后一条为底部字幕带),v 间隙按竖轴
     const gcs = pk.gapCaptions;
-    const gth = Math.max(2, gapPx * 2);
+    // 带高由 puzzleGeometry 决定:两倍间距 / 用户设的字幕带高度 / 底部那条字幕自身需要的高度，取最大。
+    // 字号不再被它反压，所以「字号 200」现在真的比「字号 28」大。
+    const gth = geo.bandFrac * Hn;
     const hAxRow = axes.h || [], vAxRow = axes.v || [];
     const rowsN = hAxRow.length + 1;
+    // 字幕左右各让出「格子外边距」那么多：左/右对齐时字不会贴死在画布边上，
+    // 也和照片的左右留白对齐（原先左对齐 x≈2px，看起来像出了血）
+    const capPadX = Math.max(2, gapPx * 2);
+    const capBox = { x: capPadX, y: 0, w: Math.max(1, Wn - capPadX * 2), h: gth };
 
     // 选中格高亮(预览);导出(noSelection)时抑制,避免选中蓝边进入成品图
     const drawSlotSel = (x, y, w, h) => {
@@ -2091,9 +2177,10 @@ function renderPuzzle(app, compare, noSelection) {
             ctx.restore();
         }
         ctx.restore();
-        // 格子画面字幕:叠印在该格图片底部,宽度随格子自适应(门牌号 S<i>)
+        // 格子画面字幕:叠印在该格图片上,宽度随格子自适应(门牌号 S<i>);
+        // vAlign 可选 bottom/middle/top，direction='vertical' 时竖排
         const scap = (pk.captions && pk.captions[i]);
-        if (scap && (scap.line1 || scap.line2)) drawPuzzleCaption(ctx, scap, { x: cx, y: cy, w: cw, h: chh }, 'bottom', capFs);
+        if (scap && (scap.line1 || scap.line2)) drawPuzzleCaption(ctx, scap, { x: cx, y: cy, w: cw, h: chh }, scap.vAlign || 'bottom', capFs);
         // 选中格高亮(空格在分支里已画)
         if (app._activePuzzleSlot === i) drawSlotSel(cx, cy, cw, chh);
     });
@@ -2112,13 +2199,20 @@ function renderPuzzle(app, compare, noSelection) {
                 else {
                     const pos = hAxRow[idx];
                     if (pos == null) continue;
-                    by = Math.max(0, Math.min(Hn - gth, py(pos) - gth / 2)); // 行间通栏带:以轴线居中
+                    // 行间字幕的带高按它自己那段字算，不能借用底部标题带的高度 ——
+                    // 底部有一条 60px 的大标题时，行间那条小字也会被撑成 60px、压住上下两行图。
+                    const g2 = Math.max(gapPx * 2, captionBlockHOf(cap, capFs) + Math.max(2, gapPx));
+                    // 轴位跟着格子一起压缩，否则字幕带会飘到缝隙外面
+                    by = Math.max(0, Math.min(Hn - g2, py(pos * yScale) - g2 / 2)); // 行间通栏带:以轴线居中
+                    drawPuzzleCaption(ctx, cap, { x: capPadX, y: by, w: capBox.w, h: g2 }, 'middle', capFs);
+                    continue;
                 }
-                drawPuzzleCaption(ctx, cap, { x: 0, y: by, w: Wn, h: gth }, null, capFs);
+                drawPuzzleCaption(ctx, cap, { x: capPadX, y: by, w: capBox.w, h: gth }, 'middle', capFs);
             } else {
                 const pos = vAxRow[idx];
                 if (pos == null) continue;
-                drawVerticalPuzzleCaption(ctx, cap, px(pos), 0, Hn, gth, capFs);
+                // 竖排仍只占一条缝的宽度（不跟着底部标题带一起变宽）
+                drawVerticalPuzzleCaption(ctx, cap, px(pos), 0, yScale * Hn, Math.max(2, gapPx * 2), capFs);
             }
         }
     }
@@ -2166,13 +2260,13 @@ function renderPuzzle(app, compare, noSelection) {
             ctx.save();
             ctx.fillStyle = 'rgba(30,144,255,0.55)';
             if (hax.dim === 'v') ctx.fillRect(px(apos) - lw / 2, 0, lw, Hn);
-            else ctx.fillRect(0, py(apos) - lw / 2, Wn, lw);
+            else ctx.fillRect(0, py(apos * yScale) - lw / 2, Wn, lw);
             ctx.restore();
         }
     }
 
     ctx.restore();
-    if (typeof window !== 'undefined') window.__lastPuzzleGeom = { Wn, Hn, shift, gapPx, gapG, layout, axes };
+    if (typeof window !== 'undefined') window.__lastPuzzleGeom = { Wn, Hn, gapPx, layout, axes, bandFrac: geo.bandFrac, yScale };
     app.applyZoomStyle();
 }
 
@@ -2222,6 +2316,8 @@ window.drawLogoElements = drawLogoElements;
 window.PUZZLE_LAYOUT_TYPES = PUZZLE_LAYOUT_TYPES;
 window.PUZZLE_LAYOUT_AXES = PUZZLE_LAYOUT_AXES;
 window.__buildPuzzleSlots = buildPuzzleSlots;
+window.__puzzleGeometry = puzzleGeometry;
+window.__puzzleCapBandFrac = puzzleCapBandFrac;
 window.__clampPuzzleAxes = clampPuzzleAxes;
 window.__puzzleFit = puzzleFit;
 // photoSrc 显式导出：engine-styles.js 的相框/卡片管线（44 个预设）靠 window.photoSrc

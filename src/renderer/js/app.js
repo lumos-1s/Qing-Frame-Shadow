@@ -1206,7 +1206,10 @@ window.App = {
                         this.clearActivePuzzleSlot(true);
                         // 记录按下点相对分隔线的偏移,拖动时线不会跳到指针中心
                         const pp = this.puzzlePx(e);
-                        const raw = hp.dim === 'v' ? pp.x / canvas.width : pp.y / canvas.height;
+                        // 与 puzzleDragAxis 同口径：有底部字幕带时格子被压缩，
+                        // 指针位置要先反算回「未压缩」的版式坐标，否则一按就会跳
+                        const ys = (hp.dim === 'h' && this.puzzleYScale) ? this.puzzleYScale(pk) : 1;
+                        const raw = hp.dim === 'v' ? pp.x / canvas.width : pp.y / canvas.height / ys;
                         this._dragPz = { type: 'axis', dim: hp.dim, idx: hp.idx, sx: e.screenX, sy: e.screenY, moved: false, grabOff: raw - hp.pos };
                         this._setPuzzleAxisHover(hp);
                         canvas.style.cursor = (hp.dim === 'v') ? 'col-resize' : 'row-resize';
@@ -1764,6 +1767,8 @@ window.App = {
             puzzle: {
                 enabled: 0, layout: 'single', layoutType: 0, gap: 6, slotFill: 'cover', bgMode: 0,
                 canvasRatio: 'auto', borderColor: 'ffffff', offsetX: 0, offsetY: 0, zoom: 100,
+                // 底部字幕带高度：0 = 自动（两倍间距 / 底部字幕自身需要的高度，取大者）
+                capBand: 0,
                 slots: {}, axisVals: {}, captions: {}, gapCaptions: {},
             },
         };
@@ -3586,7 +3591,7 @@ window.App = {
             'slShadowX', 'slShadowY', 'slShadowBlur', 'slShadowOpacity', 'slGlowBlur', 'slGlowOpacity',
             'slVignetteStrength', 'slVignetteFeather', 'slLeakOpacity', 'slLeakAngle', 'slFilmGrain',
             'slActiveIconOpacity', 'slElementRotation', 'slPuzzleGap', 'slPuzzleCorner',
-            'slCapSize1', 'slCapSize2', 'slCapSpacing', 'slSlotOffsetX', 'slSlotOffsetY', 'slSlotZoom',
+            'slCapSize1', 'slCapSize2', 'slCapBand', 'slCapSpacing', 'slSlotOffsetX', 'slSlotOffsetY', 'slSlotZoom',
             'slAppleModelSize', 'slAppleParamSize', 'slAppleDateSize',
             'slAppleLogoSize', 'slAppleLogoOpacity', 'slAppleLineWidth',
             'slXmBrandSize', 'slXmLineSize', 'slXmLogoSize', 'slXmLogoOpacity', 'slXmPad', 'slXmScrim',
@@ -3637,7 +3642,7 @@ window.App = {
         // select 变更 -> commit
         const sels = ['cbCanvasRatio', 'cbParamPosition', 'cbParamType', 'cbFillType', 'cbGradientType', 'cbTextureBlend',
             'cbStrokePos', 'cbLeakType', 'cbPuzzleBg', 'cbPuzzleCanvas',
-            'cbSlotFill', 'cbCapFont1', 'cbCapFont2'];
+            'cbSlotFill', 'cbCapFont1', 'cbCapFont2', 'cbCapAlign', 'cbCapVAlign'];
         sels.forEach(id => {
             const el = $(id);
             if (el) el.addEventListener('change', () => this.onSelectCustom(id));
@@ -3713,7 +3718,7 @@ window.App = {
         if (camSel) camSel.addEventListener('change', () => { if (camSel.value) this.applyCamLibEntry(camSel.value); else this.refreshCamLibSelect(); });
         // 「快速预设」分组已移除（按钮 btnQuickFilm / btnAutoColorBorder），
         // 对应实现 applyQuickPreset() / autoColorBorder() 仍保留，可挂到别处入口。
-        bindBtn('btnEditGapCaption', () => this.addEditGapCaption());
+        bindBtn('btnCapStyleAll', () => this.copyCaptionStyle());
         bindBtn('btnDeleteGapCaption', () => this.deleteCaption());
 bindBtn('btnResetAllSlots', () => this.resetAllSlots());
 bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
@@ -4567,6 +4572,7 @@ bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
             slLeakOpacity: ['lblLeakOpacity', v + '%'], slLeakAngle: ['lblLeakAngle', v + '°'],
             slFilmGrain: ['lblFilmGrain', v],
             slPuzzleGap: ['lblPuzzleGap', v], slPuzzleCorner: ['lblPuzzleCorner', v + '%'], slCapSize1: ['lblCapSize1', v], slCapSize2: ['lblCapSize2', v],
+            slCapBand: ['lblCapBand', v ? v : '自动'],
             slCapSpacing: ['lblCapSpacing', v + '%'], slSlotOffsetX: ['lblSlotOffsetX', v], slSlotOffsetY: ['lblSlotOffsetY', v],
             slSlotZoom: ['lblSlotZoom', v + '%'],
         };
@@ -4578,7 +4584,7 @@ bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
         if (['slGlobalMargin', 'slImgScale', 'slCornerTL', 'slCornerTR', 'slCornerBL', 'slCornerBR', 'slCornerRadius', 'slParamFontSize', 'slBrandSize', 'slParamScale', 'slGlassSize',
             'slAppleModelSize', 'slAppleParamSize', 'slAppleDateSize', 'slAppleLogoSize', 'slAppleLogoOpacity', 'slAppleLineWidth',
             'slLayerCornerTL', 'slLayerCornerTR', 'slLayerCornerBL', 'slLayerCornerBR', 'slLayerCornerRadius'].includes(id)) return; // 由 onSliderCustom 处理
-        if (id === 'slPuzzleGap' || id === 'slPuzzleCorner' || id === 'slCapSize1' || id === 'slCapSize2' || id === 'slCapSpacing' || id === 'slSlotOffsetX' || id === 'slSlotOffsetY' || id === 'slSlotZoom') {
+        if (id === 'slPuzzleGap' || id === 'slPuzzleCorner' || id === 'slCapSize1' || id === 'slCapSize2' || id === 'slCapBand' || id === 'slCapSpacing' || id === 'slSlotOffsetX' || id === 'slSlotOffsetY' || id === 'slSlotZoom') {
             this.syncPuzzleFromUI(); this.onSettingChanged(); return;
         }
         this.onSettingChanged();
