@@ -217,10 +217,10 @@ async function main() {
     catch (e) { check(false, '探针执行', String(e && e.message)); }
     if (res) {
         if (res.missing) check(false, '模块已加载', 'QfsPanelDensity 未定义');
-        check(res.primary.join(',') === 'canvas,text,border,grade,logo'
-            && res.inMenu.join(',') === 'template,puzzle,grid' && !res.sep
+        check(res.primary.join(',') === 'canvas,text,grade,logo,puzzle,grid'
+            && res.inMenu.join(',') === 'border,template' && !res.sep
             && res.tabRows === 1 && res.tabsH < 60,
-            '页签收成一行：主 5 个 + 更多 3 个，高度不再占两排',
+            '页签收成一行：拼图/切图提为主位图标，边框参数收进更多，高度不再占两排',
             JSON.stringify({ primary: res.primary, inMenu: res.inMenu, sep: res.sep, h: res.tabsH, rows: res.tabRows }));
         check(res.menuPaint && res.menuPaint.inMenu,
             '「更多」弹层真的画出来了（不被页签栏 overflow 裁掉）',

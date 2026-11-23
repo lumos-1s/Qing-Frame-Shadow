@@ -322,17 +322,24 @@ window.App = Object.assign(window.App || {}, {
     setStatus(msg) {
         this.statusMsg = msg;
         this.diagLog && this.diagLog('状态: ' + msg);
+        const m = String(msg || '');
+        // 引导语和「批量导入结果」都是过程性提示，用中性灰；
+        // 其它「已导入模板 / 配置 / LR 预设」是实打实的操作结果，保持成功绿。
+        const guide = /已进入工作台|从左侧工具栏导入|导入照片开始|^已导入\s*\d+\s*张图片/.test(m);
         if (this.dom.stCanvas) {
-            const m = String(msg || '');
-            // 引导语和「批量导入结果」都是过程性提示，不是需要庆祝的操作结果：
-            // 一律用中性灰，导入后让白色文件信息 (#stInfo) 接过主视线。
-            // 文字完整保留 —— 跳过数 / ICC / 内存警告都在这句话里，只是不抢颜色。
-            // 其它「已导入模板 / 已导入配置 / 已导入 LR 预设」仍是实打实的操作结果，保持成功绿。
-            const guide = /已进入工作台|从左侧工具栏导入|导入照片开始|^已导入\s*\d+\s*张图片/.test(m);
             let level = ' st-hint';
             if (!guide && /失败|错误|不支持|不可用|无法|未找到|未加载|请先|请输入|至少保留|没有可|不存在|异常|缺失|未知原因/.test(m)) level = ' st-err';
             else if (!guide && /已|完成|成功/.test(m)) level = ' st-ok';
             this.dom.stCanvas.className = 'st-item grow' + level;
+        }
+        const msgEl = document.getElementById('stMsg');
+        if (msgEl) {
+            // 启动引导语只在空工作区出现。已有照片还挂着「从左侧工具栏导入照片开始」
+            // 会把状态栏第 4 段挤成一串，尺寸口径也被盖住。
+            // 注意只隐藏启动语，不隐藏「已导入 N 张，跳过 M 个」这类结果。
+            const bootHint = /已进入工作台|从左侧工具栏导入|导入照片开始/.test(m);
+            const hasPhoto = !!(this.images && this.images.length);
+            msgEl.textContent = (bootHint && hasPhoto) ? '' : m;
         }
         this.updateStatusSize();
     },
@@ -351,7 +358,9 @@ window.App = Object.assign(window.App || {}, {
             const eh = cw >= ch ? Math.round(4000 * ch / Math.max(1, cw)) : 4000;
             sizeText = `画布 ${cw}×${ch} · 导出 ${ew}×${eh}`;
         }
-        el.textContent = sizeText + (this.statusMsg ? ` · ${this.statusMsg}` : '');
+        // 尺寸口径固定在这一段，状态消息单独占 #stMsg；不再把两者拼成一句话
+        const sizeEl = document.getElementById('stSize') || el;
+        sizeEl.textContent = sizeText;
     },
     canvasW() { return this.dom.canvas ? (this.dom.canvas._logW || this.dom.canvas.width) : 0; },
     canvasH() { return this.dom.canvas ? (this.dom.canvas._logH || this.dom.canvas.height) : 0; },

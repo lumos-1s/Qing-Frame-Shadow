@@ -354,24 +354,22 @@
                 <div class="tabs" id="inspTabs" role="tablist" aria-label="参数页签">
                     <button class="tab active" data-tab="canvas" role="tab" aria-selected="true" title="画布与照片：比例、边距、缩放、圆角、裁切">画布</button>
                     <button class="tab" data-tab="text" role="tab" aria-selected="false">文字</button>
-                    <button class="tab" data-tab="border" role="tab" aria-selected="false" title="边框参数：可编辑边框的填充、描边、圆角、阴影；预设自带边框时说明原因并给出换用入口">边框参数</button>
                     <button class="tab" data-tab="grade" role="tab" aria-selected="false" title="调色：像素调色（曝光/曲线/锐化/校准/混色器）+ 氛围（暗角/漏光/颗粒）">调色</button>
                     <button class="tab" data-tab="logo" role="tab" aria-selected="false">Logo</button>
+                    <!-- 拼图/切图是干活入口，提到主位用图标页签省宽度；边框参数这种低频调参收进「更多」 -->
+                    <button class="tab tab-icon" data-tab="puzzle" role="tab" aria-selected="false" aria-label="拼图" title="拼图：把多张照片拼成一张成品">
+                        <svg class="tab-ico" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+                    </button>
+                    <button class="tab tab-icon" data-tab="grid" role="tab" aria-selected="false" aria-label="切图" title="切图：把一张照片切成九宫格或自定义网格">
+                        <svg class="tab-ico" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M6 2v12M10 2v12M2 6h12M2 10h12"/></svg>
+                    </button>
                     <div class="tab-more-wrap" id="tabMoreWrap">
                         <button class="tab tab-more" id="btnTabMore" type="button" aria-haspopup="true" aria-expanded="false" title="更多页签与工具">更多 ▾</button>
                         <div class="tab-more-menu" id="tabMoreMenu" hidden>
+                            <button class="tab tab-overflow" data-tab="border" role="tab" aria-selected="false" title="边框参数：可编辑边框的填充、描边、圆角、阴影">边框参数</button>
                             <button class="tab tab-overflow" data-tab="template" role="tab" aria-selected="false" title="我的样式：保存 / 导入 / 管理模板">样式</button>
                             <div class="tab-more-sep" role="separator"></div>
                             <div class="tab-more-label">工具</div>
-                            <button class="tab tab-overflow" data-tab="puzzle" role="tab" aria-selected="false" title="拼图：把多张照片拼成一张成品">
-                                <svg class="tab-ico" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
-                                拼图
-                            </button>
-                            <button class="tab tab-overflow" data-tab="grid" role="tab" aria-selected="false" title="切图：把一张照片切成九宫格或自定义网格">
-                                <svg class="tab-ico" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M6 2v12M10 2v12M2 6h12M2 10h12"/></svg>
-                                切图
-                            </button>
-                            <div class="tab-more-sep" role="separator"></div>
                             <button type="button" class="tab-more-action" id="btnMenuFoldReset" title="把低频参数组恢复成默认收起">恢复默认折叠</button>
                         </div>
                     </div>
@@ -957,7 +955,7 @@
                             </div>
                         </div>
 
-                        <div class="param-group">
+                        <div class="param-group collapsed">
                             <div class="pg-title collapsible">相机参数(自动识别)</div>
 <!--                            <div class="hint-box">已自动识别照片 EXIF 并显示在下方，可直接修改，画布实时更新；全部清空则走原版随机相机参数。</div>-->
                             <div class="param-row"><label>参数库</label><select id="cbCamLib" class="ctl-sel"><option value="">-- 选择已存参数(自动填入) --</option></select></div>
@@ -1965,7 +1963,7 @@
             <span id="stRes" class="st-item">原片 --</span>
             <span id="stInfo" class="st-item">未导入照片</span>
             <span id="stStyle" class="st-item st-style" role="button" tabindex="0" hidden title="点击在左侧素材库定位当前样式"></span>
-            <span id="stCanvas" class="st-item grow">输出 --×--</span>
+            <span id="stCanvas" class="st-item grow"><span id="stSize">输出 --×--</span><span id="stMsg"></span></span>
             <button id="btnCompare" class="st-btn" title="按住查看原图（触屏可点按，空格 按住）/ 松开恢复"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><circle cx="8" cy="8" r="6.2"/><path d="M8 1.8v12.4"/><path d="M8 1.8a6.2 6.2 0 0 1 0 12.4" fill="currentColor" fill-opacity=".25" stroke="none"/></svg>对比原图</button>
             <div class="progress-wrap"><div id="progressBar" class="progress-bar"></div></div>
             <span id="exportProgressText" class="st-item" style="display:none"></span>

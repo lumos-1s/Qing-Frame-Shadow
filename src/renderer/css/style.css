@@ -941,6 +941,14 @@ html.dark .import-progress { background: rgba(30,32,40,.94); }
 }
 .tab:hover { color: var(--text); background: var(--surface-alt); }
 .tab.active { color: var(--primary-text); font-weight: 600; background: var(--primary-soft); }
+.tabs .tab-icon {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    padding: calc(4px * var(--font-scale)) calc(6px * var(--font-scale));
+}
+.tabs .tab-icon .tab-ico { width: 13px; height: 13px; }
+#stCanvas { display: flex; align-items: center; min-width: 0; }
+#stMsg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#stMsg:not(:empty)::before { content: '·'; margin: 0 6px; color: var(--text-3); }
 .tabs-spacer { flex: 0 0 0; width: 0; }
 .tab.tab-collapse { flex: 0 0 24px; padding: calc(5px * var(--font-scale)); color: var(--text-3); }
 .tab-more-wrap { position: relative; flex: 0 0 auto; }
