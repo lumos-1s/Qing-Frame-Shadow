@@ -45,6 +45,21 @@
     let genMode = 'free';
     // AI 破框正在跑：挡住重复点击，也用来防「生成中又切照片」把结果挂到别的图上。
     let breaking = false;
+    // 发布开关：AI 破框还没在真实 Key 下验过保脸和各家网关，先不进这一版的界面。
+    // 只认 QfsFeatures 的默认值，别在这里再写一份，否则发版时容易漏改一处。
+    function aiBreakOn() {
+        return !!(window.QfsFeatures && window.QfsFeatures.on('aiBreak'));
+    }
+    // 关掉时要把入口、设置项、提示行一起收干净：只藏按钮会留下「图像模型」
+    // 和「还差一个图像模型」这类指向不存在功能的字。
+    function applyFeatureGates() {
+        const on = aiBreakOn();
+        const btn = $('btnFrameBreak'); if (btn) btn.hidden = !on;
+        const field = $('frameImageModel');
+        const wrap = field && field.closest ? field.closest('.frame-api-field') : null;
+        if (wrap) wrap.hidden = !on;
+        const hint = $('frameImageHint'); if (hint) hint.hidden = !on;
+    }
     // 错误块里的「重试」该重跑什么：生成失败重跑生成，破框失败重跑破框，
     // 否则点一下「重试」会莫名其妙地出一批边框。
     let errorRetry = null;
@@ -736,6 +751,8 @@
             const cfg = P && P.load ? P.load() : {};
             const ok = !!(P && P.ready && P.ready(cfg));
             if (!ok) return { ok: false, text: '还没填好：需要接口地址、API Key 和模型名' };
+            // 破框没上线时，就别在状态栏提「出图用哪个模型」，那会把人指向看不见的设置。
+            if (!aiBreakOn()) return { ok: true, text: 'API 已就绪 · ' + (cfg.model || '默认模型') };
             // 对话通了不等于能出图：这两条通道用的是两个模型，界面上得一分为二地说。
             const only = P && P.textOnlyOf ? P.textOnlyOf(cfg.baseUrl) : '';
             const img = P && P.imageModelOf ? P.imageModelOf(cfg) : '';
@@ -1038,6 +1055,7 @@
     }
 
     async function aiBreakFrame() {
+        if (!aiBreakOn()) { setStatus('这个版本还没放出 AI 破框', 'bad'); return; }
         if (breaking) return;
         const P = window.QfsAiProvider;
         if (!P || typeof P.image !== 'function') { setStatus('这个版本没有图像通道', 'bad'); return; }
@@ -1866,6 +1884,7 @@
     // ── 生命周期 ──
     async function open() {
         if (!modal) return; modal.style.display = 'flex';
+        applyFeatureGates();
         refreshSamplePhotos();
         refreshBrief();
         // 导演是兜底入口，不做粘性：每次打开都回到正常的「生成 4 款」。
@@ -2055,6 +2074,7 @@
         });
         const brk = $('btnFrameBreak');
         if (brk) brk.addEventListener('click', () => { aiBreakFrame(); });
+        applyFeatureGates();
         syncModeUI();
         // 面板滚动/窗口缩放时跟着按钮重新定位模型浮层，避免它飘在旧位置。
         if (typeof window.addEventListener === 'function') {

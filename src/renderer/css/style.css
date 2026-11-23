@@ -2525,6 +2525,8 @@ button:disabled, input:disabled, select:disabled, textarea:disabled {
 }
 .frame-break-btn:hover { border-color: var(--brand-gold); background: rgba(220,186,121,.10); color: var(--text); }
 .frame-break-btn:disabled { opacity: .5; cursor: default; }
+/* 未发布的功能靠 hidden 收起来：display 由组件自己给定，[hidden] 得显式压过它 */
+.frame-break-btn[hidden], .frame-api-field[hidden], .frame-api-note[hidden] { display: none; }
 .frame-director-link {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 2px 0; border: 0; border-radius: 0; background: none;

@@ -252,7 +252,9 @@ app.whenReady().then(async () => {
     // 版本断言一律取「运行版本」，不写死号——否则每次发版都要改测试
     check(!!sA4b.ver && sA4b.head.indexOf('v' + sA4b.ver) >= 0,
         '弹窗标题带上当前版本号', sA4b.head);
-    check(sA4b.curOpen && sA4b.curLen > 200 && sA4b.groups.length >= 2,
+    // 0.1.28 的说明只有三条短句（约 125 字），阈值卡 200 会把「有内容」判成空；
+    // 这里看的是「有展开、有两组以上、不是一句占位」，不是文案长度。
+    check(sA4b.curOpen && sA4b.curLen > 100 && sA4b.groups.length >= 2,
         '当前版本那一条默认展开且有内容', JSON.stringify({ o: sA4b.curOpen, n: sA4b.curLen, g: sA4b.groups }));
     check(sA4b.injected === 0, '更新说明是纯文本渲染（不注入 HTML）', String(sA4b.injected));
     check(savedPrefs.some((p) => p && p.changelogSeen === sA4b.ver),

@@ -63,8 +63,30 @@ app.whenReady().then(async () => {
     await exec(`(() => { window.QfsFramePanel.init(window.App); window.QfsFramePanel.open(); return true; })()`);
     await sleep(400);
 
-    const hasBtn = await exec(`(() => { const b = document.getElementById('btnFrameBreak'); return !!b && /AI 破框/.test(b.textContent); })()`);
-    check(hasBtn === true, '面板里有「AI 破框」入口', String(hasBtn));
+    // ⓪ 发版默认状态：开关关着，界面上不该出现任何「AI 破框」的痕迹。
+    // 只藏按钮不够——设置里的「图像模型」和提示行会指向一个看不见的功能。
+    const gateOff = await exec(`(() => {
+        const b = document.getElementById('btnFrameBreak');
+        const f = document.getElementById('frameImageModel');
+        const wrap = f && f.closest('.frame-api-field');
+        return { flag: window.QfsFeatures.defaults().aiBreak,
+            btnHidden: b.hidden, btnShown: b.offsetParent !== null,
+            fieldHidden: wrap ? wrap.hidden : null,
+            hintHidden: document.getElementById('frameImageHint').hidden };
+    })()`);
+    check(gateOff.flag === false && gateOff.btnHidden === true && gateOff.btnShown === false,
+        '默认发版状态：破框入口是收起的', JSON.stringify(gateOff));
+    check(gateOff.fieldHidden === true && gateOff.hintHidden === true,
+        '「图像模型」设置项与提示行也一起收起', JSON.stringify(gateOff));
+
+    // 发版时把 app-features.js 里的默认值改成 true 即可；这里用测试开关临时打开，
+    // 后面几段按「功能已上线」来验，免得开关关着就把整条链的覆盖丢掉。
+    await exec(`(() => { window.QfsFeatures.override('aiBreak', true); return window.QfsFramePanel.open(); })()`);
+    await sleep(400);
+
+    const hasBtn = await exec(`(() => { const b = document.getElementById('btnFrameBreak');
+        return !!b && /AI 破框/.test(b.textContent) && b.offsetParent !== null; })()`);
+    check(hasBtn === true, '打开开关后，面板里有「AI 破框」入口', String(hasBtn));
 
     // ① 没配图像模型：只提示 + 打开设置，不发请求
     await exec(`(() => {
@@ -279,6 +301,30 @@ app.whenReady().then(async () => {
     check(/没有画图接口/.test(hint.state), '顶部状态不再只说「已就绪」', hint.state);
     check(hint.fits === true && hint.inside === true, '提示行在卡片里，不横向溢出',
         JSON.stringify({ fits: hint.fits, inside: hint.inside }));
+
+    // ⑨ 临发版前又关掉：入口与设置项要重新收起，隐藏的按钮被程序触发也不能打接口
+    await exec(`(() => {
+        const m = document.getElementById('aiSetupModal'); if (m) m.style.display = 'none';
+        window.QfsFeatures.override('aiBreak', null);
+        return window.QfsFramePanel.open();
+    })()`);
+    await sleep(400);
+    const gateBack = await exec(`(() => {
+        window.__imgCalls = [];
+        const b = document.getElementById('btnFrameBreak');
+        const f = document.getElementById('frameImageModel');
+        const wrap = f && f.closest('.frame-api-field');
+        b.click();
+        return { btnHidden: b.hidden, btnShown: b.offsetParent !== null,
+            fieldHidden: wrap ? wrap.hidden : null,
+            calls: window.__imgCalls.length,
+            status: document.getElementById('frameStatus').textContent };
+    })()`);
+    check(gateBack.btnHidden === true && gateBack.btnShown === false,
+        '关掉开关后入口重新收起，不留空位', JSON.stringify(gateBack));
+    check(gateBack.fieldHidden === true, '设置里的图像模型也一起收起', String(gateBack.fieldHidden));
+    check(gateBack.calls === 0 && /还没放出/.test(gateBack.status),
+        '即使被程序触发，隐藏的按钮也不会打图像接口', gateBack.calls + ' · ' + gateBack.status);
 
     console.log('');
     if (failures.length) { console.log('FAILED ' + failures.length + ' · AI 破框'); app.exit(1); return; }

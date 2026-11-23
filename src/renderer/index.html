@@ -2389,7 +2389,8 @@
                             <span id="frameDirectorText">不知道要什么？让导演从 91 款里挑</span>
                             <span class="frame-director-tail" id="frameDirectorTail" aria-hidden="true">→</span>
                         </button>
-                        <button type="button" class="frame-break-btn" id="btnFrameBreak"
+                        <!-- 默认 hidden：由 QfsFeatures.aiBreak 决定是否放出来，脚本没跑也不会误上线 -->
+                        <button type="button" class="frame-break-btn" id="btnFrameBreak" hidden
                                 title="把这张照片交给图像模型，直接生成一张破框成片（约 30–90 秒）。输入框里写的字会作为补充要求一起发过去。先在「AI 设置」里填图像模型">AI 破框 · 生成一张</button>
                     </div>
                 </div>
@@ -2480,11 +2481,11 @@
                                     <button type="button" class="mini-btn" id="btnFrameApiTest">测试连接</button>
                                 </div>
                             </div>
-                            <label class="frame-api-field" for="frameImageModel">
+                            <label class="frame-api-field" for="frameImageModel" hidden>
                                 <span class="frame-adv-label">图像模型（AI 破框用，和上面的对话模型是两个）</span>
                                 <input type="text" id="frameImageModel" class="frame-api-input" placeholder="如 gpt-image-1 / doubao-seedream-4-0-20260415" autocomplete="off" spellcheck="false" />
                             </label>
-                            <div class="frame-api-note" id="frameImageHint">不填就没有 AI 破框（对话模型出不了图）。</div>
+                            <div class="frame-api-note" id="frameImageHint" hidden>不填就没有 AI 破框（对话模型出不了图）。</div>
                             <div class="frame-api-note" id="frameApiNote">支持 OpenAI 兼容接口：官方、中转或自建网关。填完点「测试连接」，成功后再保存。</div>
                         </div>
                         <div class="frame-adv-row" id="frameAgentRow">
@@ -2799,6 +2800,7 @@
     <script src="js/app-elements.js"></script>
     <script src="js/app-view.js"></script>
     <script src="js/app-state.js"></script>
+    <script src="js/app-features.js"></script>
     <script src="js/app-templates.js"></script>
     <script src="js/app-sync.js"></script>
     <script src="js/app-puzzle.js"></script>
