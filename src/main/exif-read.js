@@ -34,13 +34,17 @@ async function readHead(filePath, bytes) {
 // 在 buf 里找 APP1/Exif 段。返回:
 //   'full'   整段都在窗口内(可安全解析)
 //   'beyond' 找到了,但段尾超出窗口
-//   'absent' 扫到窗口末尾也没找到(可能不是 JPEG,也可能头部没有 EXIF)
+//   'no-exif' 扫到 SOS(压缩图像数据起点)仍没找到；JPEG 元数据段必须在 SOS 之前，
+//             到这里就能确定没有 EXIF，不必再整读几十 MB
+//   'absent' 扫到窗口末尾也没找到（可能不是 JPEG，也可能头部没截到 SOS）
 function exifSegmentState(buf) {
     let off = 2;
     while (off + 4 <= buf.byteLength) {
         if (buf[off] !== 0xFF) { off++; continue; }
         const marker = buf[off + 1];
         if (marker === 0xD8 || marker === 0xD9 || (marker >= 0xD0 && marker <= 0xD7)) { off += 2; continue; }
+        // SOS 之后就是图像扫描数据，不会再有 APP1/Exif 段。
+        if (marker === 0xDA) return 'no-exif';
         const len = buf.readUInt16BE(off + 2);
         if (marker === 0xE1 && len >= 10) {
             let isExif = true;
@@ -73,6 +77,8 @@ async function readExif(filePath) {
             try {
                 const head = await readHead(filePath, EXIF_HEAD_BYTES);
                 const state = exifSegmentState(head);
+                // 'no-exif' 已扫到 SOS，能确定没有 EXIF；只有「段尾超窗口」或
+                // 「窗口里没扫完（absent）」才需要整读兜底，避免无 EXIF 大图反复搬运整文件。
                 if (state === 'beyond' || (state === 'absent' && isJpeg)) {
                     raw = parseBuf(await fs.promises.readFile(filePath));  // 头部没覆盖到 → 整读
                 } else {

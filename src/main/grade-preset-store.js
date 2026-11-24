@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { safeLeafName } = require('./export-path');
+const { writeFileAtomic } = require('./state');
 
 // 一份调色预设正常只有几 KB；留 4MB 余量，同时防止被构造的文件撑爆主进程内存。
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -78,7 +79,7 @@ function save(dir, name, xml) {
     }
     try {
         ensureDir(dir);
-        fs.writeFileSync(path.join(dir, safe + XMP_EXT), xml, 'utf-8');
+        writeFileAtomic(path.join(dir, safe + XMP_EXT), xml, 'utf-8');
         return { ok: true };
     } catch (e) {
         return { ok: false, error: String(e) };

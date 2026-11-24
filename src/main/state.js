@@ -2,6 +2,19 @@
 const fs = require('fs');
 const path = require('path');
 
+// 通用原子写：同目录临时文件 + rename，避免进程在写一半时退出留下半截 JSON/XML。
+// rename 跨设备会失败，所以临时文件必须和目标是同一目录。
+function writeFileAtomic(file, data, encoding) {
+    const tmp = `${file}.tmp-${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    fs.writeFileSync(tmp, data, encoding);
+    try {
+        fs.renameSync(tmp, file);
+    } catch (e) {
+        try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ }
+        throw e;
+    }
+}
+
 function createStateStore(stateFile) {
     function loadState() {
         try {
@@ -67,4 +80,4 @@ function createStateStore(stateFile) {
     return { loadState, saveState, validDir, freeFilePath };
 }
 
-module.exports = { createStateStore };
+module.exports = { createStateStore, writeFileAtomic };

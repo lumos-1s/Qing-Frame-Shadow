@@ -16,7 +16,7 @@ const os = require('os');
 const path = require('path');
 const exifUtil = require(path.join(__dirname, '..', 'src', 'renderer', 'js', 'exif.js'));
 const { readExif, exifSegmentState, EXIF_HEAD_BYTES } = require(path.join(__dirname, '..', 'src', 'main', 'exif-read.js'));
-const { createStateStore } = require(path.join(__dirname, '..', 'src', 'main', 'state.js'));
+const { createStateStore, writeFileAtomic } = require(path.join(__dirname, '..', 'src', 'main', 'state.js'));
 
 let fails = 0;
 function ok(cond, label, extra) {
@@ -146,6 +146,20 @@ async function oldReadExif(p) {
     const r4 = await readExif(png);
     ok(JSON.stringify(r4) === '{}', '④ 大 PNG:返回空 EXIF(与整读一致)', JSON.stringify(r4));
 
+    /* ④b 大 JPEG 但头部已扫到 SOS：确定无 EXIF，不必整读 */
+    const bigNoExif = writeTmp('big-noexif.jpg', Buffer.concat([
+        Buffer.from([0xFF, 0xD8]), fillerSeg(64), Buffer.from([0xFF, 0xDA, 0x00, 0x08]),
+        Buffer.alloc(EXIF_HEAD_BYTES * 2, 0x33)
+    ]));
+    const headBufNo = Buffer.alloc(EXIF_HEAD_BYTES);
+    const fdNo = fs.openSync(bigNoExif, 'r');
+    fs.readSync(fdNo, headBufNo, 0, EXIF_HEAD_BYTES, 0);
+    fs.closeSync(fdNo);
+    ok(exifSegmentState(headBufNo) === 'no-exif', '④b 无 EXIF 的大 JPEG:扫到 SOS 即确定 absent',
+        'got=' + exifSegmentState(headBufNo));
+    const rNo = await readExif(bigNoExif);
+    ok(JSON.stringify(rNo) === '{}', '④b 无 EXIF 的大 JPEG:无需整读也返回空', JSON.stringify(rNo));
+
     /* ⑤ 仓库内真实图片:不应抛错 */
     const texDir = path.join(__dirname, '..', 'shared', 'textures');
     if (fs.existsSync(texDir)) {
@@ -240,6 +254,16 @@ async function oldReadExif(p) {
         // 唯一允许出现的地方是 index.js 里的两个包装器定义(handle + on 各一处)
         ok(raw.length === 1 && raw[0] === 'index.js:2',
             '⑧ IPC 注册只经过统一包装器（raw ipcMain.handle/on 仅包装器内 2 处）', raw.join(', '));
+    }
+
+    /* ⑨ 原子写：覆盖已有文件后内容正确，且不留下临时文件 */
+    {
+        const target = path.join(tmpDir, 'atomic.json');
+        fs.writeFileSync(target, 'old');
+        writeFileAtomic(target, '{"new":1}', 'utf-8');
+        const leftovers = fs.readdirSync(tmpDir).filter(n => n.includes('atomic.json.tmp'));
+        ok(fs.readFileSync(target, 'utf-8') === '{"new":1}' && leftovers.length === 0,
+            '⑨ 原子写覆盖目标且清理临时文件', JSON.stringify(leftovers));
     }
 
     fs.rmSync(tmpDir, { recursive: true, force: true });

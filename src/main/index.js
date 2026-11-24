@@ -5,7 +5,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { pathToFileURL } = require('url');
 const zlib = require('zlib');
-const { createStateStore } = require('./state');
+const { createStateStore, writeFileAtomic } = require('./state');
 const { safeLeafName, safeExportName, autoExportTarget, EXPORT_EXTS } = require('./export-path');
 const { normalizeMirror, mirrorUrlFor, downloadVerified, releaseAssetUrl } = require('./update-mirror');
 const { normalizeAutoCheck, shouldAutoCheck } = require('./update-policy');
@@ -136,6 +136,14 @@ const onIpc = (channel, fn) => {
         if (!isTrustedFrame(e)) return;
         fn(e, ...args);
     });
+};
+
+// 批量写盘期间用户可能关掉窗口；此时 sender 已销毁，直接 send 会抛异常并把
+// 剩余文件的写入流程整条中断。进度推送失败只影响 UI，绝不能影响导出本身。
+const sendExportProgress = (sender, payload) => {
+    try {
+        if (sender && !sender.isDestroyed()) sender.send('export-progress', payload);
+    } catch (_) { /* 窗口关闭 / 渲染进程已退出 */ }
 };
 
 function resolveInside(root, candidate) {
@@ -1144,7 +1152,7 @@ handleIpc('save-template', (_e, { name, data }) => {
         const json = JSON.stringify(data, null, 2);
         if (!json) return { ok: false, error: '模板内容无法序列化' };
         if (json.length > 32 * 1024 * 1024) return { ok: false, error: '模板超过 32MB，已拒绝保存' };
-        fs.writeFileSync(path.join(TEMPLATES_DIR, safe + '.json'), json, 'utf-8');
+        writeFileAtomic(path.join(TEMPLATES_DIR, safe + '.json'), json, 'utf-8');
         return { ok: true };
     } catch (e) { return { ok: false, error: String(e) }; }
 });
@@ -1493,7 +1501,7 @@ handleIpc('export-template', async (_e, { name, data }) => {
         const json = JSON.stringify(data, null, 2);
         if (!json) return { ok: false, error: '模板内容无法序列化' };
         if (json.length > 32 * 1024 * 1024) return { ok: false, error: '模板超过 32MB，已拒绝导出' };
-        fs.writeFileSync(filePath, json, 'utf-8');
+        writeFileAtomic(filePath, json, 'utf-8');
         saveState({ lastExportDir: path.dirname(filePath) });
         return { ok: true };
     } catch (e) { return { ok: false, error: String(e) }; }
@@ -1675,7 +1683,7 @@ handleIpc('export-qfs', async (_e, data) => {
         const json = JSON.stringify(data, null, 2);
         if (!json) return { ok: false, error: '工程内容无法序列化' };
         if (json.length > 256 * 1024 * 1024) return { ok: false, error: '工程超过 256MB，请改用流式导出' };
-        fs.writeFileSync(filePath, json, 'utf-8');
+        writeFileAtomic(filePath, json, 'utf-8');
         saveState({ lastExportDir: path.dirname(filePath) });
         return { ok: true };
     } catch (e) { return { ok: false, error: String(e) }; }
@@ -1973,7 +1981,7 @@ handleIpc('save-images-batch', async (_e, files) => {
             } catch (e) { fail++; }
             // 必须用 handler 的形参(_e);这里原来写的是不存在的 `event`,
             // 一进循环就抛 ReferenceError 并被外层 catch 吞掉 → 只写完第 1 个文件。
-            _e.sender.send('export-progress', { done: ok + fail, total: files.length });
+            sendExportProgress(_e.sender, { done: ok + fail, total: files.length });
         }
     } catch (e) { return { ok, fail, error: String(e) }; }
     return { ok, fail, dir };
@@ -2067,7 +2075,7 @@ handleIpc('write-export-files', async (event, payload) => {
         try {
             fs.writeFileSync(location.filePath,
                 applyExportColorProfile(await exifWrite.applyExifToExportItem(files[0]), files[0]));
-            event.sender.send('export-progress', { done: 1, total: 1 });
+            sendExportProgress(event.sender, { done: 1, total: 1 });
             return { ok: 1, fail: 0 };
         } catch (e) {
             const reason = String((e && e.message) || e);
@@ -2112,7 +2120,7 @@ handleIpc('write-export-files', async (event, payload) => {
             }
             // 目录分支原来不发这个事件,渲染层 onExportProgress 永远收不到 →
             // 九宫格批量导出的进度条永远停在 2% / 「写盘 0/N」。逐张上报。
-            event.sender.send('export-progress', { done: ok + failures.length, total: files.length });
+            sendExportProgress(event.sender, { done: ok + failures.length, total: files.length });
         }
     } catch (e) { return { ok, fail: failures.length, error: String(e), failures }; }
     return { ok, fail: failures.length, failures };
