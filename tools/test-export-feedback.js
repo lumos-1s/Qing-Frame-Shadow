@@ -348,6 +348,19 @@ ipcMain.handle('get-app-info', () => ({ version: '0.1.26', electron: '45', chrom
     check(renderFail.idx === renderFail.before.idx && renderFail.name === 'single.png',
         '渲染失败后当前照片指针已还原', JSON.stringify(renderFail));
 
+    // ── ⑪ 相框「不放大」提示已与现实相反（引擎早已按 exportScale 上采样）──
+    const frameNote = await exec(`(() => {
+        const A = window.App;
+        A.template = A.defaultTemplate();
+        A.template.photoFrameStyle = 'POLAROID_HAND';
+        A.dom.selExportSize.value = '8192';
+        A.updateExportSizeNote();
+        const n = A.dom.exportSizeNote;
+        return { display: n ? n.style.display : '', text: n ? n.textContent : '' };
+    })()`);
+    check(frameNote.display === 'none' && !frameNote.text,
+        '小图 + 相框 + 8192 档不再显示错误的「不放大」提示', JSON.stringify(frameNote));
+
     console.log(failures.length ? `\n${failures.length} FAILURE(S)` : '\nALL PASS');
     win.destroy();
     app.exit(failures.length ? 1 : 0);

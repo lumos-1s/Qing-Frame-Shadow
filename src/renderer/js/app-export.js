@@ -1646,49 +1646,16 @@ window.App = Object.assign(window.App || {}, {
         return out.join('');
     },
 
-    // 导出尺寸提示:所选档位超过相框能给出的最大尺寸时,提醒用户实际输出会小于所选值。
-    //
-    // 背景缺陷:engine-styles.js 的相框路径用 finalScale = Math.min(1, displayMax/长边) 封顶,
-    // 根本不读 app.exportScale(而 NONE 路径读)。于是"选 4096/8192 + 用相框样式"拿不到所选尺寸 ——
-    // 小图尤其明显(实测 1200px 照片选 4096 只出 1320px)。修它要动边框渲染主路径,
-    // 而 AGENTS.md 规定「边框相关功能保持原样」,故不在渲染层动刀,改为把静默失望变成已知信息。
-    //
-    // 为什么只报"约 XXXX px"、不报精确值 —— 这里踩过一次坑,值得记下:
-    // 我最初按 scaledSize 复刻了一份"照片长边 + 边框"当作上限,结果对 POLAROID_HAND 报错数。
-    // 原因是 styleDims 里各样式取边框的方式根本不统一:多数样式用 scaledSize(...) 的返回值,
-    // 但 POLAROID_HAND 这类是"比例驱动",直接写死 border = max(30, iw * 0.05),压根不读 photoFrameBorderSize。
-    // 也就是说精确上限必须走 styleDims 那 63 个分支,而在 UI 层复刻一份必然随引擎演进而说错话 ——
-    // 说错数字比不说更糟(用户会拿它当依据去定印刷尺寸)。
-    //
-    // 现在的做法:只陈述一定为真的事实,不猜具体数字。
-    //   · 照片长边 L:相框的成品长边一定 ≥ L(加边框只会更大),所以能拿到 sizeOpt 当且仅当 sizeOpt ≥ L
-    //   · 于是 sizeOpt > L ⟹ 一定拿不到 sizeOpt,这条推论与任何样式的边框算法无关,永不为错
-    // 代价是对「刚好差一点够到」的档位会漏报(宁可漏报,不可报错)。
+    // 旧版相框引擎不读 exportScale，小图选 4096 会静默停在原尺寸，所以这里弹过
+    // 「相框不放大」提示。engine-styles.js 早已按 exportScale 上采样到所选档位，
+    // 这条提示与现实相反（会误导用户以为白选了大尺寸），现在保留函数只做隐藏。
     updateExportSizeNote() {
         const note = this.dom.exportSizeNote;
         if (!note) return;
-        const hide = () => {
-            // 这是每次 input 都会走到的路径(经 onSettingChanged):已经是隐藏且无文字时别再写 DOM
-            if (note.style.display === 'none' && !note.textContent) return;
-            note.style.display = 'none';
-            note.textContent = '';
-        };
-        const sizeOpt = parseInt(this.dom.selExportSize.value, 10) || 0;
-        const tpl = this.template;
-        // 原图直出(NONE)读 exportScale,行为与所选值一致,无需提示
-        if (sizeOpt <= 0 || !tpl) return hide();
-        if (String(tpl.photoFrameStyle || 'NONE').toUpperCase() === 'NONE') return hide();
-        // 拼图走 app-puzzle.js 自己的导出通道(恒 4000px),与本表无关,别去打扰用户
-        if (tpl.puzzle && tpl.puzzle.enabled) return hide();
-        const el = this.image && this.image.el;
-        if (!el) return hide();
-        const photoLong = Math.max(el.naturalWidth || 0, el.naturalHeight || 0);
-        // 照片长边都够不着所选档位 → 必然拿不到(sizeOpt > photoLong 是充分条件,与样式无关)
-        if (sizeOpt <= photoLong) return hide();
-        note.style.display = '';
-        note.textContent = `相框按原始分辨率导出、不放大,实际长边不会达到 ${sizeOpt}px`;
-        note.title = `所选 ${sizeOpt}px 大于照片原始长边 ${photoLong}px。相框成品长边只会在此基础上再加边框,` +
-                     `因此无法上采样到 ${sizeOpt}px。照片足够大时该档位可正常输出。`;
+        // 已经是隐藏且无文字时别再写 DOM（这是每次 input 都会走到的高频路径）
+        if (note.style.display === 'none' && !note.textContent) return;
+        note.style.display = 'none';
+        note.textContent = '';
     },
 
     resetProgress() {

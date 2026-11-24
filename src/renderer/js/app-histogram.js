@@ -311,11 +311,13 @@
         redraw() { if (lastImage) refresh(lastImage); },
         // 测试用：拿到最近一次统计，不依赖 canvas 像素（离屏读像素在不同 GL 后端下不稳定）
         statsOf(im) {
-            const data = sample(srcOf(im || (window.App && window.App.image)));
+            const src = srcOf(im || (window.App && window.App.image));
+            const data = src ? sample(src) : null;
             return data ? collect(data) : null;
         },
         clipOf(im) {
-            const data = sample(srcOf(im || (window.App && window.App.image)));
+            const src = srcOf(im || (window.App && window.App.image));
+            const data = src ? sample(src) : null;
             if (!data) return null;
             const st = collect(data);
             const n = st.total || 1;

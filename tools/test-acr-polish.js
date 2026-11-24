@@ -92,6 +92,9 @@ const PROBE = `(async () => {
     const redIm = mk(redEl, 'red.png');
     const halfClip = H.clipOf(halfIm);
     const redClip = H.clipOf(redIm);
+    // 空图/无源对象不应抛异常（旧版 statsOf/clipOf 会对 null 源直接取 naturalWidth）
+    let emptySafe = false;
+    try { emptySafe = H.statsOf({}) === null && H.clipOf({}) === null; } catch (e) { emptySafe = false; }
     H.refresh(halfIm);
     await wait(260);
     const lo = $('gradeClipLo'), hi = $('gradeClipHi');
@@ -170,7 +173,7 @@ const PROBE = `(async () => {
     const noCopyMsg = /先点/.test($('stCanvas').textContent || '');
 
     return {
-        halfClip, redClip, clipOn, clipText, clipPct, clipNums, marked, unmarked,
+        halfClip, redClip, emptySafe, clipOn, clipText, clipPct, clipNums, marked, unmarked,
         fileText, fileVisible, afterNext, afterPrev,
         plainCount: plain.length, noZero, allInRange, expZero, shpZero,
         tracks, beforeMasks, afterMasks, maskCreated, maskExpanded,
@@ -205,6 +208,7 @@ async function main() {
             '半黑半白：阴影/高光各剪切 50%', JSON.stringify(res.halfClip));
         check(res.redClip && res.redClip.lo === 0 && res.redClip.hi === 0,
             '纯红图（饱和色）不算过曝/过暗，两角都不亮', JSON.stringify(res.redClip));
+        check(res.emptySafe, '直方图空源不抛异常（statsOf/clipOf 返回 null）');
         check(res.clipOn && res.clipPct > 40 && /%/.test(res.clipText),
             '两角角标点亮，悬停文案带精确百分比', res.clipText);
         check(res.clipNums.visible && /%/.test(res.clipNums.lo) && /%/.test(res.clipNums.hi),

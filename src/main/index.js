@@ -460,13 +460,18 @@ app.whenReady().then(() => {
     //    等于把"任意代码执行"的权限交给镜像运营者。因此这里不再走任何镜像;
     //    国内网络请使用系统代理,或到 GitHub Releases 手动下载。
     const CHECK_TIMEOUT_MS = 20000;
-    const withTimeout = (promise, ms, label) => Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(
+    const withTimeout = (promise, ms, label) => new Promise((resolve, reject) => {
+        const timer = setTimeout(
             () => reject(new Error(`${label}超时（${Math.round(ms / 1000)}s），GitHub 连接缓慢或不可达，请稍后重试或使用系统代理`)),
             ms
-        ))
-    ]);
+        );
+        // 原 Promise.race 写法即使 promise 先完成，定时器仍会挂在事件循环里到点才醒。
+        // 更新检查每次点都会触发，长此以往会堆一堆空转定时器。
+        Promise.resolve(promise).then(
+            (v) => { clearTimeout(timer); resolve(v); },
+            (e) => { clearTimeout(timer); reject(e); }
+        );
+    });
     // 原始 feed 报错(JSON 解析栈)对用户不可读,推给 UI 时换成一句网络提示;日志仍保留原文
     const friendlyUpdaterError = (msg) => {
         const m = String(msg || '');

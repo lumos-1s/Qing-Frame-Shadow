@@ -221,6 +221,15 @@
         if (!t) { paintBadge(); return; }
         lastIm = t;
         if (build(t)) paint();
+        else {
+            // 新图还没烘焙出可用像素时，绝不能让上一张的角标数字挂在画面上。
+            pct = { hi: 0, lo: 0 };
+            mapSrc = null;
+            if (octx && ov) {
+                octx.setTransform(1, 0, 0, 1, 0, 0);
+                octx.clearRect(0, 0, ov.width, ov.height);
+            }
+        }
         paintBadge();
     }
 

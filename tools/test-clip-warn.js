@@ -204,6 +204,19 @@ app.whenReady().then(async () => {
           && sameSrc.hist.hi === 0 && Math.abs(sameSrc.hist.lo - 1) < 1e-9,
         '溢出警示与直方图都取全分辨率调色画布（不再一个 low 一个 canvas）', JSON.stringify(sameSrc));
 
+    // 换到还没烘焙出像素的图：角标必须归零，不能挂着上一张的百分比
+    const staleBadge = await exec(`(() => {
+        const im = { el: null, _grade: null, grade: null, name: 'no-pixels' };
+        App.images = [im]; App.image = im; App.currentIdx = 0;
+        QfsClip.redraw();
+        return { stats: QfsClip.stats(),
+                 hi: document.getElementById('clipBadgeHi').textContent,
+                 lo: document.getElementById('clipBadgeLo').textContent };
+    })()`);
+    check(staleBadge.stats.hi === 0 && staleBadge.stats.lo === 0
+          && staleBadge.hi === '0%' && staleBadge.lo === '0%',
+        '切到无像素图片时警示角标清零，不残留上一张读数', JSON.stringify(staleBadge));
+
     console.log(failures.length ? ('\n' + failures.length + ' 项失败') : '\n全部通过');
     await win.close();
     app.exit(failures.length ? 1 : 0);

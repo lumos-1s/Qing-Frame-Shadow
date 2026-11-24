@@ -2015,6 +2015,14 @@
                     const key = btn.dataset.jump;
                     let target = null;
                     if (key === 'light' || key === 'color' || key === 'fx') {
+                        // 旧偏好里整个「调色」组可能还是折叠的：只展开子组的话它仍不可见。
+                        const parent = $('grpGrade');
+                        if (parent && parent.classList.contains('collapsed')) {
+                            parent.classList.remove('collapsed');
+                            if (window.QfsPanelDensity && window.QfsPanelDensity.onFoldChange) {
+                                window.QfsPanelDensity.onFoldChange(parent);
+                            }
+                        }
                         target = document.querySelector('#grpGrade .pg-sub[data-sub="' + key + '"]');
                         if (target) {
                             target.classList.remove('collapsed');
