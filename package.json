@@ -33,6 +33,7 @@
     "test:logohit": "node tools/run-electron.js tools/test-logo-hit-on-presets.js",
     "test:logodrag": "node tools/run-electron.js tools/test-logo-drag-on-presets.js",
     "test:logosize": "node tools/run-electron.js tools/test-logo-size-limit.js",
+    "test:logopack": "node tools/test-logo-pack.js",
     "test:presetkeep": "node tools/run-electron.js tools/test-preset-keep-content.js",
     "test:presethover": "node tools/run-electron.js tools/test-preset-hover.js",
     "test:dragdrop": "node tools/run-electron.js tools/test-dragdrop.js",

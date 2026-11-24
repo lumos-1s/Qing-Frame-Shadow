@@ -19,6 +19,7 @@ const CD_SIG = 0x02014b50;
 
 // zip 索引：name -> { method, compSize, size, lho }
 function readZipIndex(buf) {
+    if (!Buffer.isBuffer(buf) || buf.length < 22) throw new Error('不是有效的 zip / Eagle 素材包');
     let eocd = -1;
     const min = Math.max(0, buf.length - 22 - 0xffff);
     for (let i = buf.length - 22; i >= min; i--) {
@@ -28,6 +29,7 @@ function readZipIndex(buf) {
     const count = buf.readUInt16LE(eocd + 10);
     let p = buf.readUInt32LE(eocd + 16);
     const map = new Map();
+    if (p < 0 || p >= buf.length) return map;
     for (let i = 0; i < count; i++) {
         if (p + 46 > buf.length || buf.readUInt32LE(p) !== CD_SIG) break;
         const method = buf.readUInt16LE(p + 10);
@@ -37,21 +39,38 @@ function readZipIndex(buf) {
         const extraLen = buf.readUInt16LE(p + 30);
         const commentLen = buf.readUInt16LE(p + 32);
         const lho = buf.readUInt32LE(p + 42);
+        const next = p + 46 + nameLen + extraLen + commentLen;
+        // 畸形 central directory：名字/extra 越界时停止，不能拿越界区间当文件名。
+        if (next > buf.length) break;
         const name = buf.toString('utf8', p + 46, p + 46 + nameLen);
-        map.set(name, { method, compSize, size, lho });
-        p += 46 + nameLen + extraLen + commentLen;
+        // 只收 local header 落在文件内的 entry；真正解压前 readEntry 还会再校验一次。
+        if (lho >= 0 && lho + 30 <= buf.length) map.set(name, { method, compSize, size, lho });
+        p = next;
     }
     return map;
 }
 
 function readEntry(buf, e) {
     if (!e) return null;
+    // 解压炸弹防护：central directory 声明的大小先卡一道，解压输出再由
+    // maxOutputLength 兜底。旧代码只在解压**之后**检查 20MB，恶意包可在
+    // inflateRawSync 里直接把主进程内存吃满。
+    if (!Number.isInteger(e.lho) || e.lho < 0 || e.lho + 30 > buf.length) return null;
+    if (Number(e.size) > MAX_FILE) return null;
+    if (!Number.isFinite(e.compSize) || e.compSize < 0) return null;
     const nameLen = buf.readUInt16LE(e.lho + 26);
     const extraLen = buf.readUInt16LE(e.lho + 28);
     const start = e.lho + 30 + nameLen + extraLen;
+    if (start < 0 || start > buf.length || start + e.compSize > buf.length) return null;
     const raw = buf.subarray(start, start + e.compSize);
-    if (e.method === 0) return Buffer.from(raw);
-    if (e.method === 8) return zlib.inflateRawSync(raw);
+    if (e.method === 0) {
+        if (raw.length > MAX_FILE) return null;
+        return Buffer.from(raw);
+    }
+    if (e.method === 8) {
+        try { return zlib.inflateRawSync(raw, { maxOutputLength: MAX_FILE }); }
+        catch (_) { return null; }
+    }
     return null;
 }
 
@@ -68,6 +87,9 @@ const RASTER = ['.png', '.jpg', '.jpeg', '.webp'];
 const VECTOR = ['.svg'];
 const MAX_FILE = 20 * 1024 * 1024;
 const MAX_TOTAL = 200 * 1024 * 1024;
+// 整包上限：再大就不该一次性读进内存。压缩包本身可以很小、解压后很大，
+// 真正的炸弹防护在 readEntry 的 maxOutputLength，这里只挡「文件本身就巨大」。
+const MAX_PACK = 512 * 1024 * 1024;
 
 // 返回 { ok, added, replaced, skipped, total, brands, shadowed, error? }
 // destDir 不存在会创建；同名文件按覆盖处理（用户在应用里显式导入，应当生效）。
@@ -75,7 +97,12 @@ const MAX_TOTAL = 200 * 1024 * 1024;
 function importLogoPack(filePath, destDir, builtinDir) {
     const res = { ok: false, added: 0, replaced: 0, skipped: 0, total: 0, brands: [], shadowed: 0, svgOnly: 0 };
     let buf;
-    try { buf = fs.readFileSync(filePath); }
+    try {
+        const st = fs.statSync(filePath);
+        if (!st.isFile()) { res.error = '这不是一个文件'; return res; }
+        if (st.size > MAX_PACK) { res.error = '素材包太大（超过 512MB），请拆分后再导入'; return res; }
+        buf = fs.readFileSync(filePath);
+    }
     catch (e) { res.error = '读不到这个文件：' + (e && e.message || e); return res; }
 
     let index;
