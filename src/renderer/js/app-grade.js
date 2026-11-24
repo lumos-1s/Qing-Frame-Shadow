@@ -2005,6 +2005,39 @@
                     });
                 }
             }
+            // 类 LR 参数导航：展开目标并滚到它。刻意不做互斥子页签——
+            // 调色常常要同时看曝光与白平衡，其它组必须保持原样。
+            const jump = $('gradeJump');
+            if (jump) {
+                jump.addEventListener('click', (e) => {
+                    const btn = e.target.closest('[data-jump]');
+                    if (!btn) return;
+                    const key = btn.dataset.jump;
+                    let target = null;
+                    if (key === 'light' || key === 'color' || key === 'fx') {
+                        target = document.querySelector('#grpGrade .pg-sub[data-sub="' + key + '"]');
+                        if (target) {
+                            target.classList.remove('collapsed');
+                            const head = target.querySelector('.pg-sub-head');
+                            if (head) head.setAttribute('aria-expanded', 'true');
+                        }
+                    } else {
+                        target = $(key);
+                        if (target && target.classList.contains('param-group')) {
+                            target.classList.remove('collapsed');
+                            if (window.QfsPanelDensity && window.QfsPanelDensity.onFoldChange) {
+                                window.QfsPanelDensity.onFoldChange(target);
+                            }
+                        }
+                    }
+                    if (!target) return;
+                    const body = document.querySelector('#inspector .insp-body');
+                    if (!body) return;
+                    const tr = target.getBoundingClientRect();
+                    const br = body.getBoundingClientRect();
+                    body.scrollTop += (tr.top - br.top) - 8;
+                });
+            }
             // 轨道零点标记：按 defaultValue 算出默认档在轨道上的位置，
             // 写进行上的 --zero，CSS 画一枚小三角（排除色相/混色器等特殊轨道）。
             document.querySelectorAll('#panel-grade .param-row > input[type=range]').forEach((inp) => {

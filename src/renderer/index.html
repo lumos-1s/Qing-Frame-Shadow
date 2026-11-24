@@ -1443,11 +1443,32 @@
                                 <button type="button" class="histo-auto" id="btnGradeAuto" title="自动调色：曝光、黑白场；普通照片含白平衡，RAW 照片会同时校正显影白平衡（色温/色调）。本地计算，可撤销">自动</button>
                             </div>
                         </div>
-                        <!-- 低频组默认收起后的唯一提示：一行写完「收了几组、怎么展开」。
-                            全部展开后这行消失，不常驻占位。 -->
-                        <div class="fold-notice" id="foldNotice" hidden>
-                            <span id="foldNoticeText"></span>
-                            <button type="button" class="mini-btn" id="btnExpandAll" title="把调色页所有参数组展开">全部展开</button>
+                        <!-- 类 LR 的参数导航：点一下把对应段/组展开并滚到它，不隐藏其它组。
+                             低频组的收起提示收进这同一行，不再单独占一整行。 -->
+                        <div class="grade-jump" id="gradeJump" role="toolbar" aria-label="调色参数导航">
+                            <button type="button" data-jump="light">亮</button>
+                            <button type="button" data-jump="color">颜色</button>
+                            <button type="button" data-jump="fx">效果</button>
+                            <button type="button" data-jump="grpCurve">曲线</button>
+                            <button type="button" data-jump="grpDet">细节</button>
+                            <button type="button" data-jump="grpMask">蒙版</button>
+                            <div class="fold-notice" id="foldNotice" hidden>
+                                <span id="foldNoticeText"></span>
+                                <button type="button" class="mini-btn" id="btnExpandAll" title="展开全部低频参数组">全部展开</button>
+                            </div>
+                            <span class="pg-title-actions" id="gradeTitleActions">
+                                <button id="btnGradeReset" class="mini-btn" type="button" title="全部归零，回到照片本色">重置</button>
+                                <span class="grade-more-wrap" id="gradeMoreWrap">
+                                    <button id="btnGradeMore" class="mini-btn grade-more-btn" type="button" aria-haspopup="true" aria-expanded="false" title="更多调色操作">⋯</button>
+                                    <span class="tab-more-menu grade-more-menu" id="gradeMoreMenu" hidden>
+                                        <button id="btnGradeApplyAll" class="tab-more-action" type="button" title="把这套参数复制给本次导入的所有照片">应用到全部</button>
+                                        <button id="btnGradeApplySelected" class="tab-more-action" type="button" title="只把这套调色参数复制给胶片条里多选的照片（不含当前照片）">应用到选中</button>
+                                        <button id="btnGradeCopySet" class="tab-more-action" type="button" title="复制这张照片的调色 + 边框设置（不写系统剪贴板）">复制设置</button>
+                                        <button id="btnGradePasteSet" class="tab-more-action" type="button" title="把复制的设置粘贴到胶片条里多选的照片">粘贴设置</button>
+                                        <button id="btnGradeImportXmp" class="tab-more-action" type="button" title="导入 Lightroom / Camera Raw 的 .xmp 调色预设">导入 LR 预设</button>
+                                    </span>
+                                </span>
+                            </span>
                         </div>
                         <div class="param-group" id="grpMask">
                             <div class="pg-title collapsible">蒙版</div>
@@ -1555,19 +1576,6 @@
                                  其余低频操作收进菜单，参数区直接从「亮」开始。 -->
                             <div class="pg-title collapsible">
                                 <span class="pg-title-text">基础</span>
-                                <span class="pg-title-actions" id="gradeTitleActions">
-                                    <button id="btnGradeReset" class="mini-btn" type="button" title="全部归零，回到照片本色">重置</button>
-                                    <span class="grade-more-wrap" id="gradeMoreWrap">
-                                        <button id="btnGradeMore" class="mini-btn grade-more-btn" type="button" aria-haspopup="true" aria-expanded="false" title="更多调色操作">⋯</button>
-                                        <span class="tab-more-menu grade-more-menu" id="gradeMoreMenu" hidden>
-                                            <button id="btnGradeApplyAll" class="tab-more-action" type="button" title="把这套参数复制给本次导入的所有照片">应用到全部</button>
-                                            <button id="btnGradeApplySelected" class="tab-more-action" type="button" title="只把这套调色参数复制给胶片条里多选的照片（不含当前照片）">应用到选中</button>
-                                            <button id="btnGradeCopySet" class="tab-more-action" type="button" title="复制这张照片的调色 + 边框设置（不写系统剪贴板）">复制设置</button>
-                                            <button id="btnGradePasteSet" class="tab-more-action" type="button" title="把复制的设置粘贴到胶片条里多选的照片">粘贴设置</button>
-                                            <button id="btnGradeImportXmp" class="tab-more-action" type="button" title="导入 Lightroom / Camera Raw 的 .xmp 调色预设">导入 LR 预设</button>
-                                        </span>
-                                    </span>
-                                </span>
                             </div>
 
                             <!-- 三段的划分照 Camera Raw：亮（明暗）/ 颜色（白平衡与饱和）/ 效果（质感）。
@@ -1615,8 +1623,8 @@
                                 </div>
                             </div>
 
-                            <div class="pg-sub" data-sub="color">
-                                <div class="pg-sub-head" role="button" tabindex="0" aria-expanded="true">
+                            <div class="pg-sub collapsed" data-sub="color">
+                                <div class="pg-sub-head" role="button" tabindex="0" aria-expanded="false">
                                     <span class="pg-sub-name">颜色</span>
                                     <button type="button" class="pg-sub-tool" id="btnWbPick" aria-pressed="false" title="点画面里的中性色（灰墙 / 白纸 / 阴天天空），自动定白平衡">吸管</button>
                                     <button type="button" class="pg-sub-reset" data-sub-reset="color" title="把「颜色」这组归零：色温 / 色调 / 自然饱和度 / 饱和度">复位</button>
@@ -1645,8 +1653,8 @@
 
                             <!-- 效果段接管原来「细节」里的三档。细节只剩锐化，
                                  和 Camera Raw 一样把「质感」与「锐化」分开。 -->
-                            <div class="pg-sub" data-sub="fx">
-                                <div class="pg-sub-head" role="button" tabindex="0" aria-expanded="true">
+                            <div class="pg-sub collapsed" data-sub="fx">
+                                <div class="pg-sub-head" role="button" tabindex="0" aria-expanded="false">
                                     <span class="pg-sub-name">效果</span>
                                     <button type="button" class="pg-sub-reset" data-sub-reset="fx" title="把「效果」这组归零：纹理 / 清晰度 / 去除薄雾 / 晕影 / 颗粒">复位</button>
                                 </div>

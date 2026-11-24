@@ -166,17 +166,22 @@ const PROBE = `(async () => {
     const colorReset = afterColor.temp === 0 && afterColor.tint === 0;
 
     // ── 6. 收起 / 展开 ──
-    const head = document.querySelector('#grpGrade .pg-sub[data-sub="color"] .pg-sub-head');
+    // 类 LR：默认只展开「亮」，颜色/效果收起；点标题切换，行可见性跟着走。
+    const colorSub = document.querySelector('#grpGrade .pg-sub[data-sub="color"]');
+    const head = colorSub.querySelector('.pg-sub-head');
     const rowTemp = $('rowGradeTemp');
+    const subBefore = colorSub.classList.contains('collapsed');
     head.click();
     await wait(60);
-    const collapsed = getComputedStyle(rowTemp).display === 'none'
-        && head.getAttribute('aria-expanded') === 'false'
-        && document.querySelector('#grpGrade .pg-sub[data-sub="color"]').classList.contains('collapsed');
+    const toggled = colorSub.classList.contains('collapsed') !== subBefore;
+    const stateOk = head.getAttribute('aria-expanded') === String(!colorSub.classList.contains('collapsed'))
+        && (getComputedStyle(rowTemp).display === 'none') === colorSub.classList.contains('collapsed');
     head.click();
     await wait(60);
-    const expanded = getComputedStyle(rowTemp).display !== 'none' && head.getAttribute('aria-expanded') === 'true';
-
+    const restored = colorSub.classList.contains('collapsed') === subBefore;
+    const jump = $('gradeJump');
+    const jumpBtns = jump ? Array.prototype.slice.call(jump.querySelectorAll('[data-jump]')).map((b) => b.dataset.jump) : [];
+    const foldInJump = !!jump && !!jump.querySelector('#foldNotice');
     // ── 7. 行布局：标签在上、轨道整宽、数值靠右 ──
     A.resetGrade();
     A.setGrade({ con: 18 });
@@ -238,7 +243,7 @@ const PROBE = `(async () => {
         exifText, exifEmpty,
         keys, lightOk, colorOk, fxOk, detOnlySharpen,
         lightReset, othersKept, fxReset, colorReset,
-        collapsed, expanded,
+        subBefore, toggled, stateOk, restored, jumpBtns, foldInJump,
         layout, unitText, numVal, cw, ch, painted, widthRows
     };
 })()`;
@@ -292,7 +297,12 @@ async function main() {
             JSON.stringify({ lightReset: res.lightReset, othersKept: res.othersKept }));
         check(res.fxReset, '「效果」复位清纹理/清晰度/去薄雾/晕影/颗粒，颜色保持不动');
         check(res.colorReset, '「颜色」复位只清白平衡与饱和');
-        check(res.collapsed && res.expanded, '段标题可收起再展开', JSON.stringify({ c: res.collapsed, e: res.expanded }));
+        check(res.subBefore && res.toggled && res.stateOk && res.restored,
+            '默认只展开「亮」；段标题可切换，折叠状态与行可见性一致',
+            JSON.stringify({ before: res.subBefore, toggled: res.toggled, stateOk: res.stateOk, restored: res.restored }));
+        check(res.jumpBtns.join(',') === 'light,color,fx,grpCurve,grpDet,grpMask' && res.foldInJump,
+            '参数导航直接跳到各段，收起提示并进同一行而不是单独占位',
+            JSON.stringify({ btns: res.jumpBtns, fold: res.foldInJump }));
         check(res.layout.labelAbove && res.layout.fullWidth && res.layout.valueRight && res.layout.labelLeft,
             '滑块行：标签在上、轨道整宽、数值靠右', JSON.stringify(res.layout));
         check(res.unitText === '' && res.numVal === '18',

@@ -1307,6 +1307,36 @@ input[type=range].fine-tuning::-webkit-slider-thumb {
     border-color: rgba(255, 120, 110, .75);
     background: linear-gradient(90deg, rgba(255, 70, 70, .30) 0 50%, rgba(64, 120, 255, .30) 50% 100%);
 }
+/* 类 LR 的参数导航：点一下把对应段/组展开并滚过去，不是互斥子页签——
+   其它组保持原样，方便同时对照曝光与白平衡。收起提示并进同一行，不再单独占位。 */
+.grade-jump {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
+    margin: var(--sp-2-5) 2px 2px; padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+.grade-jump > button {
+    flex: 0 0 auto; border: 1px solid transparent; border-radius: 7px;
+    background: transparent; color: var(--text-2); cursor: pointer;
+    font-size: var(--fs-11); padding: 3px 7px;
+    transition: color .15s, background-color .15s, border-color .15s;
+}
+.grade-jump > button:hover {
+    color: var(--primary-text); background: var(--surface-alt); border-color: var(--border);
+}
+.grade-jump > #gradeTitleActions {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 3px;
+    opacity: 1; pointer-events: auto;
+}
+.grade-jump .fold-notice { margin: 0 3px 0 0; padding: 0 2px; }
+/* 徽章原本挂在「基础」标题上，那层收掉后挪到导航栏，仍有「已调整 / 编辑蒙版」反馈 */
+#panel-grade:has(#grpGrade.grade-on) .grade-jump::after {
+    content: '已调整'; margin-left: 4px; font-size: var(--fs-10);
+    color: var(--primary-text); background: var(--primary-soft);
+    border-radius: 6px; padding: 1px 5px;
+}
+#panel-grade:has(#grpGrade.editing-mask) .grade-jump::after {
+    content: '编辑蒙版'; color: var(--surface); background: var(--primary);
+}
 /* 折叠提示只做一行轻量状态，不再用虚线卡片单独占一块：
    收了几组 + 一个文字入口，组标题上的箭头已经说明怎么展开。 */
 .fold-notice {
@@ -1328,6 +1358,13 @@ input[type=range].fine-tuning::-webkit-slider-thumb {
 #inspector.no-image .histo-card { opacity: .5; pointer-events: none; }
 
 /* 段头：比 .pg-title 低一档，靠一条发丝线分隔，右侧复位按钮默认隐身 */
+/* 「基础」容器节点保留给折叠计数/徽章，但不再显示；操作按钮已移到导航栏右端。 */
+#grpGrade > .pg-title { display: none; }
+/* 被提为一级的三段标题稍微加点呼吸，和低权重的小节头区分开 */
+#grpGrade .pg-sub-head { padding-top: calc(11px * var(--density)); padding-bottom: calc(7px * var(--density)); }
+#grpGrade .pg-sub:first-of-type .pg-sub-head {
+    border-top: 1px solid var(--border); padding-top: calc(9px * var(--density));
+}
 .pg-sub { margin-top: 2px; }
 .pg-sub-head {
     display: flex; align-items: center; gap: 6px;
