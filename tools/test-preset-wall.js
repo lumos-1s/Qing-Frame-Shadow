@@ -80,6 +80,12 @@ async function main() {
       try {
         const App = window.App;
         if (!App) return { error: 'App 未加载' };
+        // 这个用例与别的 GUI 用例共用真实 userData；别的用例可能把左栏收起写进
+        // localStorage。B1 断言的是普通编辑态左栏常驻，先恢复默认展开。
+        localStorage.removeItem('qfs_sidebar_collapsed');
+        document.body.classList.remove('sidebar-collapsed');
+        const rail = document.getElementById('btnSidebarRail');
+        if (rail) rail.hidden = true;
         const wait = (ms) => new Promise((r) => setTimeout(r, ms));
         // tools/preload-measure.js 会注入 window.__qfTest，app.js 因此跳过「启动即开墙」，
         // 否则墙的覆盖层会挡住其它用例的真实鼠标事件。本用例是墙自己的测试，显式打开。
@@ -828,6 +834,39 @@ async function main() {
         '拼图中插入照片后示例图自动移除', JSON.stringify(puzzleInsert));
     check(puzzleInsert.puzzle && puzzleInsert.slot0 === 0,
         '示例图的拼图槽位转给新图（不再是空槽）', JSON.stringify(puzzleInsert));
+
+    // 8b. 插到当前图之前：image 对象不变，但 currentIdx 必须跟着右移，
+    // 否则调色预设/草稿会打到旁边那张照片。
+    openImageResult = { name: '前插照片.png', path: 'test://front.png' };
+    const frontInsert = await exec(`(async () => {
+        const A = window.App;
+        const mk = async (name, color) => {
+            const c = document.createElement('canvas'); c.width = 120; c.height = 80;
+            const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, 120, 80);
+            const el = new Image();
+            await new Promise((r) => { el.onload = r; el.onerror = r; el.src = c.toDataURL('image/png'); });
+            return { el, name, path: 'test://' + name, w: 120, h: 80, exif: {}, customSettings: null };
+        };
+        const a = await mk('A.png', '#a00');
+        const b = await mk('B.png', '#0a0');
+        const c = await mk('前插照片.png', '#00a');
+        A.images = [a, b]; A.image = b; A.currentIdx = 1;
+        A.template = A.defaultTemplate();
+        A.template.puzzle.enabled = 1;
+        A.template.puzzle.layout = 'grid4';
+        A.template.puzzle.slots = { 0: { imageIndex: 0 }, 1: { imageIndex: 1 } };
+        A.setTpl(b, JSON.parse(JSON.stringify(A.template)));
+        A.buildThumbnails();
+        const orig = A.imageFromPick;
+        A.imageFromPick = async () => { A.queueThumb(c); return c; };
+        try { await A.insertImageFromPick(0); } finally { A.imageFromPick = orig; }
+        return { names: A.images.map((im) => im.name), idx: A.currentIdx,
+                 current: A.image && A.image.name };
+    })()`);
+    openImageResult = CANCEL();
+    check(frontInsert.idx === 2 && frontInsert.current === 'B.png'
+          && frontInsert.names.join(',') === '前插照片.png,A.png,B.png',
+        '在两张非示例图之间插入照片后 currentIdx 仍指向原来的当前图', JSON.stringify(frontInsert));
 
     // 9. 双击拼图槽位换图：示例图退出，槽位落到新图
     openImageResult = { name: '换槽照片.png', path: 'test://slot.png' };

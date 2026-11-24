@@ -85,7 +85,13 @@ window.App = Object.assign(window.App || {}, {
         const quality = lossy ? Math.min(1, Math.max(0.6, (parseInt(this.dom.slExportQuality.value, 10) || 92) / 100)) : 1;
         const sizeOpt = parseInt(this.dom.selExportSize.value, 10) || 0;
         const needsBg = fmt === 'jpeg';
-        const targets = this.selectedIdx.length > 1 ? this.selectedIdx : [this.currentIdx];
+        // 拼图页签的主按钮是「导出拼图」：拼图成品只有当前画布这一张。
+        // 胶片条残留的批量勾选不能把这里悄悄变成「逐张导出各照片」，否则用户
+        // 以为导的是拼图，实际得到一堆单图（文件名、尺寸、内容全对不上）。
+        const activeTab = this.dom.tabs && this.dom.tabs.querySelector('.tab.active');
+        const onPuzzleTab = !!(activeTab && activeTab.dataset.tab === 'puzzle');
+        const targets = onPuzzleTab ? [this.currentIdx]
+            : (this.selectedIdx.length > 1 ? this.selectedIdx : [this.currentIdx]);
         const jobs = [];
         targets.forEach(idx => {
             const im = this.images[idx];

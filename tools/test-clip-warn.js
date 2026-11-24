@@ -182,6 +182,28 @@ app.whenReady().then(async () => {
         '没有溢出时干净：读数 0、画布不留残影', JSON.stringify(none));
     check(none.badge === '0%', '角标读数归零', none.badge);
 
+    // 警示与直方图必须取同一张调色画布：low 是全白、canvas 是全黑时，
+    // 两边都该报「暗部 100%」。旧实现警示优先 low，会和直方图对不上。
+    const sameSrc = await exec(`(() => {
+        const mk = (rgb) => {
+            const c = document.createElement('canvas'); c.width = 80; c.height = 60;
+            const g = c.getContext('2d'); g.fillStyle = rgb; g.fillRect(0, 0, 80, 60);
+            return c;
+        };
+        const el = mk('rgb(128,128,128)');
+        const im = { el, w: 80, h: 60, name: 'src-mix', grade: { exp: 0.4 },
+            _grade: { neutral: false, low: mk('rgb(254,254,254)'), lowKey: 'low',
+                      canvas: mk('rgb(0,0,0)'), fullKey: 'full' } };
+        App.images = [im]; App.image = im; App.currentIdx = 0;
+        QfsClip.redraw();
+        const c = QfsClip.stats();
+        const h = QfsHistogram.clipOf(im);
+        return { clip: c, hist: h };
+    })()`);
+    check(sameSrc.clip.hi === 0 && sameSrc.clip.lo === 1
+          && sameSrc.hist.hi === 0 && Math.abs(sameSrc.hist.lo - 1) < 1e-9,
+        '溢出警示与直方图都取全分辨率调色画布（不再一个 low 一个 canvas）', JSON.stringify(sameSrc));
+
     console.log(failures.length ? ('\n' + failures.length + ' 项失败') : '\n全部通过');
     await win.close();
     app.exit(failures.length ? 1 : 0);

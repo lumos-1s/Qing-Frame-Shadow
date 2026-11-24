@@ -103,6 +103,8 @@ const READ = `(() => {
         stRes: A.dom.stRes.textContent,
         stInfo: A.dom.stInfo.textContent,
         status: String(A.statusMsg || ''),
+        sideMode: A._sideMode,
+        photoTabHidden: !!(document.getElementById('sideTabPhoto') || {}).hidden,
     };
 })()`;
 
@@ -206,8 +208,31 @@ app.whenReady().then(async () => {
         '⑤ 只剩 1 张也能删(不再被"至少保留一张照片"挡住)',
         `images ${s.images}→${a.images}  状态「${a.status}」`, 'images=0');
 
+    // ⑥ 拼图页的照片库模式下删光：左栏退出照片模式，入口收起，再导入不会卡在空列表
+    s = await win.webContents.executeJavaScript(setup(2));
+    await win.webContents.executeJavaScript(`(() => {
+        const A = window.App;
+        A.template.puzzle.enabled = 1;
+        A.template.puzzle.layout = 'grid4';
+        A.template.puzzle.slots = { 0: { imageIndex: 0 }, 1: { imageIndex: 1 } };
+        A.setTpl(A.image, JSON.parse(JSON.stringify(A.template)));
+        A.switchTab('puzzle');
+        A.setSideMode('photo');
+        return 1;
+    })()`);
+    await win.webContents.executeJavaScript(`(() => {
+        const A = window.App;
+        A.removeImages([0, 1]);
+        return 1;
+    })()`);
+    a = await win.webContents.executeJavaScript(READ);
+    line(a.images === 0 && a.sideMode === 'border' && a.photoTabHidden,
+        '⑥ 拼图照片库模式下删光照片，左栏退回素材库且照片入口收起',
+        `images=${a.images} sideMode=${a.sideMode} photoTabHidden=${a.photoTabHidden}`,
+        'images=0 / sideMode=border / photoTabHidden=true');
+
     console.log('─'.repeat(90));
-    console.log(fails.length ? `✖ ${fails.length} 项未通过: ${fails.join('、')}` : `✓ 全部 5 项通过`);
+    console.log(fails.length ? `✖ ${fails.length} 项未通过: ${fails.join('、')}` : `✓ 全部 6 项通过`);
     dbg.detach();
     finish(fails.length ? 1 : 0);
 }).catch(e => { console.error(e); finish(1); });

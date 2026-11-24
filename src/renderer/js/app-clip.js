@@ -73,13 +73,14 @@
         return !!octx;
     }
 
-    // 警示图取哪张像素：优先 low（1600px 降采样，拖动时屏幕上就是这一张），
-    // 没有才退到全尺寸烘焙 / 原图。参数归零时 low/canvas 还挂着上一次的结果，
-    // 必须回原图，否则重置后警示还停在旧位置（与直方图同一个坑）。
+    // 警示图取哪张像素：与画面/直方图完全同一口径。烘焙好的全分辨率画布优先；
+    // 没有才退到拖动用的降采样 low（且 lowKey 必须有效，否则可能是裁切前的旧图）；
+    // 参数归零时全退回原图。旧实现优先 low，导致 J 警示百分比与直方图系统性对不上。
     function srcOf(im) {
         if (!im) return null;
+        if (typeof window.photoSrcOf === 'function') return window.photoSrcOf(im);
         const g = im._grade;
-        if (g && !g.neutral) return g.low || g.canvas || null;
+        if (g && !g.neutral) return g.canvas || (g.low && g.lowKey ? g.low : null) || im.el || null;
         return im.el || null;
     }
 

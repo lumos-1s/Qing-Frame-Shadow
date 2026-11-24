@@ -208,8 +208,12 @@ const RUN = `(async () => {
     A.dom.selExportSize.value = '0';
     A.dom.slExportQuality.value = '92';
     A.dom.chkKeepExif.checked = false;
+    // 拼图页签下即使胶片条还勾着别的照片，主按钮也只导当前这张拼图。
+    A.selectedIdx = [0, 1]; A.batchSel = [0, 1];
+    A.switchTab('puzzle');
     await A.exportImage();
     add(/导出完成/.test(A.statusMsg || ''), '⑤ 主导出拼图(原图尺寸档)完成', A.statusMsg || '(空)');
+    add(EXPORTED && EXPORTED.length === 1, '⑤ 拼图页签忽略批量勾选，只导出当前拼图', EXPORTED && EXPORTED.length);
     const f5 = EXPORTED && EXPORTED[0];
     let dim5 = null;
     if (f5 && (f5.bytes || f5.data)) {

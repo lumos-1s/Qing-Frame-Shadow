@@ -679,7 +679,15 @@ window.App = Object.assign(window.App || {}, {
         const base = this.normalizeGrade(preset.grade);
         base.masks = [];
         const touchesCurrent = idxs.indexOf(this.currentIdx) >= 0;
-        if (touchesCurrent && this.pushUndo) this.pushUndo();
+        // 每张被改的照片各自压一条撤销步。旧实现只给当前图 pushUndo，
+        // 批量应用后切到别的图按 Ctrl+Z 会提示「没有可撤销的操作」。
+        for (const i of idxs) {
+            const it = this.images[i];
+            if (!it) continue;
+            const tplForUndo = (it === im) ? this.template
+                : ((this.getTpl && this.getTpl(it)) || this.defaultTemplate());
+            if (this.pushUndoForImage) this.pushUndoForImage(it, tplForUndo);
+        }
         if (touchesCurrent && this.setActiveMask) this.setActiveMask(null);
 
         let n = 0;

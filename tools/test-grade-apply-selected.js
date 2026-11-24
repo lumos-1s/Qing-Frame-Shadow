@@ -108,7 +108,19 @@ async function main() {
         imgs[0].grade.exp = 0.9;
         A.applyGradeToAll();
         const all = { vals: vals(), status: A.statusMsg || '' };
-        return { before, menu, noSel, partial, curve, allSel, all };
+        return { before, menu, noSel, partial, curve, allSel, all,
+        presetUndo: (() => {
+            // 批量应用预设后，切到被改的其它照片按 Ctrl+Z，应能各自撤销。
+            const fake = { disp: '测试预设', grade: A.normalizeGrade({ exp: 0.33, con: 12 }) };
+            const before = imgs.map((im) => Number((im.grade || {}).exp) || 0);
+            A.currentIdx = 0; A.image = imgs[0];
+            A.applyGradePreset(fake, [0, 1, 2]);
+            const applied = imgs.map((im) => Number((im.grade || {}).exp) || 0);
+            A.selectImage(1);
+            A.undo();
+            const undone = imgs.map((im) => Number((im.grade || {}).exp) || 0);
+            return { before, applied, undone, status: A.statusMsg || '' };
+        })() };
     })()`);
 
     check(r.menu.all && r.menu.selected && r.menu.label.indexOf('应用到选中') >= 0,
@@ -130,6 +142,9 @@ async function main() {
         `${JSON.stringify(r.allSel.vals)} status=${r.allSel.status}`);
     check(r.all.vals.every((v) => v[0] === 0.9) && r.all.status.indexOf('应用到其余 3 张') >= 0,
         '「应用到全部」行为保持不变（两个入口共用深拷贝）', r.all.status);
+    check(r.presetUndo.applied[1] === 0.33 && r.presetUndo.undone[1] === r.presetUndo.before[1]
+          && r.presetUndo.undone[2] === 0.33 && /撤销/.test(r.presetUndo.status),
+        '批量应用调色预设后，切到目标照片可逐张撤销', JSON.stringify(r.presetUndo));
 
     console.log(failures.length ? `\n${failures.length} FAILURE(S)` : '\nALL PASS');
     win.destroy();

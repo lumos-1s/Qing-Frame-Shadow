@@ -3115,6 +3115,7 @@ window.App = {
         if (!res) return;
         const im = await this.imageFromPick(res);
         if (!im) { this.setStatus('图片加载失败，未插入'); return; }
+        const cur = this.image;
         const pos = Math.max(0, Math.min(k, this.images.length));
         this.images.splice(pos, 0, im);
         // 插入照片会右移列表索引:平移槽位/勾选/选中引用,保持已有格子内容与编辑状态对应正确
@@ -3133,6 +3134,10 @@ window.App = {
         if (!this.image && newPos >= 0) {
             this.image = im;
             this.currentIdx = newPos;
+        } else if (cur) {
+            // 插到当前图之前会让它的索引右移；不跟着改，调色预设/草稿就会打到旁边那张。
+            const curPos = this.images.indexOf(cur);
+            if (curPos >= 0) this.currentIdx = curPos;
         }
         this.buildThumbnails();
         const pk = this.tplPuzzle();
@@ -3193,6 +3198,12 @@ window.App = {
             this.selectedEls = [];
             this.currentIdx = 0;
             if (typeof this._resetHistory === 'function') this._resetHistory();
+            // 照片库只在拼图页露出；删光后拼图也没了，左栏必须退出照片模式，
+            // 否则再导入照片时点「照片库」里空列表会像按钮坏了一样。
+            if (this._sideMode === 'photo' && typeof this.setSideMode === 'function') {
+                this.setSideMode('border', { activateTab: false });
+            }
+            if (typeof this.updatePuzzleExitEntry === 'function') this.updatePuzzleExitEntry();
             this.updateEmptyState();
             if (this.dom.stRes) this.dom.stRes.textContent = '';
             if (this.dom.stInfo) this.dom.stInfo.textContent = '';
