@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/lumos-1s/Qing-Fram-Shadow/stargazers"><img src="https://img.shields.io/github/stars/lumos-1s/Qing-Fram-Shadow?style=flat-square&color=blue" alt="GitHub stars"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/lumos-1s/Qing-Fram-Shadow?style=flat-square&color=green" alt="MIT License"></a>
-  <a href="https://github.com/lumos-1s/Qing-Fram-Shadow/releases"><img src="https://img.shields.io/badge/version-0.1.28-orange?style=flat-square" alt="Version 0.1.28"></a>
+  <a href="https://github.com/lumos-1s/Qing-Fram-Shadow/releases"><img src="https://img.shields.io/badge/version-0.1.29-orange?style=flat-square" alt="Version 0.1.29"></a>
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-45-47848F?style=flat-square" alt="Electron 45"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?style=flat-square" alt="Windows 10/11">
 </p>
@@ -74,7 +74,7 @@
 <a id="download"></a>
 ## 下载 · Download
 
-**当前版本 v0.1.28** — 从 [GitHub Releases](https://github.com/lumos-1s/Qing-Fram-Shadow/releases) 下载 Windows 安装版（NSIS）或便携版。
+**当前版本 v0.1.29** — 从 [GitHub Releases](https://github.com/lumos-1s/Qing-Fram-Shadow/releases) 下载 Windows 安装版（NSIS）或便携版。
 
 > **English** — Grab the Windows installer or portable build from Releases. Everything is rendered on your machine; no account, no upload.
 
@@ -108,6 +108,13 @@ npm run dist           # 打包 Windows 安装版 + 便携版
 
 <a id="whats-new"></a>
 ## 最近更新 · What's New
+
+### v0.1.29 · 2026-11-24
+
+- 拼图页加入照片库左栏与格子浮层：换图 / 旋转 / 复位 / 清空，一键套用风格；切图预览可按块勾选、长边档位真正生效。
+- 溢出警示（J）与直方图角标标出真正过曝 / 压黑的区域和百分比；调色面板改为可折叠分组。
+- 顶栏「重置」升级为「重置全部」，边框 / 调色 / 裁切旋转 / 显影一次清空且可撤销。
+- 修复导出卡死、切图串图、重启丢微调、插入照片后选错图等一批问题。
 
 ### v0.1.28 · 2026-11-18
 

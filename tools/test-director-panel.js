@@ -35,7 +35,7 @@ ipcMain.handle('get-user', () => null);
 ipcMain.handle('load-acr-tables', () => null);
 ipcMain.handle('load-acr-shadows', () => null);
 ipcMain.handle('get-app-info', () => ({
-    version: '0.1.28', electron: '45', chrome: '1', node: '1',
+    version: '0.1.29', electron: '45', chrome: '1', node: '1',
     platform: 'win32', arch: 'x64', packaged: false, portable: false, userData: TMP, appPath: ROOT
 }));
 ipcMain.handle('frames:list', () => []);
