@@ -219,7 +219,7 @@
     // 三通道同时烧白/压黑才算过曝/过暗，饱和色不算。
     function setClip(stat) {
         const pct = (n) => (stat.total ? (n / stat.total) * 100 : 0);
-        const set = (id, side, any, end) => {
+        const set = (id, numId, side, any, end) => {
             const el = $(id);
             if (!el) return;
             const p = pct(any);
@@ -227,9 +227,15 @@
             el.dataset.pct = p.toFixed(2);
             el.dataset.allPct = p.toFixed(2);
             el.title = side + '溢出（' + end + '）' + p.toFixed(2) + '% · 点击在波形上标出端点';
+            const num = $(numId);
+            if (num) {
+                // 阈值比角标点亮更低：0.1% 已经值得看见，但 0% 不占位置。
+                num.hidden = p < 0.05;
+                num.textContent = side + ' ' + p.toFixed(1) + '%';
+            }
         };
-        set('gradeClipLo', '暗部', stat.lo, '压黑');
-        set('gradeClipHi', '高光', stat.hi, '烧白');
+        set('gradeClipLo', 'gradeClipNumLo', '暗部', stat.lo, '压黑');
+        set('gradeClipHi', 'gradeClipNumHi', '高光', stat.hi, '烧白');
     }
 
     function setExif(im) {

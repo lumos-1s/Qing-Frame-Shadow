@@ -95,9 +95,12 @@ const PROBE = `(async () => {
     H.refresh(halfIm);
     await wait(260);
     const lo = $('gradeClipLo'), hi = $('gradeClipHi');
+    const numLo = $('gradeClipNumLo'), numHi = $('gradeClipNumHi');
     const clipOn = lo.classList.contains('is-on') && hi.classList.contains('is-on');
     const clipText = lo.title + ' | ' + hi.title;
     const clipPct = parseFloat(lo.dataset.pct);
+    const clipNums = { lo: numLo.textContent, hi: numHi.textContent,
+        visible: !numLo.hidden && !numHi.hidden };
     lo.click();
     const marked = H.clipMarked() && lo.classList.contains('is-mark') && hi.classList.contains('is-mark');
     lo.click();
@@ -167,7 +170,7 @@ const PROBE = `(async () => {
     const noCopyMsg = /先点/.test($('stCanvas').textContent || '');
 
     return {
-        halfClip, redClip, clipOn, clipText, clipPct, marked, unmarked,
+        halfClip, redClip, clipOn, clipText, clipPct, clipNums, marked, unmarked,
         fileText, fileVisible, afterNext, afterPrev,
         plainCount: plain.length, noZero, allInRange, expZero, shpZero,
         tracks, beforeMasks, afterMasks, maskCreated, maskExpanded,
@@ -204,6 +207,8 @@ async function main() {
             '纯红图（饱和色）不算过曝/过暗，两角都不亮', JSON.stringify(res.redClip));
         check(res.clipOn && res.clipPct > 40 && /%/.test(res.clipText),
             '两角角标点亮，悬停文案带精确百分比', res.clipText);
+        check(res.clipNums.visible && /%/.test(res.clipNums.lo) && /%/.test(res.clipNums.hi),
+            '直方图角上直接标出过曝/压黑比例，不用悬停读 title', JSON.stringify(res.clipNums));
         check(res.marked && res.unmarked, '点角标在波形上标出端点，再点关闭');
         check(/city\.jpg/.test(res.fileText) && /1\/4|1\/3/.test(res.fileText) && res.fileVisible,
             '标题栏中间显示「文件名 · 第几张」且不拦截拖拽', res.fileText);

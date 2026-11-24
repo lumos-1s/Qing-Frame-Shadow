@@ -1253,7 +1253,8 @@ input[type=range].fine-tuning::-webkit-slider-thumb {
 }
 .histo-plot { position: relative; padding: 0 2px; }
 .histo-cv { display: block; width: 100%; height: calc(88px * var(--density)); background: var(--histo-bg); }
-/* 剪切警告：常驻两角，任一通道压到 0 / 顶到 255 才点亮；点击在波形上标出被 capEnds 夹掉的首尾档 */
+/* 剪切警告：三通道同时压到 0 / 顶到 254 才点亮（口径与画面涂色一致）；
+   角标只表状态，旁边的数字表比例。点击角标在波形上标出被 capEnds 夹掉的首尾档 */
 .histo-clip {
     position: absolute; top: 5px; z-index: 2;
     width: 9px; height: 9px; padding: 0; border: 0;
@@ -1268,6 +1269,22 @@ input[type=range].fine-tuning::-webkit-slider-thumb {
 .histo-clip.clip-lo.is-on { background: #78aaff; opacity: 1; }
 .histo-clip.clip-hi.is-on { background: #ff7b6e; opacity: 1; }
 .histo-clip.is-mark { transform: scale(1.35); }
+.histo-clipnum {
+    position: absolute; top: 3px; z-index: 2; pointer-events: none;
+    font-size: var(--fs-9); font-variant-numeric: tabular-nums;
+    padding: 1px 3px; border-radius: 4px; background: rgba(10, 14, 13, .55);
+}
+.histo-clipnum[hidden] { display: none; }
+.clipnum-lo { left: 16px; color: #9cc5ff; }
+.clipnum-hi { right: 16px; color: #ff9a8e; }
+/* 空工作区：给直方图卡一句说明，别只留一块空波形 */
+.histo-empty {
+    display: none; position: absolute; inset: 0; z-index: 1;
+    place-items: center; pointer-events: none;
+    color: var(--text-3); font-size: var(--fs-10);
+}
+#inspector.no-image .histo-empty { display: grid; }
+#inspector.no-image .histo-cv { opacity: .35; }
 .histo-foot {
     display: flex; align-items: center; gap: 6px;
     padding-right: 9px;

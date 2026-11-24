@@ -1431,6 +1431,10 @@
                                 <canvas id="gradeHisto" class="histo-cv" aria-label="RGB 直方图"></canvas>
                                 <button id="gradeClipLo" class="histo-clip clip-lo" type="button" aria-label="阴影剪切警告" title="阴影剪切：暂无像素压到 0"></button>
                                 <button id="gradeClipHi" class="histo-clip clip-hi" type="button" aria-label="高光剪切警告" title="高光剪切：暂无像素顶到 255"></button>
+                                <!-- 角标只说「有没有」，这里补上「多少」：修高光时不用把鼠标停在三角上读 title -->
+                                <span class="histo-clipnum clipnum-lo" id="gradeClipNumLo" hidden></span>
+                                <span class="histo-clipnum clipnum-hi" id="gradeClipNumHi" hidden></span>
+                                <span class="histo-empty" id="gradeHistoEmpty">导入照片后显示直方图</span>
                             </div>
                             <div class="histo-foot">
                                 <div class="histo-exif" id="gradeExif" title="照片的 EXIF 参数"></div>
