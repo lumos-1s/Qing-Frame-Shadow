@@ -240,7 +240,7 @@ window.App = {
         const mod = this.modKeyLabel();
         const tips = {
             btnUndo: `撤销 (${mod}+Z)`, btnRedo: `重做 (${mod}+Y)`,
-            btnReset: '重置', btnRandom: '随机预设',
+            btnReset: '重置全部', btnRandom: '随机预设',
             btnFit: '适应窗口', btnOpen: '导入照片',
         };
         Object.entries(tips).forEach(([id, tip]) => {
@@ -713,7 +713,7 @@ window.App = {
         d.btnSyncSel.addEventListener('click', () => this.syncToSelected());
         d.btnUndo.addEventListener('click', () => this.undo());
         d.btnRedo.addEventListener('click', () => this.redo());
-        d.btnReset.addEventListener('click', () => this.resetParams());
+        d.btnReset.addEventListener('click', () => this.resetAll());
         d.btnRandom.addEventListener('click', () => this.randomBorder());
         d.btnFit.addEventListener('click', () => this.fitZoom());
         // 窗口尺寸变化:视图停在「适应」时自动重算缩放。

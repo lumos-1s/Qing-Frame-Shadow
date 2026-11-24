@@ -918,7 +918,10 @@ window.App = Object.assign(window.App || {}, {
         return true;
     },
 
-    // 把照片换回原图（工具栏右键 / 裁切弹层共用）。返回是否真的还原了
+    // 恢复原始位图 / RAW 视图：工具栏「还原原图」和「重置全部」共用。
+    // opts.skipGradeRebuild：紧接着还会重置调色，不必先全尺寸烘一遍旧参数。
+    // opts.keepOrigin：重置全部要留着原图引用，否则 Ctrl+Z 无法重放裁切/旋转。
+    // 返回是否真的还原了
     restoreOriginalPhoto(im, opts) {
         const t = im || this.image;
         if (!t || !t.orig || !t.orig.el) return false;
@@ -926,7 +929,7 @@ window.App = Object.assign(window.App || {}, {
         // 直接换回代理像素会把全尺寸和后续重解一起毁掉。
         if (t.raw && this.rawApplyUndo) {
             const v = t.orig.raw || { crop: null, rotate: 0 };
-            delete t.orig;
+            if (!opts || !opts.keepOrigin) delete t.orig;
             t.thumb = null;
             t._thumbEl = null;
             t._tqAt = 0;
@@ -945,7 +948,7 @@ window.App = Object.assign(window.App || {}, {
         t.h = t.orig.h;
         t.geoOps = [];           // 回到原图 = 几何操作日志清空，草稿/撤销都得同步
         t.rotate = 0;
-        delete t.orig;
+        if (!opts || !opts.keepOrigin) delete t.orig;
         t.thumb = null;
         t._thumbEl = null;
         t._tqAt = 0;
@@ -954,7 +957,7 @@ window.App = Object.assign(window.App || {}, {
         // 不清的话 photoSrcOf 会优先返回旧烘焙画布（还是裁切前那张），
         // 用户看到的是「点了还原原图，画面纹丝不动」，导出的也是裁切图。
         if (this.invalidateGrade) this.invalidateGrade(t);
-        if (this.rebuildGrade) this.rebuildGrade('full');
+        if (this.rebuildGrade && !(opts && opts.skipGradeRebuild)) this.rebuildGrade('full');
         if (this.invalidateStyleCaches) this.invalidateStyleCaches();
         if (this.queueThumb) this.queueThumb(t);
         if (this.buildThumbnails) this.buildThumbnails();

@@ -1330,17 +1330,46 @@ window.App = Object.assign(window.App || {}, {
         this.scheduleRender(true);
     },
 
-    resetParams() {
-        if (!this.template) return;
+    // 顶栏「重置全部」：边框样式 + 调色（含蒙版）+ 裁切/旋转 + RAW 显影参数。
+    // 以前叫 resetParams，实际只把 template 换成默认模板，标题却写「重置所有参数」，
+    // 调完色按它调色纹丝不动 —— 现在补成真正的全部重置，并保留一次撤销机会。
+    resetAll() {
+        const im = this.image;
+        if (!im) { this.setStatus('请先导入照片'); return false; }
+        const mod = this.modKeyLabel ? this.modKeyLabel() : 'Ctrl';
+        if (!window.confirm('确定重置全部编辑吗？\n\n边框样式、调色（含蒙版）、裁切/旋转、RAW 显影参数都会回到默认。此操作可以按 '
+            + mod + '+Z 撤销。')) {
+            this.setStatus('已取消重置');
+            return false;
+        }
         this.pushUndo();
-        // 重置后本图不再视为“已用预设”:清掉单一存取口的两处存储,
-        // 否则切走再切回/导出时仍会取到重置前的旧边框
-        if (this.image) this.clearTpl(this.image);
+
+        // ① 几何 / RAW 视图：保留 im.orig，撤销时才能按日志重放裁切/旋转。
+        const opts = { silent: true, keepOrigin: true, skipGradeRebuild: true };
+        if (im.raw) {
+            const defaults = Object.assign({}, this.RAW_DEFAULTS || {});
+            im.raw.params = Object.assign({}, defaults);
+            if (!this.restoreOriginalPhoto || !this.restoreOriginalPhoto(im, opts)) {
+                if (this.rawApplyUndo) this.rawApplyUndo(im, { params: defaults, crop: null, rotate: 0 });
+                im.rotate = 0;
+            }
+        } else if (this.restoreOriginalPhoto) {
+            this.restoreOriginalPhoto(im, opts);
+        }
+
+        // ② 调色（蒙版存在 grade.masks 里，一起清掉）
+        if (this.resetGrade) this.resetGrade();
+
+        // ③ 边框样式 / 拼图版式，以及每图模板缓存
+        this.clearTpl(im);
         this.template = this.defaultTemplate();
         this.saveCurrentTemplate();
         this.refreshUI();
+        if (this.updatePuzzleExitEntry) this.updatePuzzleExitEntry();
+        if (this.bumpGridArtVersion) this.bumpGridArtVersion();
         this.scheduleRender(true);
-        this.setStatus('参数已重置');
+        this.setStatus(`已重置全部编辑（边框、调色、裁切旋转、显影），按 ${mod}+Z 可撤销`);
+        return true;
     },
 
     randomBorder() {
