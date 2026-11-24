@@ -485,7 +485,18 @@ window.App = {
             this._scheduleToolbarOverflow();
             fit();
         };
-        const toggle = (key) => { localStorage.setItem(key, localStorage.getItem(key) === '1' ? '0' : '1'); sync(); };
+        const toggle = (key) => {
+            // 切图页自动收起时没有写 localStorage；此时第一次点「素材」轨应直接展开，
+            // 不能走「null → 1」的取反逻辑，否则点了没反应还把收起坐实成用户选择。
+            if (key === K_SIDE && this._sidebarAutoByGrid) {
+                this._sidebarAutoByGrid = false;
+                localStorage.setItem(K_SIDE, '0');
+                sync();
+                return;
+            }
+            localStorage.setItem(key, localStorage.getItem(key) === '1' ? '0' : '1');
+            sync();
+        };
         ['btnSidebarCollapse', 'btnSidebarRail'].forEach(id => {
             const el = this.$(id);
             if (el) el.addEventListener('click', () => toggle(K_SIDE));
