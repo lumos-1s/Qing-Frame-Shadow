@@ -549,8 +549,3 @@ Linear's depth is carried by surface ladder + hairline borders. The brand resist
 
 Source: https://github.com/VoltAgent/awesome-design-md/tree/main/design-md/linear.app
 
-
-## Qingframe 本地适配
-
-原 DESIGN.md 的 #010102 画布在照片编辑器里过于压暗，深色主题改为深石板变体：画布 #16171c、表面 #1d2027/#242731/#2b2f3a、描边 #363a46；强调色从 #5e6ad2 柔化为 #7b87e8（hover #98a3f5），按钮文字改深色以保持对比度。其余表面阶梯、发丝线、单一强调色原则沿用 Linear。
-
