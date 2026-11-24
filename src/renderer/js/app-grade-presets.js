@@ -109,6 +109,7 @@ window.App = Object.assign(window.App || {}, {
 
     setSideMode(mode, opts) {
         const m = (mode === 'grade' || mode === 'photo') ? mode : 'border';
+        const prevMode = this._sideMode;
         if (this._sideMode !== m) this._endGradePresetHover(true);
         this._sideMode = m;
         const aside = this.$('sidebar');
@@ -146,6 +147,14 @@ window.App = Object.assign(window.App || {}, {
             if (this.switchTab) {
                 const active = document.querySelector('#inspTabs .tab.active');
                 if (!active || active.dataset.tab !== 'grade') this.switchTab('grade');
+            }
+        }
+        // 用户手动换左栏模式也算离开拼图：回到画布页，那里会关掉拼图开关。
+        // 程序化切换（activateTab:false，如进出拼图的还原）不触发。
+        if (prevMode === 'photo' && m !== 'photo' && !(opts && opts.activateTab === false)) {
+            const active = document.querySelector('#inspTabs .tab.active');
+            if (active && active.dataset.tab === 'puzzle' && m !== 'grade' && this.switchTab) {
+                this.switchTab('canvas');
             }
         }
     },

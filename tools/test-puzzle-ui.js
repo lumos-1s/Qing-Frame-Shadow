@@ -62,6 +62,9 @@ const RUN = `(async () => {
     add(A.$('btnPuzzleExit').hidden, '非拼图页签：退出拼图入口隐藏', A.$('btnPuzzleExit').hidden);
 
     // ② 进拼图页签：照片库接管左栏，退出按钮出现
+    // 上一步切到 canvas 按新规则已经取消拼图，这里重新开启再进入。
+    A.template.puzzle.enabled = 1;
+    if (ims[0].customSettings && ims[0].customSettings.puzzle) ims[0].customSettings.puzzle.enabled = 1;
     A.switchTab('puzzle');
     await sleep(250);
     add(!A.$('sideTabPhoto').hidden && !A.$('sidePhotoBody').hidden && A._sideMode === 'photo',
@@ -168,6 +171,28 @@ const RUN = `(async () => {
     add(A.template.puzzle.enabled === 0, '退出后拼图关闭', A.template.puzzle.enabled);
     add(A.$('btnPuzzleExit').hidden && A.$('sideTabPhoto').hidden, '退出后两个入口都收起', A.$('sideTabPhoto').hidden);
     add(A._sideMode === 'border', '退出后素材栏还原为边框模式', A._sideMode);
+
+    // ⑨ 点拼图外的页签 / 换左栏模式：都直接取消拼图，版式和格子仍是旧数据
+    A.template.puzzle.enabled = 1;
+    A.switchTab('puzzle');
+    await sleep(120);
+    const savedLayout = A.template.puzzle.layout;
+    const savedSlot0 = JSON.stringify(A.template.puzzle.slots[0]);
+    A.switchTab('canvas');
+    await sleep(150);
+    add(A.template.puzzle.enabled === 0 && A.template.puzzle.layout === savedLayout
+        && JSON.stringify(A.template.puzzle.slots[0]) === savedSlot0,
+        '切到拼图外的页签就取消拼图，版式和格子仍保留', A.template.puzzle.enabled);
+
+    A.template.puzzle.enabled = 1;
+    A.switchTab('puzzle');
+    await sleep(120);
+    A.setSideMode('border');
+    await sleep(150);
+    add(A.template.puzzle.enabled === 0
+        && document.querySelector('#inspTabs .tab.active').dataset.tab === 'canvas',
+        '手动换左栏素材库模式也取消拼图并回到画布',
+        A.template.puzzle.enabled + '/' + document.querySelector('#inspTabs .tab.active').dataset.tab);
   } catch (e) {
     add(false, '执行异常', e && e.message);
   }
