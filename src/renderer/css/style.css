@@ -11,9 +11,9 @@
     --surface: #FBFAF6;
     --surface-alt: #F1EDE3;
     --surface-2: #E7E1D3;
-    --primary: #129E78;
-    --primary-strong: #0D7F5F;
-    --primary-soft: rgba(18,158,120,0.13);
+    --primary: #5e6ad2;
+    --primary-strong: #4f5bc4;
+    --primary-soft: rgba(94,106,210,.12);
     --rose: #D4627A;
     --violet: #8D75E8;
     --amber: #D99A3E;
@@ -25,7 +25,7 @@
     --text-3: #666B64;
     /* 语义色作为**文字**时用深一档：原色在浅底只有 2~3:1（绿 2.85 / 琥珀 2.04 / 玫红 3.03）。
        填充与边框仍用 --primary/--amber/--rose，按钮、徽标、焦点圈外观不变。 */
-    --primary-text: #0A6E55;
+    --primary-text: #3d47a3;
     --amber-text: #8A5A12;
     --rose-text: #A63B57;
     /* 新手引导里的次级文字一直引用这个变量，但从未定义过（等于没生效）。
@@ -46,10 +46,10 @@
     --shadow-rim: 0 1px 0 rgba(255,255,255,.55);
     --overlay-bg: rgba(255,255,255,.92);
     /* 圆角收敛：控件 4 / 卡片 8 / 弹窗 10。只有品牌卡与预设封面允许更大。 */
-    --r-xs: 3px;
-    --r-s: 4px;
+    --r-xs: 4px;
+    --r-s: 6px;
     --r-m: 8px;
-    --r-l: 10px;
+    --r-l: 12px;
     --tnum: tabular-nums;
     /* 语义色收敛(2026-10-25):头像/缩略图/星标/图片池/危险按钮等 UI 专属色 */
     --avatar-bg: #3a3f48;      /* 头像占位底色 */
@@ -57,7 +57,7 @@
     --star: #f59e0b;           /* 收藏星标 */
     --pool-bg: #2b2f36;        /* 图片池背景 */
     --pool-border: #3a3f48;    /* 图片池边框 */
-    --primary-ink: #0c1914;    /* primary 按钮深色文字 */
+    --primary-ink: #ffffff;    /* primary 按钮文字：Linear 薰衣草底配白字 */
     --danger: #B44444;         /* 危险按钮 */
     /* 间距刻度(4px 基准,2026-10-25) */
     /* 字体缩放系数:字号阶梯(--fs-*)与间距刻度(--sp-*)都乘它,
@@ -72,53 +72,59 @@
     --fs-13: calc(13px * var(--font-scale)); --fs-14: calc(14px * var(--font-scale)); --fs-15: calc(15px * var(--font-scale)); --fs-16: calc(16px * var(--font-scale)); --fs-18: calc(18px * var(--font-scale));
     --fs-20: calc(20px * var(--font-scale)); --fs-22: calc(22px * var(--font-scale)); --fs-24: calc(24px * var(--font-scale));
     /* 字体栈:中文字体单一来源;等宽用于诊断/分享码 */
-    --font-ui: "PingFang SC", "Microsoft YaHei", -apple-system, "Helvetica Neue", system-ui, sans-serif;
-    --mono: ui-monospace, SFMono-Regular, Consolas, "Courier New", monospace;
+    --font-ui: Inter, "Segoe UI Variable Display", "Segoe UI", -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, "Courier New", monospace;
     /* 文本层级:--text-1 兼容历史引用(与 --text 同级) */
     --text-1: #232724;
-    /* 品牌金(入口体系:标题栏 logo 与预设墙;工作台功能色仍为 --primary 绿) */
-    --brand-gold: #DCBA79;
-    --brand-gold-strong: #F6E3AC;
-    --brand-gold-deep: #A6814B;
-    --brand-gold-text: #e6d9b8;
-    --brand-gold-ink: #f2e4c4;
+    /* 品牌标记与预设墙：与工作台共用 Linear 薰衣草蓝，不再引入第二强调色 */
+    --brand-gold: #5e6ad2;
+    --brand-gold-strong: #828fff;
+    --brand-gold-deep: #3d47a3;
+    --brand-gold-text: #3d47a3;
+    --brand-gold-ink: #ffffff;
 }
 
 /* ── 深色主题(默认,html.dark) ── */
 html.dark {
     /* 与 :root 同义;运行时由 JS 在 documentElement 上内联覆盖,这里仅作显式兜底 */
     --font-scale: 1;
-    --bg: #181B1A;
-    --bg-grid: rgba(255,255,255,.035);
-    --surface: #202422;
-    --surface-alt: #272C2A;
-    --surface-2: #2F3532;
-    --primary: #3DD9B0;
-    --primary-strong: #2CBA95;
-    --primary-soft: rgba(61,217,176,0.16);
+    --bg: #010102;
+    --bg-grid: rgba(255,255,255,.025);
+    --surface: #0f1011;
+    --surface-alt: #141516;
+    --surface-2: #18191a;
+    --primary: #5e6ad2;
+    --primary-strong: #828fff;
+    --primary-soft: rgba(94,106,210,.18);
     --rose: #E27891;
     --violet: #9A7FFF;
     --amber: #DBA44E;
-    --text: #E8EAE6;
-    --text-2: #A5ACA5;
-    /* 原来的 #70786F 在深底上只有 2.75~3.8，同样不达标 */
-    --text-3: #909890;
-    --primary-text: #4FE3BC;
+    --text: #f7f8f8;
+    --text-2: #d0d6e0;
+    /* Linear 阶梯上的弱化文字：在 #010102~#18191a 上都过 WCAG AA */
+    --text-3: #8a8f98;
+    --primary-text: #828fff;
     --amber-text: #E9B964;
     --rose-text: #EE93A8;
-    --border: #2C312E;
-    --border-strong: #3C433F;
-    --bg-soft: #1C201E;
-    --thumb-bg: #2B302D;
-    /* 深底上 --thumb-bg 只比面板亮一点，轨道几乎看不见；单独给一档更亮的灰 */
-    --track: #454E49;
-    --histo-bg: #15181A;
-    --shadow-sm: 0 2px 10px rgba(0,0,0,0.32);
-    --shadow: 0 12px 32px rgba(0,0,0,0.46);
-    --shadow-lg: 0 26px 60px rgba(0,0,0,0.58);
-    --shadow-rim: inset 0 1px 0 rgba(255,255,255,.05);
-    --overlay-bg: rgba(28,31,29,.94);
-    --text-1: #E8EAE6; /* 兼容历史引用(与 dark --text 同级) */
+    --border: #23252a;
+    --border-strong: #34343a;
+    --bg-soft: #0f1011;
+    --thumb-bg: #141516;
+    --track: #34343a;
+    --histo-bg: #010102;
+    /* Linear 靠表面阶梯 + 发丝线做层级，几乎不用投影 */
+    --shadow-sm: none;
+    --shadow: none;
+    --shadow-lg: none;
+    --shadow-rim: inset 0 1px 0 rgba(255,255,255,.04);
+    --overlay-bg: rgba(1,2,2,.92);
+    --text-1: #f7f8f8; /* 兼容历史引用(与 dark --text 同级) */
+    --primary-ink: #ffffff;
+    --brand-gold: #828fff;
+    --brand-gold-strong: #aab4ff;
+    --brand-gold-deep: #5e6ad2;
+    --brand-gold-text: #aab4ff;
+    --brand-gold-ink: #ffffff;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -4391,3 +4397,40 @@ input.pw-zoom-range:hover::-webkit-slider-thumb { background: #f2ddab; }
     display: inline-block; width: 11px; height: 11px; border-radius: 3px;
     box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18);
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   Linear 设计语言收口（最后覆盖）
+   · #010102 画布 + 四级炭灰表面 + 发丝线，不靠投影做层级
+   · 单一薰衣草蓝强调色：选中态 / 焦点 / 主按钮，其它彩色只保留语义色
+   · 按钮 8px、小控件 6px、卡片 12px；字重 500~600、微负字距
+   ════════════════════════════════════════════════════════════════════ */
+html.dark .tbtn.primary,
+html.dark .ub-btn.primary,
+html.dark .mini-btn.primary { background: var(--primary); color: var(--primary-ink); }
+html.dark .tbtn.primary:hover,
+html.dark .ub-btn.primary:hover,
+html.dark .mini-btn.primary:hover { background: var(--primary-strong); color: var(--primary-ink); }
+
+/* 旧代码把「深绿底上的深字」写死在填充按钮上；换成薰衣草底后统一配白字。 */
+html.dark .photo-lib-slot,
+html.dark .mask-orig-hint button:hover,
+html.dark .stage-immersive-btn:hover,
+html.dark .stage-puzzle-exit:hover,
+html.dark .puzzle-slot-bar button:hover:not(:disabled) { color: #ffffff; }
+html.dark .thumb-item .thumb-check:checked::after {
+    border-left-color: #ffffff; border-bottom-color: #ffffff;
+}
+
+/* 按钮/页签：Linear 的 button 规格是 14px/500、8px 圆角、8×14 padding */
+.tbtn, .mini-btn, .ub-btn, .tabs .tab, .settings-tab { font-weight: 500; }
+.tbtn, .mini-btn, .ub-btn { border-radius: var(--r-m); }
+.tabs .tab, #inspTabs .tab { border-radius: var(--r-m); letter-spacing: -.1px; }
+.tab.active { font-weight: 600; }
+.pg-title, .modal-title { font-weight: 600; letter-spacing: -.2px; }
+.photo-meta, .modal-card, .stage { border-radius: var(--r-m); }
+.modal-card { border: 1px solid var(--border-strong); box-shadow: none; }
+#toolbar, .tabs, .settings-tabs, #sidebar, #inspector { box-shadow: none; }
+
+/* 焦点环：Linear 用半透明薰衣草描边，不靠背景闪烁提示落点。 */
+:focus-visible { outline: 2px solid rgba(94,106,210,.55); outline-offset: 2px; }
+.immersion { --imm-accent: #828fff; --imm-accent-soft: rgba(130,143,255,.16); }

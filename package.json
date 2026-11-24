@@ -26,6 +26,7 @@
     "test:engine": "node tools/test-engine-invariants.js",
     "test:exportdir": "node tools/test-export-default-dir.js",
     "check:contrast": "node tools/check-ui-contrast.js",
+    "test:design": "node tools/test-design-linear.js",
     "caps:report": "node tools/gen-style-caps.js --report",
     "test:brand": "node tools/run-electron.js tools/test-brand-logo.js",
     "test:elements": "node tools/run-electron.js tools/test-element-ops.js",
@@ -289,3 +290,4 @@
     "libraw-wasm": "^1.6.0"
   }
 }
+
