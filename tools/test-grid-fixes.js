@@ -153,7 +153,20 @@ const RUN = `(async () => {
     $('slGridOffsetY').value = '0'; $('slGridOffsetY').dispatchEvent(new Event('input', { bubbles: true }));
     await A.renderGridPreview();
     await sleep(200);
-    add(/:0,0$/.test(A._gridCacheKey), '缓存键里记着构图偏移', A._gridCacheKey);
+    add(/@0:0,0\\|/.test(A._gridCacheKey), '缓存键里记着构图偏移', A._gridCacheKey);
+    // 缓存不能跨照片/跨调色复用：旧键只有行列/留白/偏移，换图后会拿上一张的块
+    // 配新文件名写出去。现在键里必须带图片身份与画面指纹。
+    const keyBase = A.gridCacheKey();
+    const prevGrade = A.image.grade;
+    A.image.grade = { exposure: 20 };
+    add(A.gridCacheKey() !== keyBase, '改调色后切块缓存键不同', A.gridCacheKey());
+    A.image.grade = prevGrade;
+    const other = { el: document.createElement('canvas'), name: 'other.png', w: 100, h: 80, exif: {}, customSettings: null };
+    A.images.push(other);
+    const otherKey = A.gridCacheKey(other);
+    A.images.pop();
+    add(otherKey !== keyBase, '换照片后切块缓存键不同', otherKey);
+    add(A.gridCacheKey() === keyBase, '切回原图后缓存键可命中', A.gridCacheKey());
 
     // 第二次预览重建了 DOM，必须重新取 cells（旧引用已经 detached）
     const cells2 = Array.from(document.querySelectorAll('#gridPreviewGrid .grid-preview-cell'));

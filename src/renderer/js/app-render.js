@@ -44,12 +44,24 @@ window.App = Object.assign(window.App || {}, {
         this._renderDirty = false;
         this._renderSkip = 0;
         this._renderUrgent = false;
-        this.renderPreview();
-        // 兑现 flushRender 等待者:此时本帧已真正合成,调用方可安全读像素
+        let err = null;
+        try {
+            this.renderPreview();
+        } catch (e) {
+            err = e || new Error('渲染失败');
+            // 交给外层错误上报，但不能让异常逃出 rAF 回调：否则下面的等待者永远
+            // 拿不到兑现/拒绝，导出会静默悬死。
+            try { console.error('预览渲染失败:', e); } catch (_) {}
+        }
+        // 兑现 flushRender 等待者:渲染成功时调用方可安全读像素；失败时明确拒绝，
+        // 让导出走 catch/finally，恢复临时档位而不是永久卡住。
         if (this._renderFlushResolvers.length) {
             const rs = this._renderFlushResolvers;
             this._renderFlushResolvers = [];
-            rs.forEach(res => res());
+            rs.forEach(({ res, rej }) => {
+                if (err) rej(err);
+                else res();
+            });
         }
     },
 
@@ -60,13 +72,12 @@ window.App = Object.assign(window.App || {}, {
         this._renderDirty = true;
         this._renderUrgent = true;
         this._renderSkip = 0;
-        if (this._renderRaf) return new Promise(res => {
-            const prev = this._renderFlushResolvers;
-            prev.push(res);
-            return undefined;
+        if (this._renderRaf) return new Promise((res, rej) => {
+            // 同一帧可能有多个等待者；渲染异常时必须全部 reject，不能只挂在 rAF 里。
+            (this._renderFlushResolvers || (this._renderFlushResolvers = [])).push({ res, rej });
         });
-        return new Promise(res => {
-            this._renderFlushResolvers = [res];
+        return new Promise((res, rej) => {
+            this._renderFlushResolvers = [{ res, rej }];
             this._renderRaf = requestAnimationFrame(() => this._drainRenderQueue());
         });
     },

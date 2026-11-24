@@ -212,8 +212,10 @@ window.App = Object.assign(window.App || {}, {
                 // 渲染到同一块 canvas,谁后跑谁定稿。不等它就导出会拿到"预览还没让位"的中间态。
                 // 没有排队帧时不再主动多渲一帧:导出紧跟的全尺寸渲染会定稿,UI 尺寸试渲染只在
                 // needProbe(元素缩放)时才有意义。
-                if (this._renderRaf || this._renderDirty) await this.flushRender();
                 try {
+                    // 放进逐张的 try 里：预览帧渲染失败时要记为这张失败并继续，
+                    // 而不是让异常冒到外层把整批导出中断、状态栏停在「正在导出」。
+                    if (this._renderRaf || this._renderDirty) await this.flushRender();
                     let beforeW = 0;
                     if (needProbe) {
                         await this._awaitFrameRender(puzzle);
@@ -230,11 +232,9 @@ window.App = Object.assign(window.App || {}, {
                     // “原图尺寸”对多图拼图没有单一来源,沿用拼图页签通道的 4000px。
                     if (sizeOpt > 0) this.exportScale = sizeOpt;
                     else if (puzzle) this.exportScale = 4000;
-                    await new Promise(res => requestAnimationFrame(() => {
-                        if (puzzle && window.__renderPuzzle) window.__renderPuzzle(this, false, true);
-                        else window.__render(this, false);
-                        res();
-                    }));
+                    // 必须走带异常转 reject 的通道：裸 rAF 里渲染一抛错，res 永不执行，
+                    // 整个导出会永久悬在 await 上，finally 的档位还原也全部跳过。
+                    await this._awaitFrameRender(puzzle);
                     const afterW = Math.max(1, this.dom.canvas.width || 1);
                     // 元素尺寸/锚点偏移的换算基准:试渲染宽度 × 本通道的 dpr 比例。
                     // 为什么必须补这个比例 —— 元素几何是以「设备像素」存的(engine.js drawLogoElements
@@ -419,6 +419,43 @@ window.App = Object.assign(window.App || {}, {
 
     // 预览缓存失效:改了规格/留白/渲染长边后,导出不能继续用旧切块
     invalidateGridCache() { this._gridBlocks = null; this._gridCacheKey = ''; },
+
+    // 切块缓存键：除了规格/留白/偏移，还必须带上「哪张照片 + 画面版本」。
+    // 旧键只有 3x3@0:0,0，换照片或改调色后仍会命中上一张的 _gridBlocks，
+    // 于是把旧照片/旧调色的块配上新照片的文件名写出去，用户完全无提示。
+    gridCacheKey(im) {
+        const { rows, cols } = this.gridSpec();
+        const off = this.gridOffset();
+        const pic = im || this.image || {};
+        // 位图被裁切/旋转/RAW 重显影时会换掉 im.el；用弱引用序号识别，避免缓存跟着旧位图走。
+        let elId = 0;
+        if (pic.el && typeof pic.el === 'object') {
+            if (!this._gridElIds) this._gridElIds = new WeakMap();
+            elId = this._gridElIds.get(pic.el) || 0;
+            if (!elId) {
+                elId = (this._gridElSeq = (this._gridElSeq || 0) + 1);
+                this._gridElIds.set(pic.el, elId);
+            }
+        }
+        const digest = (v) => {
+            let str = '';
+            try { str = JSON.stringify(v == null ? null : v); } catch (_) { str = ''; }
+            // FNV-1a 32 位：只用来判断「是否变过」，不需要抗碰撞密码学强度。
+            let h = 0x811c9dc5;
+            for (let i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = Math.imul(h, 0x01000193);
+            }
+            return (h >>> 0).toString(36) + ':' + str.length;
+        };
+        const idx = Array.isArray(this.images) ? this.images.indexOf(pic) : -1;
+        return rows + 'x' + cols + '@' + this.gridPad() + ':' + off.x + ',' + off.y
+            + '|v' + (this._gridArtVersion || 0)
+            + '|i' + idx + '.' + elId
+            + '|t' + digest(this.template)
+            + '|g' + digest(pic.grade)
+            + '|r' + this.gridRenderMax(pic);
+    },
 
     // 画面本身变了（调色/边框/字幕/撤销），预览里的切块同样过期。
     // 缓存键只含行列/留白，不会自己发现这点，所以由提交侧显式递增一个版本。
@@ -628,7 +665,7 @@ window.App = Object.assign(window.App || {}, {
             if (expBtn) expBtn.textContent = '导出这 ' + blocks.length + ' 张';
             this.updateGridPickUI();
             this._gridBlocks = blocks;
-            this._gridCacheKey = rows + 'x' + cols + '@' + this.gridPad() + ':' + off.x + ',' + off.y;
+            this._gridCacheKey = this.gridCacheKey();
             document.getElementById('gridPreviewModal').style.display = 'flex';
             this.setStatus('已生成切图预览,确认后导出');
         } catch (e) {
@@ -698,7 +735,7 @@ window.App = Object.assign(window.App || {}, {
         const pad = this.gridPad();
         const off = this.gridOffset();
         const gridLabel = this.gridLabel();
-        const cacheKey = rows + 'x' + cols + '@' + pad + ':' + off.x + ',' + off.y;
+        const cacheKey = this.gridCacheKey(this.image);
         let offWrite = null;
         try {
             if (targets.length > 1) {

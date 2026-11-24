@@ -294,6 +294,60 @@ ipcMain.handle('get-app-info', () => ({ version: '0.1.26', electron: '45', chrom
           && writeCalls[writeCalls.length - 1].files.length === 1,
         '单张重试只重发失败的那 1 张', String(writeCalls.length));
 
+    // ── ⑩ 全尺寸渲染抛错：导出必须结束并还原临时档位，不能永久卡在「正在导出」 ──
+    const flushFail = await exec(`(async () => {
+        const A = window.App;
+        await A.flushRender().catch(() => {});
+        const orig = A.renderPreview;
+        A.renderPreview = () => { throw new Error('preview boom'); };
+        const t0 = Date.now();
+        let outcome;
+        try {
+            outcome = await Promise.race([
+                A.flushRender().then(() => 'resolved', (e) => 'rejected:' + ((e && e.message) || e)),
+                new Promise((r) => setTimeout(() => r('timeout'), 2000))
+            ]);
+        } finally {
+            A.renderPreview = orig;
+            A.scheduleRender(true);
+        }
+        return { outcome, ms: Date.now() - t0 };
+    })()`);
+    check(flushFail.outcome === 'rejected:preview boom' && flushFail.ms < 1500,
+        '预览渲染抛错时 flushRender 明确拒绝，不再永久等待', JSON.stringify(flushFail));
+
+    const renderFail = await exec(`(async () => {
+        const A = window.App;
+        await A.flushRender().catch(() => {});
+        const orig = window.__render;
+        window.__render = () => { throw new Error('render boom'); };
+        const before = { dpr: A.uiDprOverride, scale: A.exportScale, idx: A.currentIdx };
+        const t0 = Date.now();
+        let outcome;
+        try {
+            outcome = await Promise.race([
+                A.exportImage().then(() => 'done', (e) => 'rejected:' + ((e && e.message) || e)),
+                new Promise((r) => setTimeout(() => r('timeout'), 3000))
+            ]);
+        } finally {
+            window.__render = orig;
+            A.scheduleRender(true);
+        }
+        return {
+            outcome, ms: Date.now() - t0, status: A.statusMsg,
+            dpr: A.uiDprOverride, scale: A.exportScale,
+            idx: A.currentIdx, name: A.image && A.image.name,
+            before
+        };
+    })()`);
+    check(renderFail.outcome === 'done' && /失败 1/.test(renderFail.status || '')
+          && /渲染失败/.test(renderFail.status || ''),
+        '全尺寸渲染抛错时导出正常收尾并报失败，不再悬死', JSON.stringify(renderFail));
+    check(renderFail.dpr === undefined && renderFail.scale === undefined,
+        '渲染失败后 uiDprOverride / exportScale 已还原', JSON.stringify(renderFail));
+    check(renderFail.idx === renderFail.before.idx && renderFail.name === 'single.png',
+        '渲染失败后当前照片指针已还原', JSON.stringify(renderFail));
+
     console.log(failures.length ? `\n${failures.length} FAILURE(S)` : '\nALL PASS');
     win.destroy();
     app.exit(failures.length ? 1 : 0);
