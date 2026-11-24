@@ -89,6 +89,43 @@ window.App = {
             // 「联名水印」旧版默认对齐是左下(0)，与联名水印官方版式(底部居中)不符。
             // 老草稿没有 xmAlignV 标记时迁移一次为居中；用户之后手动选左下会带标记保存，正常记住。
             if (s.xmLeica && typeof s.xmLeica === 'object' && Number(s.xmAlignV) < 2) s.xmLeica.align = 1;
+            // 预设只给外观基线，用户在预设上改过的字段必须优先恢复。
+            // 旧实现只在「预设找不到」的兜底分支里恢复这些字段，命中预设时直接 return，
+            // 于是重启后签名、圆角、边距、参数色等全部回到预设出厂值。
+            const applySavedTweaks = () => {
+                const t = this.template;
+                if (!t) return;
+                if (s.photoFrameStyle) t.photoFrameStyle = s.photoFrameStyle;
+                // 圆角分别存在 cornerConfig（全局圆角）和顶层 borderRadius（图层边框）里，
+                // 旧版只存不取，重启后圆角白改。
+                if (s.cornerRadiusAll) {
+                    const cc = t.cornerConfig || (t.cornerConfig = {});
+                    cc.cornerRadiusAll = s.cornerRadiusAll;
+                }
+                if (s.borderRadius) t.borderRadius = s.borderRadius;
+                if (s.userSignature) t.userSignature = s.userSignature;
+                if (s.signFont) t.signFont = s.signFont;
+                if (s.signColor) t.signColor = s.signColor;
+                if (s.signIncludeModel != null) t.signIncludeModel = s.signIncludeModel;
+                if (s.creditMode != null) t.creditMode = s.creditMode;
+                if (s.avatarScale) t.avatarScale = s.avatarScale;
+                if (s.signSize) t.signSize = s.signSize;
+                if (s.avatarShow !== undefined) t.avatarShow = s.avatarShow;
+                if (s.signBgBlur != null) t.signBgBlur = s.signBgBlur;
+                if (s.paramColor) t.paramColor = s.paramColor;
+                if (s.paramFontSize) t.paramFontSize = s.paramFontSize;
+                if (s.brandSize) t.brandSize = s.brandSize;
+                if (s.brandLogo != null) t.brandLogo = s.brandLogo;
+                if (s.paramScale) t.paramScale = s.paramScale;
+                if (s.liquidGlassSize) t.liquidGlassSize = s.liquidGlassSize;
+                if (s.liquidGlassDate != null) t.liquidGlassDate = s.liquidGlassDate;
+                if (typeof s.polaroidCaption === 'string') t.polaroidCaption = s.polaroidCaption;
+                if (typeof s.hassyCaption === 'string') t.hassyCaption = s.hassyCaption;
+                if (s.appleCard && typeof s.appleCard === 'object') t.appleCard = s.appleCard;
+                if (s.xmLeica && typeof s.xmLeica === 'object') t.xmLeica = s.xmLeica;
+                // 用户显式记忆过「背景模糊默认开/关」时，它优先于旧草稿里的单次值。
+                if (typeof this.applyBgBlurDefault === 'function') this.applyBgBlurDefault(t);
+            };
             // 找到对应预设并选中
             if (s.presetName && Array.isArray(this.presets)) {
                 // 去品牌化改名：旧草稿里还写着旧名字，映射到新预设，避免恢复时丢掉选中态
@@ -100,18 +137,9 @@ window.App = {
                 if (p) {
                     this.selectPreset(p);
                     this._lastStateApplied = true;
-                    // 预设只提供外观基线:上次改过的苹果信息卡(文本/颜色/字号/显隐)优先恢复
-                    if (s.appleCard && typeof s.appleCard === 'object' && this.template) {
-                        this.template.appleCard = s.appleCard;
-                        this.refreshUI();
-                        this.scheduleRender();
-                    }
-                    // 联名水印同理
-                    if (s.xmLeica && typeof s.xmLeica === 'object' && this.template) {
-                        this.template.xmLeica = s.xmLeica;
-                        this.refreshUI();
-                        this.scheduleRender();
-                    }
+                    applySavedTweaks();
+                    this.refreshUI();
+                    this.scheduleRender();
                     return;
                 }
             }
@@ -119,36 +147,7 @@ window.App = {
             // 启动时 this.template 还没被创建；不先建模板，下面所有赋值都会静默跳过
             // —— 这正是旧版「自动恢复」在启动阶段完全失效的原因。
             if (!this.template) this.template = this.defaultTemplate();
-            if (s.photoFrameStyle) this.template.photoFrameStyle = s.photoFrameStyle;
-            // 圆角分别存在 cornerConfig（全局圆角）和顶层 borderRadius（图层边框）里，
-            // 旧版只存不取，重启后圆角白改。
-            if (s.cornerRadiusAll) {
-                const cc = this.template.cornerConfig || (this.template.cornerConfig = {});
-                cc.cornerRadiusAll = s.cornerRadiusAll;
-            }
-            if (s.borderRadius) this.template.borderRadius = s.borderRadius;
-            if (s.userSignature) this.template.userSignature = s.userSignature;
-            if (s.signFont) this.template.signFont = s.signFont;
-            if (s.signColor) this.template.signColor = s.signColor;
-            if (s.signIncludeModel != null) this.template.signIncludeModel = s.signIncludeModel;
-            if (s.creditMode != null) this.template.creditMode = s.creditMode;
-            if (s.avatarScale) this.template.avatarScale = s.avatarScale;
-            if (s.signSize) this.template.signSize = s.signSize;
-            if (s.avatarShow !== undefined) this.template.avatarShow = s.avatarShow;
-            if (s.signBgBlur != null) this.template.signBgBlur = s.signBgBlur;
-            if (s.paramColor) this.template.paramColor = s.paramColor;
-            if (s.paramFontSize) this.template.paramFontSize = s.paramFontSize;
-            if (s.brandSize) this.template.brandSize = s.brandSize;
-            if (s.brandLogo != null) this.template.brandLogo = s.brandLogo;
-            if (s.paramScale) this.template.paramScale = s.paramScale;
-            if (s.liquidGlassSize) this.template.liquidGlassSize = s.liquidGlassSize;
-            if (s.liquidGlassDate != null) this.template.liquidGlassDate = s.liquidGlassDate;
-            if (typeof s.polaroidCaption === 'string') this.template.polaroidCaption = s.polaroidCaption;
-            if (typeof s.hassyCaption === 'string') this.template.hassyCaption = s.hassyCaption;
-            if (s.appleCard && typeof s.appleCard === 'object') this.template.appleCard = s.appleCard;
-            if (s.xmLeica && typeof s.xmLeica === 'object') this.template.xmLeica = s.xmLeica;
-            // 用户显式记忆过「背景模糊默认开/关」时，它优先于旧草稿里的单次值。
-            if (typeof this.applyBgBlurDefault === 'function') this.applyBgBlurDefault(this.template);
+            applySavedTweaks();
             this._lastStateApplied = true;
             this.refreshUI();
             this.scheduleRender();

@@ -40,6 +40,11 @@ window.App = Object.assign(window.App || {}, {
                 brandLogo: this.template.brandLogo || 0,
                 paramScale: this.template.paramScale || 1,
                 liquidGlassSize: this.template.liquidGlassSize || 1,
+                // 这三项此前只读取、从未写入：改完「玻璃条显示日期 / 拍立得底部文字 /
+                // 哈苏底部文字」重启后永远回到默认。0/空串也是用户选择，必须原样存。
+                liquidGlassDate: this.template.liquidGlassDate === 0 ? 0 : 1,
+                polaroidCaption: this.template.polaroidCaption || '',
+                hassyCaption: this.template.hassyCaption || '',
                 appleCard: this.template.appleCard || null,
                 xmLeica: this.template.xmLeica || null,
                 // 对齐迁移标记:≥2 表示用户已在「居中为默认」的版本里保存过,恢复时不再改 align

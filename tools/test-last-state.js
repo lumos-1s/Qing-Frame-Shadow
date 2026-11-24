@@ -113,6 +113,55 @@ async function main() {
     check(restored.name === 'VHS录像带' && restored.style === 'VHS_TAPE',
         '恢复的预设不会被首帧「选第一个」覆盖', JSON.stringify(restored));
 
+    // ①b 命中预设时，用户在预设上改过的字段必须覆盖回模板（旧实现直接 return 丢掉）
+    await seed({
+        presetName: 'VHS录像带',
+        photoFrameStyle: 'VHS_TAPE',
+        userSignature: '跨重启签名',
+        cornerRadiusAll: 33,
+        paramColor: '#123456',
+        liquidGlassDate: 0,
+        polaroidCaption: '拍立得文字',
+        hassyCaption: '哈苏文字'
+    });
+    const tweaked = await exec(`(() => {
+        const A = window.App;
+        const t = A.template || {};
+        const cc = t.cornerConfig || {};
+        return {
+            applied: A._lastStateApplied,
+            name: t.templateName || '',
+            signature: t.userSignature || '',
+            corner: cc.cornerRadiusAll || 0,
+            color: t.paramColor || '',
+            glassDate: t.liquidGlassDate,
+            polaroid: t.polaroidCaption || '',
+            hassy: t.hassyCaption || ''
+        };
+    })()`);
+    check(tweaked.applied && tweaked.signature === '跨重启签名' && tweaked.corner === 33
+          && tweaked.color === '#123456' && tweaked.glassDate === 0
+          && tweaked.polaroid === '拍立得文字' && tweaked.hassy === '哈苏文字',
+        '命中预设时仍恢复签名/圆角/参数色/玻璃日期/拍立得/哈苏文字', JSON.stringify(tweaked));
+
+    // ①c autoSaveState 必须真的写出这三项（旧版只读不写，重启永远回默认）
+    const savedFields = await exec(`(() => {
+        const A = window.App;
+        A.template = A.template || A.defaultTemplate();
+        A.template.liquidGlassDate = 0;
+        A.template.polaroidCaption = '存档拍立得';
+        A.template.hassyCaption = '存档哈苏';
+        A.autoSaveState();
+        try { return JSON.parse(localStorage.getItem('qfs_last_state') || '{}'); } catch (_) { return {}; }
+    })()`);
+    check(savedFields.liquidGlassDate === 0 && savedFields.polaroidCaption === '存档拍立得'
+          && savedFields.hassyCaption === '存档哈苏',
+        '自动存档写入玻璃日期/拍立得/哈苏文字', JSON.stringify({
+            glassDate: savedFields.liquidGlassDate,
+            polaroid: savedFields.polaroidCaption,
+            hassy: savedFields.hassyCaption
+        }));
+
     // ② 预设被删/改名时，字段兜底必须真的写进模板（旧版 template=null 全跳过）
     await seed({
         presetName: '不存在的预设',
