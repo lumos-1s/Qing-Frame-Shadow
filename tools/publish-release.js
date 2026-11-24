@@ -22,7 +22,7 @@ const flag = (k) => argv.includes('--' + k);
 
 const TOKEN = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
 const OWNER = 'lumos-1s';
-const REPO = 'Qing-Fram-Shadow';
+const REPO = 'Qing-Frame-Shadow';
 const TAG = arg('tag', 'v' + require('../package.json').version);
 const TARGET = arg('target', '');
 const NOTES = arg('notes', '');

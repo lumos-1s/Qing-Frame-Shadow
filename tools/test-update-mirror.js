@@ -57,8 +57,8 @@ const server = http.createServer((req, res) => {
     check(!normalizeMirror('https://a b.com/').ok, '含空格的地址被拒', null);
 
     // 2) URL 改写
-    const original = releaseAssetUrl({ owner: 'lumos-1s', repo: 'Qing-Fram-Shadow', version: '0.1.22', file: 'Qingframe-Setup-0.1.22-x64.exe' });
-    check(original === 'https://github.com/lumos-1s/Qing-Fram-Shadow/releases/download/v0.1.22/Qingframe-Setup-0.1.22-x64.exe',
+    const original = releaseAssetUrl({ owner: 'lumos-1s', repo: 'Qing-Frame-Shadow', version: '0.1.22', file: 'Qingframe-Setup-0.1.22-x64.exe' });
+    check(original === 'https://github.com/lumos-1s/Qing-Frame-Shadow/releases/download/v0.1.22/Qingframe-Setup-0.1.22-x64.exe',
         'releaseAssetUrl 拼出 GitHub 原始地址', original);
     const viaPlaceholder = mirrorUrlFor(original, 'https://ghproxy.net/{url}');
     check(viaPlaceholder === 'https://ghproxy.net/' + original, '{url} 原样替换（ghproxy 要求不编码）', viaPlaceholder);

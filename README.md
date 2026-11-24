@@ -11,9 +11,9 @@
 <p align="center"><sub>A local-first Windows desktop app — 91 presets and 96 frame styles, live grading, RAW developing, watermarks and batch export. No account, no uploads.</sub></p>
 
 <p align="center">
-  <a href="https://github.com/lumos-1s/Qing-Fram-Shadow/stargazers"><img src="https://img.shields.io/github/stars/lumos-1s/Qing-Fram-Shadow?style=flat-square&color=blue" alt="GitHub stars"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/lumos-1s/Qing-Fram-Shadow?style=flat-square&color=green" alt="MIT License"></a>
-  <a href="https://github.com/lumos-1s/Qing-Fram-Shadow/releases"><img src="https://img.shields.io/badge/version-0.1.29-orange?style=flat-square" alt="Version 0.1.29"></a>
+  <a href="https://github.com/lumos-1s/Qing-Frame-Shadow/stargazers"><img src="https://img.shields.io/github/stars/lumos-1s/Qing-Frame-Shadow?style=flat-square&color=blue" alt="GitHub stars"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/lumos-1s/Qing-Frame-Shadow?style=flat-square&color=green" alt="MIT License"></a>
+  <a href="https://github.com/lumos-1s/Qing-Frame-Shadow/releases"><img src="https://img.shields.io/badge/version-0.1.29-orange?style=flat-square" alt="Version 0.1.29"></a>
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-45-47848F?style=flat-square" alt="Electron 45"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?style=flat-square" alt="Windows 10/11">
 </p>
@@ -74,7 +74,7 @@
 <a id="download"></a>
 ## 下载 · Download
 
-**当前版本 v0.1.29** — 从 [GitHub Releases](https://github.com/lumos-1s/Qing-Fram-Shadow/releases) 下载 Windows 安装版（NSIS）或便携版。
+**当前版本 v0.1.29** — 从 [GitHub Releases](https://github.com/lumos-1s/Qing-Frame-Shadow/releases) 下载 Windows 安装版（NSIS）或便携版。
 
 > **English** — Grab the Windows installer or portable build from Releases. Everything is rendered on your machine; no account, no upload.
 
@@ -128,7 +128,7 @@ npm run dist           # 打包 Windows 安装版 + 便携版
 - 界面收成暗房质感：纯色主按钮、发丝线分层、线性图标；新手引导改为三步流程卡。
 - 修复背景模糊卡片圆角照片的白边。
 
-完整变更与安装包见 [GitHub Releases](https://github.com/lumos-1s/Qing-Fram-Shadow/releases)；应用内「设置 → 关于 → 更新内容」也有离线版。
+完整变更与安装包见 [GitHub Releases](https://github.com/lumos-1s/Qing-Frame-Shadow/releases)；应用内「设置 → 关于 → 更新内容」也有离线版。
 
 <a id="tech-stack"></a>
 ## 技术栈 · Tech Stack

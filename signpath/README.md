@@ -51,10 +51,10 @@ subject returned by SignPath (with `package.json` as the fallback).
 Use these values in the SignPath Foundation application:
 
 - **Project name:** `QingFramShadow（清框影）`.
-- **Repository:** <https://github.com/lumos-1s/Qing-Fram-Shadow>
-- **Homepage:** <https://github.com/lumos-1s/Qing-Fram-Shadow>
-- **Download:** <https://github.com/lumos-1s/Qing-Fram-Shadow#download>
-- **Privacy policy:** <https://github.com/lumos-1s/Qing-Fram-Shadow/blob/main/PRIVACY.md>
+- **Repository:** <https://github.com/lumos-1s/Qing-Frame-Shadow>
+- **Homepage:** <https://github.com/lumos-1s/Qing-Frame-Shadow>
+- **Download:** <https://github.com/lumos-1s/Qing-Frame-Shadow#download>
+- **Privacy policy:** <https://github.com/lumos-1s/Qing-Frame-Shadow/blob/main/PRIVACY.md>
 - **License:** MIT.
 - **Category:** Graphics.
 - **Tagline:** QingFramShadow is an open-source, local-first Windows app for

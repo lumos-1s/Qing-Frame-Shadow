@@ -1004,7 +1004,7 @@ window.App = Object.assign(window.App || {}, {
         el.className = 'about-status about-diag-status' + (tone ? ' ' + tone : '');
     },
     _aboutReleasesUrl() {
-        return 'https://github.com/lumos-1s/Qing-Fram-Shadow/releases';
+        return 'https://github.com/lumos-1s/Qing-Frame-Shadow/releases';
     },
     // 打开关于页时,把之前静默检查/下载留下的状态带进来。
     syncAboutUpdateState() {

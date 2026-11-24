@@ -15,8 +15,8 @@ const localAgent = require('./local-agent');
 const aiProvider = require('./ai-provider');
 
 // 仓库改名后统一从这里取,避免菜单 / 更新源 / 下载兜底 / 外链白名单各写一份。
-const REPO_URL = 'https://github.com/lumos-1s/Qing-Fram-Shadow';
-const REPO_PATH = '/lumos-1s/Qing-Fram-Shadow';
+const REPO_URL = 'https://github.com/lumos-1s/Qing-Frame-Shadow';
+const REPO_PATH = '/lumos-1s/Qing-Frame-Shadow';
 
 // 打包版与开发版数据隔离:发布版用独立 userData,首次启动头像/用户名等默认全空,
 // 也不会读到开发机(含开发者自己)已保存的旧登录数据。
@@ -566,7 +566,7 @@ app.whenReady().then(() => {
         const file = info && Array.isArray(info.files) ? info.files[0] : null;
         if (!info || !file || !file.sha512) throw new Error('清单里没有可用的校验值，已回退 GitHub 直连');
         const fileName = path.basename(String(file.url || info.path || '')) || ('Qingframe-Setup-' + info.version + '.exe');
-        const original = releaseAssetUrl({ owner: 'lumos-1s', repo: 'Qing-Fram-Shadow', version: info.version, file: fileName });
+        const original = releaseAssetUrl({ owner: 'lumos-1s', repo: 'Qing-Frame-Shadow', version: info.version, file: fileName });
         const url = mirrorUrlFor(original, mirror);
         const dest = path.join(app.getPath('userData'), 'update-cache', fileName);
         const w = BrowserWindow.getAllWindows()[0];
@@ -683,7 +683,7 @@ handleIpc('get-app-info', () => ({
 }));
 
 // 关于页只允许打开本项目 GitHub 链接,避免渲染进程拿到任意 openExternal 能力。
-// 路径必须正好是仓库主页或以 / 结尾,防止 "Qing-Fram-Shadow-xxx" 一类前缀误匹配。
+// 路径必须正好是仓库主页或以 / 结尾,防止 "Qing-Frame-Shadow-xxx" 一类前缀误匹配。
 handleIpc('open-external', async (_e, url) => {
     try {
         const u = new URL(String(url));

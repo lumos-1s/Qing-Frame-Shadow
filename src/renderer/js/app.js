@@ -3916,7 +3916,7 @@ bindBtn('btnResetPuzzleAxes', () => this.resetPuzzleAxes());
         });
         bindBtn('btnAboutIntro', () => this.showIntroAgain());
         bindBtn('aboutUpdateAction', () => this.aboutUpdateActionClick());
-        const repo = 'https://github.com/lumos-1s/Qing-Fram-Shadow';
+        const repo = 'https://github.com/lumos-1s/Qing-Frame-Shadow';
         const aboutLinks = {
             btnAboutHome: repo,
             btnAboutIssues: repo + '/issues',

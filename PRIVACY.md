@@ -16,7 +16,7 @@ The application checks GitHub Releases for updates:
 
 - On startup (after a short delay), and when you choose "check for updates".
 - It requests release metadata from
-  `https://github.com/lumos-1s/Qing-Fram-Shadow/releases`.
+  `https://github.com/lumos-1s/Qing-Frame-Shadow/releases`.
 - Update downloads are requested only after you choose to download an update.
 - These requests go directly to GitHub by default; the application does not
   route them through third-party update mirrors on its own. They are subject to
@@ -39,7 +39,7 @@ manually if you want a complete cleanup.
 ## Contact
 
 Privacy questions can be raised at
-<https://github.com/lumos-1s/Qing-Fram-Shadow/issues>.
+<https://github.com/lumos-1s/Qing-Frame-Shadow/issues>.
 
 Except for the update checks described above, this program will not transfer
 any information to other networked systems unless specifically requested by the

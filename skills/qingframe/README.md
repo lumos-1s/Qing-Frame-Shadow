@@ -20,10 +20,10 @@ frames/SKILL.md                ← 完整手册（CLI 不带参数时打印的�
 
 ## 方式二：用 npx skills 安装（发布后）
 
-仓库公开到 GitHub 后（例如 `https://github.com/<你>/Qing-Fram-Shadow`），agent 可装：
+仓库公开到 GitHub 后（例如 `https://github.com/<你>/Qing-Frame-Shadow`），agent 可装：
 
 ```sh
-npx skills add <你>/Qing-Fram-Shadow
+npx skills add <你>/Qing-Frame-Shadow
 ```
 
 它会扫描仓库根的 `skills/*/SKILL.md`，把 `qingframe` 这个 skill 装进 agent。

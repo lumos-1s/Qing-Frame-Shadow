@@ -5,10 +5,10 @@
 const GH_PROXIES = ['https://ghproxy.net', 'https://ghfast.top', 'https://gh-proxy.com'];
 const FAKE_ATOM_XML = `<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <title>Qing-Fram-Shadow Releases</title>
+  <title>Qing-Frame-Shadow Releases</title>
   <entry>
     <title>新版本可用</title>
-    <link href="https://github.com/lumos-1s/Qing-Fram-Shadow/releases/tag/v0.1.10"/>
+    <link href="https://github.com/lumos-1s/Qing-Frame-Shadow/releases/tag/v0.1.10"/>
     <content type="html">更新检查与下载已全部走加速镜像, 修复国内网络直连失败问题</content>
   </entry>
 </feed>`;
@@ -78,7 +78,7 @@ const updaterMock = {
     currentVersion: require('semver')('0.1.9'),
     isAddNoCacheQuery: false
 };
-const provider = new GHProvider({ owner: 'lumos-1s', repo: 'Qing-Fram-Shadow' }, updaterMock, { executor });
+const provider = new GHProvider({ owner: 'lumos-1s', repo: 'Qing-Frame-Shadow' }, updaterMock, { executor });
 
 (async () => {
     const info = await provider.getLatestVersion();
