@@ -4,6 +4,7 @@
     const panel = document.getElementById('panel');
     const canvas = document.getElementById('previewCanvas');
     const stageEmpty = document.getElementById('stageEmpty');
+    const A = window.App;
     const state = {
         image: null, images: [], preset: null, template: window.qfsNative.defaultTemplate(),
         tab: 'style', filter: '全部', activeSlot: 0,
@@ -22,27 +23,28 @@
     };
 
     function renderPreview() {
+        Object.assign(A, { dom: { canvas }, image: state.image, images: state.images, template: state.template }, renderStubs);
         if (state.tab === 'puzzle') {
             if (!state.images.length) return;
             const tpl = state.template;
             tpl.puzzle = state.puzzle;
-            const app = Object.assign({
-                dom: { canvas }, image: state.image, images: state.images, template: tpl
-            }, renderStubs);
-            try { window.__renderPuzzle(app, false, true); }
+            A.template = tpl;
+            try { window.__renderPuzzle(A, false, true); }
             catch (e) { console.warn('[mobile] puzzle render failed', e); paintFallback(); }
             return;
         }
         if (!state.image) return;
-        const app = Object.assign({ dom: { canvas }, image: state.image, template: state.template }, renderStubs);
         try {
-            if (typeof window.__render === 'function') window.__render(app, false);
+            if (typeof window.__render === 'function') window.__render(A, false);
             else paintFallback();
         } catch (e) {
             console.warn('[mobile] render failed', e);
             paintFallback();
         }
         stageEmpty.hidden = true;
+        if (state.tab === 'grade' && window.QfsHistogram && state.image) {
+            try { window.QfsHistogram.refresh(state.image); } catch (_) { /* 直方图可选 */ }
+        }
     }
 
     function paintFallback() {
@@ -70,6 +72,7 @@
         state.preset = null;
         state.puzzle.slots = {};
         list.forEach((im, i) => { state.puzzle.slots[i] = { imageIndex: i }; });
+        Object.assign(A, { image: state.image, images: state.images, template: state.template });
         stageEmpty.querySelector('b').textContent = state.image.name;
         hint(`已导入 ${list.length} 张 · 当前 ${state.image.w}×${state.image.h}`);
         stageBar(state.image.name, `${state.image.w}×${state.image.h}`);
@@ -83,6 +86,7 @@
         state.template = clone(p);
         state.template.templateName = p._fileName || p.templateName || '';
         state.template.photoFrameStyle = (p.photoFrameStyle || p.templateName || '').toUpperCase();
+        A.template = state.template;
         stageEmpty.hidden = false;
         const name = p.templateName || p._fileName || '已套用风格';
         stageEmpty.querySelector('b').textContent = name;
@@ -180,10 +184,33 @@
         render('puzzle');
     }
 
+    const GRADE_UI = [
+        ['exp', '曝光', -5, 5, 0.01], ['con', '对比度', -100, 100, 1],
+        ['hi', '高光', -100, 100, 1], ['sh', '阴影', -100, 100, 1],
+        ['white', '白色', -100, 100, 1], ['black', '黑色', -100, 100, 1],
+        ['gam', '中间调', -100, 100, 1], ['temp', '色温', -100, 100, 1],
+        ['tint', '色调', -100, 100, 1], ['vib', '自然饱和度', -100, 100, 1], ['sat', '饱和度', -100, 100, 1]
+    ];
+
+    function gradePage() {
+        const g = (state.image && state.image.grade) || {};
+        const rows = GRADE_UI.map(([k, label, min, max, step]) => {
+            const v = Number(g[k]) || 0;
+            return `<div class="grade-row"><label>${label}</label>`
+                + `<input type="range" data-grade="${k}" min="${min}" max="${max}" step="${step}" value="${v}">`
+                + `<output data-out="${k}">${v}</output></div>`;
+        }).join('');
+        return `<h2>调色</h2>
+            <div class="histo-card"><canvas id="gradeHisto" width="600" height="180"></canvas></div>
+            <div class="grade-sliders">${rows}</div>
+            <div class="puzzle-acts"><button id="btnGradeReset">重置调色</button></div>
+            <p class="panel-note">滑块来自桌面调色引擎；直方图实时读取调色后像素</p>`;
+    }
+
     const PAGES = {
         style: stylePage,
         puzzle: puzzlePage,
-        grade: () => `<h2>调色</h2><p class="panel-note">P4：直方图 + 分组滑块 + 溢出按钮 + 自动调色。</p>`,
+        grade: gradePage,
         crop: () => `<h2>切图</h2><p class="panel-note">P5：九宫格预览 + 勾选块 + 系统分享。</p>`
     };
 
@@ -222,6 +249,28 @@
         });
         const fill = document.getElementById('btnFillAll');
         if (fill) fill.addEventListener('click', fillAll);
+
+        panel.querySelectorAll('[data-grade]').forEach((b) => {
+            b.addEventListener('input', () => {
+                const key = b.dataset.grade, v = Number(b.value);
+                if (typeof A.setGrade === 'function') A.setGrade({ [key]: v });
+                else if (state.image) {
+                    state.image.grade = state.image.grade || {};
+                    state.image.grade[key] = v;
+                }
+                const out = panel.querySelector(`[data-out="${key}"]`);
+                if (out) out.textContent = String(v);
+                renderPreview();
+            });
+        });
+        const greset = document.getElementById('btnGradeReset');
+        if (greset) greset.addEventListener('click', () => {
+            if (typeof A.resetGrade === 'function') A.resetGrade();
+            renderPreview(); render('grade');
+        });
+        if (state.tab === 'grade' && window.QfsHistogram && state.image) {
+            setTimeout(() => { try { window.QfsHistogram.refresh(state.image); } catch (_) {} }, 30);
+        }
 
         document.getElementById('btnPick').textContent = state.tab === 'puzzle' ? '＋ 选图' : '＋ 导入';
         document.getElementById('btnExport').textContent = state.tab === 'puzzle' ? '保存拼图' : '保存 / 分享';

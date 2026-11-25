@@ -116,6 +116,14 @@ body {
 .photo-thumb small { position: absolute; right: 2px; bottom: 2px; background: rgba(0,0,0,.65); color: #fff; font-size: 9px; padding: 0 3px; border-radius: 3px; }
 .photo-thumb:active { border-color: var(--primary); }
 
+.histo-card { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-soft, #181B1A); padding: 6px; }
+.histo-card canvas { display: block; width: 100%; height: 90px; }
+.grade-sliders { margin-top: 10px; }
+.grade-row { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--border); }
+.grade-row label { flex: 0 0 76px; font-size: 12px; color: var(--text-2); }
+.grade-row input[type=range] { flex: 1; min-width: 0; height: 32px; accent-color: var(--primary); }
+.grade-row output { flex: 0 0 44px; text-align: right; font-size: 11px; color: var(--primary); font-variant-numeric: tabular-nums; }
+
 #tabs {
   flex: 0 0 auto; height: var(--tab-h); padding-bottom: var(--safe-bottom);
   display: flex; background: var(--surface); border-top: 1px solid var(--border);

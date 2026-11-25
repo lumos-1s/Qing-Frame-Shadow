@@ -137,6 +137,27 @@ app.whenReady().then(async () => {
     check(p3.assigned && p3.canvasW > 0 && p3.filled === 4,
         '点照片入格并一键铺满后引擎重绘', JSON.stringify(p3));
 
+    const p4 = await win.webContents.executeJavaScript(`(async () => {
+        document.querySelector('[data-tab="grade"]').click();
+        await new Promise((r) => setTimeout(r, 200));
+        const sliders = document.querySelectorAll('[data-grade]').length;
+        const histo = !!document.getElementById('gradeHisto');
+        const exp = document.querySelector('[data-grade="exp"]');
+        if (exp) { exp.value = '1.2'; exp.dispatchEvent(new Event('input', { bubbles: true })); }
+        await new Promise((r) => setTimeout(r, 250));
+        return {
+            sliders, histo,
+            expValue: Number((window.App.image && window.App.image.grade && window.App.image.grade.exp) || 0),
+            out: (document.querySelector('[data-out="exp"]') || {}).textContent,
+            canvasW: document.getElementById('previewCanvas').width,
+            histoStats: !!(window.QfsHistogram && window.QfsHistogram.clipOf(window.App.image))
+        };
+    })()`);
+    check(p4.sliders === 11 && p4.histo && p4.histoStats,
+        'P4 调色滑块与直方图就绪', JSON.stringify(p4));
+    check(Math.abs(p4.expValue - 1.2) < 0.01 && p4.canvasW > 0 && /1.2/.test(p4.out || ''),
+        '拖动曝光调用桌面调色引擎并重绘', JSON.stringify(p4));
+
     check(errors.length === 0, '控制台无脚本异常', errors.slice(0, 3).join(' / '));
 
     console.log(fails.length ? `\n${fails.length} FAILURE(S)` : '\nALL PASS');
