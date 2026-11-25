@@ -37,6 +37,12 @@
                 const out = [];
                 for (const f of files) {
                     try {
+                        if (/\.(arw|cr2|nef|dng|raf|orf|rw2|pef|srw|raw)$/i.test(f.name)) {
+                            if (window.QF_RAW_READY) await window.QF_RAW_READY;
+                            if (typeof window.qfRawDecode !== 'function') throw new Error('RAW 解码器尚未就绪');
+                            out.push(await window.qfRawDecode(f));
+                            continue;
+                        }
                         const url = URL.createObjectURL(f);
                         const img = await new Promise((res, rej) => {
                             const i = new Image();

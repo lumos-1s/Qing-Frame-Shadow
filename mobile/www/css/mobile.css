@@ -124,6 +124,12 @@ body {
 .grade-row input[type=range] { flex: 1; min-width: 0; height: 32px; accent-color: var(--primary); }
 .grade-row output { flex: 0 0 44px; text-align: right; font-size: 11px; color: var(--primary); font-variant-numeric: tabular-nums; }
 
+.crop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.crop-cell { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-alt); }
+.crop-cell img { display: block; width: 100%; aspect-ratio: 1/1; object-fit: cover; }
+.crop-cell input { position: absolute; left: 6px; top: 6px; width: 20px; height: 20px; accent-color: var(--primary); z-index: 2; }
+.crop-cell small { position: absolute; right: 4px; bottom: 4px; background: rgba(0,0,0,.65); color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 4px; }
+
 #tabs {
   flex: 0 0 auto; height: var(--tab-h); padding-bottom: var(--safe-bottom);
   display: flex; background: var(--surface); border-top: 1px solid var(--border);

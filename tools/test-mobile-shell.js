@@ -23,7 +23,8 @@ app.whenReady().then(async () => {
     win.webContents.on('console-message', (_e, level, message) => {
         if (level === 2 || /Uncaught|is not defined|Cannot read/i.test(message)) errors.push(message);
     });
-    await win.loadFile(INDEX);
+    // ES module（RAW 桥）在 file:// 下会被 CORS 拦，测试走本地静态服务器（先 npm run mobile:serve）
+    await win.loadURL('http://127.0.0.1:4173/');
     await new Promise((r) => setTimeout(r, 600));
     const r = await win.webContents.executeJavaScript(`(() => ({
         ready: !!window.QF_MOBILE_READY,
@@ -157,6 +158,33 @@ app.whenReady().then(async () => {
         'P4 调色滑块与直方图就绪', JSON.stringify(p4));
     check(Math.abs(p4.expValue - 1.2) < 0.01 && p4.canvasW > 0 && /1.2/.test(p4.out || ''),
         '拖动曝光调用桌面调色引擎并重绘', JSON.stringify(p4));
+
+    const p5 = await win.webContents.executeJavaScript(`(async () => {
+        let calls = 0;
+        const origSave = window.qfsNative.saveImage;
+        window.qfsNative.saveImage = async () => { calls++; return { ok: true, mode: 'test' }; };
+        document.querySelector('[data-tab="crop"]').click();
+        await new Promise((r) => setTimeout(r, 200));
+        const cells = document.querySelectorAll('.crop-cell').length;
+        const presets = document.querySelectorAll('[data-grid]').length;
+        const first = document.querySelector('[data-block="0"]');
+        if (first) { first.checked = false; first.dispatchEvent(new Event('change', { bubbles: true })); }
+        document.getElementById('btnExport').click();
+        await new Promise((r) => setTimeout(r, 250));
+        window.qfsNative.saveImage = origSave;
+        return { cells, presets, calls, label: document.getElementById('btnExport').textContent };
+    })()`);
+    check(p5.cells === 9 && p5.presets === 4 && /导出选中块/.test(p5.label),
+        'P5 九宫格预览与尺寸档位就绪', JSON.stringify(p5));
+    check(p5.calls === 8,
+        '取消勾选一块后只导出 8 块', JSON.stringify(p5));
+
+    const rawReady = await win.webContents.executeJavaScript(`({
+        bridge: typeof window.qfRawDecode === 'function',
+        wasm: !!(window.QF_RAW_READY && typeof window.QF_RAW_READY.then === 'function')
+    })`);
+    check(rawReady.bridge && rawReady.wasm,
+        'P4.5 RAW 解码桥（libraw-wasm Worker）已加载', JSON.stringify(rawReady));
 
     check(errors.length === 0, '控制台无脚本异常', errors.slice(0, 3).join(' / '));
 

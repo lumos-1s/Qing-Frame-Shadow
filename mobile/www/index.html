@@ -47,6 +47,14 @@
 </div>
 
 <!-- 引擎与算法：与桌面端同源，由 tools/sync-mobile-engine.js 同步，禁止手改 -->
+<div id="gridControls" hidden aria-hidden="true">
+  <select id="selGridSize"><option value="3" selected>3</option></select>
+  <input id="inpGridCols" value="3">
+  <input id="inpGridRows" value="3">
+  <input id="slGridPad" value="0">
+  <input id="slGridOffsetX" value="0">
+  <input id="slGridOffsetY" value="0">
+</div>
 <script src="js/capacitor.js"></script>
 <script src="js/default-template.js"></script>
 <script src="js/presets-bundle.js"></script>
@@ -55,6 +63,7 @@
 <script src="js/app-stub.js"></script>
 <script src="js/app-grade.js"></script>
 <script src="js/app-histogram.js"></script>
+<script src="js/app-export.js"></script>
 <script src="js/color-space.js"></script>
 <script src="js/qfs-img.js"></script>
 <script src="js/exif.js"></script>
@@ -64,6 +73,7 @@
 <script src="js/style-params.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/engine-styles.js"></script>
+<script type="module" src="js/raw-bridge.js"></script>
 <script src="js/mobile.js"></script>
 </body>
 </html>

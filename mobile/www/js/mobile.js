@@ -8,7 +8,8 @@
     const state = {
         image: null, images: [], preset: null, template: window.qfsNative.defaultTemplate(),
         tab: 'style', filter: '全部', activeSlot: 0,
-        puzzle: { enabled: 1, layout: 'grid4', gap: 6, bgMode: 0, slots: {} }
+        puzzle: { enabled: 1, layout: 'grid4', gap: 6, bgMode: 0, slots: {} },
+        crop: { rows: 3, cols: 3, picked: new Set(), blocks: [] }
     };
 
     function clone(v) { return JSON.parse(JSON.stringify(v)); }
@@ -207,11 +208,49 @@
             <p class="panel-note">滑块来自桌面调色引擎；直方图实时读取调色后像素</p>`;
     }
 
+    async function exportGrid() {
+        const blocks = state.crop.blocks || [];
+        if (!blocks.length) { hint('先导入照片'); return; }
+        const picks = Array.from(state.crop.picked).sort((a, b) => a - b);
+        if (!picks.length) { hint('至少勾选一块'); return; }
+        hint(`正在导出 ${picks.length} 块…`);
+        let ok = 0;
+        for (const i of picks) {
+            const data = blocks[i].toDataURL('image/jpeg', 0.92);
+            const name = `${state.image.name || 'photo'}_九宫格_${i + 1}.jpg`.replace(/\.[^.]+\./, '.');
+            const r = await window.qfsNative.saveImage(data, name);
+            if (r.ok) ok++;
+        }
+        hint(`已导出 ${ok}/${picks.length} 块`);
+    }
+
+    function cropPage() {
+        if (!state.image) return `<h2>切图</h2><p class="panel-note">请先导入照片</p>`;
+        const { rows, cols } = state.crop;
+        const blocks = (typeof A._sliceGrid === 'function')
+            ? A._sliceGrid(state.image.el, rows, cols, 0, 0, 0) : [];
+        state.crop.blocks = blocks;
+        if (!state.crop.picked.size) blocks.forEach((_, i) => state.crop.picked.add(i));
+        const presets = [[3, 3], [2, 2], [4, 4], [3, 4]].map(([r, c]) =>
+            `<button class="chip${rows === r && cols === c ? ' active' : ''}" data-grid="${r}x${c}">${r}×${c}</button>`).join('');
+        const cells = blocks.map((cv, i) => {
+            const t = document.createElement('canvas'); t.width = 96; t.height = 96;
+            t.getContext('2d').drawImage(cv, 0, 0, 96, 96);
+            const checked = state.crop.picked.has(i) ? ' checked' : '';
+            return `<label class="crop-cell"><input type="checkbox" data-block="${i}"${checked}>`
+                + `<img src="${t.toDataURL('image/jpeg', 0.5)}" alt=""><small>${i + 1}</small></label>`;
+        }).join('');
+        return `<h2>切图</h2>
+            <div class="chips">${presets}</div>
+            <div class="crop-grid">${cells}</div>
+            <p class="panel-note">已勾选 ${state.crop.picked.size}/${blocks.length} 块 · 点底部「导出选中块」逐块保存/分享</p>`;
+    }
+
     const PAGES = {
         style: stylePage,
         puzzle: puzzlePage,
         grade: gradePage,
-        crop: () => `<h2>切图</h2><p class="panel-note">P5：九宫格预览 + 勾选块 + 系统分享。</p>`
+        crop: cropPage
     };
 
     function render(name) {
@@ -271,9 +310,28 @@
         if (state.tab === 'grade' && window.QfsHistogram && state.image) {
             setTimeout(() => { try { window.QfsHistogram.refresh(state.image); } catch (_) {} }, 30);
         }
+        panel.querySelectorAll('[data-grid]').forEach((b) => {
+            b.addEventListener('click', () => {
+                const [r, c] = b.dataset.grid.split('x').map(Number);
+                state.crop.rows = r; state.crop.cols = c;
+                state.crop.picked = new Set();
+                document.getElementById('inpGridCols').value = String(c);
+                document.getElementById('inpGridRows').value = String(r);
+                render('crop');
+            });
+        });
+        panel.querySelectorAll('[data-block]').forEach((b) => {
+            b.addEventListener('change', () => {
+                const i = Number(b.dataset.block);
+                if (b.checked) state.crop.picked.add(i); else state.crop.picked.delete(i);
+                const note = panel.querySelector('.panel-note');
+                if (note) note.textContent = `已勾选 ${state.crop.picked.size}/${state.crop.blocks.length} 块 · 点底部「导出选中块」逐块保存/分享`;
+            });
+        });
 
         document.getElementById('btnPick').textContent = state.tab === 'puzzle' ? '＋ 选图' : '＋ 导入';
-        document.getElementById('btnExport').textContent = state.tab === 'puzzle' ? '保存拼图' : '保存 / 分享';
+        document.getElementById('btnExport').textContent = state.tab === 'crop' ? '导出选中块'
+            : (state.tab === 'puzzle' ? '保存拼图' : '保存 / 分享');
         if (state.tab === 'puzzle') {
             stageBar('拼图 · ' + state.puzzle.layout, (PUZZLE_N[state.puzzle.layout] || 1) + ' 格');
             if (state.images.length) renderPreview();
@@ -292,7 +350,10 @@
         }
         importPhotos();
     });
-    document.getElementById('btnExport').addEventListener('click', exportCurrent);
+    document.getElementById('btnExport').addEventListener('click', () => {
+        if (state.tab === 'crop') exportGrid();
+        else exportCurrent();
+    });
 
     document.getElementById('tabs').addEventListener('click', (e) => {
         const tab = e.target.closest('.tab');

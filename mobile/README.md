@@ -23,7 +23,7 @@ mobile/
 npm run mobile:sync     # 把桌面引擎/预设同步到 mobile/www
 npm run mobile:check    # 校验同步无差异（check:chain 会自动跑）
 npm run mobile:serve    # 浏览器预览手机页面 http://localhost:4173
-npm run test:mobile     # P0 冒烟测试
+npm run test:mobile     # P0~P5 冒烟测试（需先启动 mobile:serve，RAW 桥走 ES module）
 npm --prefix mobile run cap:sync    # 同步 Web 资产到原生工程
 ```
 

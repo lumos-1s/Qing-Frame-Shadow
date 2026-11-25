@@ -46,7 +46,11 @@ const JS_FILES = [
 const PAIRS = [
     ...JS_FILES.map((f) => [path.join(ROOT, 'src', 'renderer', 'js', f), path.join(MOBILE, 'js', f)]),
     [path.join(ROOT, 'src', 'shared', 'color-space.js'), path.join(MOBILE, 'js', 'color-space.js')],
-    [path.join(ROOT, 'mobile', 'node_modules', '@capacitor', 'core', 'dist', 'capacitor.js'), path.join(MOBILE, 'js', 'capacitor.js')]
+    [path.join(ROOT, 'mobile', 'node_modules', '@capacitor', 'core', 'dist', 'capacitor.js'), path.join(MOBILE, 'js', 'capacitor.js')],
+    [path.join(ROOT, 'mobile', 'node_modules', 'libraw-wasm', 'dist', 'index.js'), path.join(MOBILE, 'js', 'raw', 'index.js')],
+    [path.join(ROOT, 'mobile', 'node_modules', 'libraw-wasm', 'dist', 'worker.js'), path.join(MOBILE, 'js', 'raw', 'worker.js')],
+    [path.join(ROOT, 'mobile', 'node_modules', 'libraw-wasm', 'dist', 'libraw.js'), path.join(MOBILE, 'js', 'raw', 'libraw.js')],
+    [path.join(ROOT, 'mobile', 'node_modules', 'libraw-wasm', 'dist', 'libraw.wasm'), path.join(MOBILE, 'js', 'raw', 'libraw.wasm')]
 ];
 
 // 从桌面 app.js 直接求值出默认模板，避免手机端另写一份造成漂移。
