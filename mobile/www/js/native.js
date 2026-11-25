@@ -21,18 +21,47 @@
 
     /* ── 选图：Web 与原生都走 <input type=file>，原生端会调起系统图库/文件应用 ── */
     let fileInput = null;
+    // 每张失败的照片都留一条原因：旧代码 catch 里什么都不做，RAW 解码失败时
+    // 用户只看到「没反应」，分不清是没选图还是解码器坏了。
+    let pickErrors = [];
+    function getPickErrors() { return pickErrors.slice(); }
+
     function pickImages() {
         return new Promise((resolve) => {
             if (!fileInput) {
                 fileInput = document.createElement('input');
                 fileInput.type = 'file';
                 fileInput.multiple = true;
-                fileInput.accept = 'image/*,.heic,.cr2,.nef,.arw,.dng';
+                fileInput.accept = 'image/*,.heic,.cr2,.nef,.arw,.dng,.raf,.orf,.rw2,.pef,.srw,.raw';
                 fileInput.style.display = 'none';
                 document.body.appendChild(fileInput);
             }
             fileInput.value = '';
+            pickErrors = [];
+            let settled = false;
+            let focusTimer = 0;
+            let watchdog = 0;
+            const onFocus = () => {
+                clearTimeout(focusTimer);
+                // 用户取消选择时没有 change 事件；回到页面后若仍没有文件就当取消。
+                // 有文件时 files.length > 0，不会被这里提前结束。
+                focusTimer = setTimeout(() => {
+                    if (!fileInput.files || !fileInput.files.length) done([]);
+                }, 600);
+            };
+            const done = (out) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(focusTimer);
+                clearTimeout(watchdog);
+                window.removeEventListener('focus', onFocus);
+                fileInput.onchange = null;
+                fileInput.oncancel = null;
+                resolve(out);
+            };
             fileInput.onchange = async () => {
+                // 已经拿到文件，取消看门狗，别在解码途中把 Promise 结束掉
+                clearTimeout(watchdog);
                 const files = Array.from(fileInput.files || []);
                 const out = [];
                 for (const f of files) {
@@ -44,10 +73,18 @@
                             continue;
                         }
                         const url = URL.createObjectURL(f);
-                        const img = await new Promise((res, rej) => {
-                            const i = new Image();
-                            i.onload = () => res(i); i.onerror = rej; i.src = url;
-                        });
+                        let img;
+                        try {
+                            img = await new Promise((res, rej) => {
+                                const i = new Image();
+                                i.onload = () => res(i);
+                                i.onerror = () => rej(new Error('图片格式无法解码'));
+                                i.src = url;
+                            });
+                        } finally {
+                            // 解码后立刻释放 blob URL，别让几十张大图一直挂在内存里
+                            try { URL.revokeObjectURL(url); } catch (_) {}
+                        }
                         // 预览限制 1600px，避免手机上大图直接占满内存
                         const max = 1600;
                         const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
@@ -58,17 +95,29 @@
                         cv.getContext('2d').drawImage(img, 0, 0, w, h);
                         cv.naturalWidth = w; cv.naturalHeight = h; cv.complete = true;
                         out.push({ el: cv, name: f.name, w, h, grade: null, file: f });
-                    } catch (_) { /* 单张失败不影响其他照片 */ }
+                    } catch (e) {
+                        // 单张失败不影响其他照片，但要留下可展示的原因
+                        pickErrors.push({ name: f.name, error: String((e && e.message) || e) });
+                    }
                 }
-                resolve(out);
+                done(out);
             };
+            // 新版 Chromium 支持 cancel 事件（Android WebView 可能没有，focus 兜底）
+            fileInput.oncancel = () => done([]);
+            // 最后一道保险：个别 WebView 既不发 cancel 也不发 focus，Promise 永不结束
+            // 会把「导入」永久卡住。3 分钟后按取消处理，允许重新选图。
+            watchdog = setTimeout(() => {
+                if (!fileInput.files || !fileInput.files.length) done([]);
+            }, 180000);
+            window.addEventListener('focus', onFocus);
             fileInput.click();
         });
     }
 
     /* ── 保存 / 分享 ── */
     async function saveImage(dataUrl, filename) {
-        const base64 = String(dataUrl || '').split(',').pop() || '';
+        const url = String(dataUrl || '');
+        const base64 = url.split(',').pop() || '';
         try {
             if (isNative) {
                 const FS = plugin('Filesystem');
@@ -79,12 +128,18 @@
                 return { ok: true, mode: 'native', uri };
             }
         } catch (e) {
-            return { ok: false, error: String(e && e.message || e) };
+            const msg = String((e && e.message) || e);
+            // 用户在系统分享面板点了取消：不是失败，界面应提示「已取消」
+            return { ok: false, canceled: /cancel|取消|dismiss/i.test(msg), error: msg };
         }
         // 浏览器降级：直接下载
         try {
             const a = document.createElement('a');
-            a.href = 'data:' + (dataUrl.startsWith('data:') ? '' : 'image/png;base64,') + base64;
+            // dataUrl 已经带 data:image/jpeg;base64, 前缀时直接使用；
+            // 旧写法又拼了一个 data:，下载出来的文件是坏图。
+            a.href = url.startsWith('data:')
+                ? url
+                : ('data:image/png;base64,' + base64);
             a.download = filename;
             document.body.appendChild(a); a.click(); a.remove();
             return { ok: true, mode: 'download' };
@@ -96,7 +151,11 @@
         if (isNative) {
             try {
                 const r = await plugin('Preferences').get({ key: 'qfm_prefs' });
-                return JSON.parse(r.value || '{}') || {};
+                const v = JSON.parse(r.value || '{}') || {};
+                // 把原生端的值并回本地副本，否则之后 savePrefs 会拿旧副本
+                // 整体覆盖，原生端后来写入的偏好会被悄悄回滚。
+                Object.assign(prefs, v);
+                return v;
             } catch (_) { /* 回退 localStorage */ }
         }
         return prefs;
@@ -124,6 +183,7 @@
         platform: () => platform,
         isMac: () => platform === 'ios',
         pickImages,
+        getPickErrors,
         saveImage,
         getPrefs,
         savePrefs,

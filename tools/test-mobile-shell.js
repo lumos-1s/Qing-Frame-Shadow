@@ -115,6 +115,7 @@ app.whenReady().then(async () => {
         document.querySelector('[data-tab="style"]').click();
         document.getElementById('btnPick').click();
         await new Promise((r) => setTimeout(r, 250));
+        const strip = document.querySelectorAll('[data-current]').length;
         document.querySelector('[data-tab="puzzle"]').click();
         await new Promise((r) => setTimeout(r, 200));
         const slots = document.querySelectorAll('.slot').length;
@@ -131,10 +132,11 @@ app.whenReady().then(async () => {
         if (fill) fill.click();
         await new Promise((r) => setTimeout(r, 150));
         const filled = document.querySelectorAll('.slot img').length;
-        return { slots, layouts, photos, assigned, canvasW, filled };
+        return { slots, layouts, photos, strip, assigned, canvasW, filled };
     })()`);
-    check(p3.slots === 4 && p3.layouts === 12 && p3.photos === 4,
-        'P3 拼图布局/格子/照片库就绪', JSON.stringify(p3));
+    // P1 已导入 1 张；P3 再导入 4 张是「追加」到照片库，共 5 张
+    check(p3.slots === 4 && p3.layouts === 12 && p3.photos === 5 && p3.strip === 5,
+        'P3 拼图布局/格子/照片库/当前照片条就绪', JSON.stringify(p3));
     check(p3.assigned && p3.canvasW > 0 && p3.filled === 4,
         '点照片入格并一键铺满后引擎重绘', JSON.stringify(p3));
 

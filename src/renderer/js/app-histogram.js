@@ -39,9 +39,13 @@
     const $ = (id) => document.getElementById(id);
 
     function ensure() {
-        if (cv && ctx) return true;
+        // 缓存的画布必须仍在文档里。手机版四个页签是重建 DOM 的：切走再切回，
+        // #gradeHisto 已经是新节点，旧 cv 却还占着缓存，直方图会一直画在
+        // 脱离文档的旧画布上，新面板里永远空白。桌面端静态面板不受影响。
+        if (cv && ctx && cv.isConnected) return true;
         cv = $('gradeHisto');
         exifEl = $('gradeExif');
+        ctx = null;
         if (!cv) return false;
         ctx = cv.getContext('2d');
         smp = document.createElement('canvas');
