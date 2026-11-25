@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#181B1A">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
+<title>清框影 · 手机版</title>
+<link rel="stylesheet" href="css/mobile.css">
+</head>
+<body>
+<div id="app">
+  <header id="mHeader">
+    <div class="brand">清框影 <span class="tag">内测</span></div>
+    <button id="btnSettings" class="icon-btn" aria-label="设置">⚙</button>
+  </header>
+
+  <main id="mMain">
+    <section id="stage">
+      <canvas id="previewCanvas"></canvas>
+      <div id="stageEmpty" class="empty-hint">
+        <div class="empty-ico">▧</div>
+        <b>先导入一张照片</b>
+        <span>点下面的「风格」页选图</span>
+      </div>
+    </section>
+
+    <section id="panel" aria-live="polite"></section>
+  </main>
+
+  <nav id="tabs" aria-label="主功能">
+    <button class="tab active" data-tab="style"><span class="ico">▦</span>风格</button>
+    <button class="tab" data-tab="puzzle"><span class="ico">▤</span>拼图</button>
+    <button class="tab" data-tab="grade"><span class="ico">◐</span>调色</button>
+    <button class="tab" data-tab="crop"><span class="ico">▦</span>切图</button>
+  </nav>
+</div>
+
+<!-- 引擎与算法：与桌面端同源，由 tools/sync-mobile-engine.js 同步，禁止手改 -->
+<script src="js/color-space.js"></script>
+<script src="js/qfs-img.js"></script>
+<script src="js/exif.js"></script>
+<script src="js/focal-eq.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/style-caps.js"></script>
+<script src="js/style-params.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/engine-styles.js"></script>
+<script src="js/mobile.js"></script>
+</body>
+</html>

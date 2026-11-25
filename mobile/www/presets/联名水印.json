@@ -1,0 +1,83 @@
+{
+  "templateName": "联名水印",
+  "templateTag": "水印",
+  "exportDpi": 300,
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 0,
+    "marginBottom": 0,
+    "marginLeft": 0,
+    "marginRight": 0,
+    "imgScale": 1,
+    "imgOffsetX": 0,
+    "imgOffsetY": 0,
+    "bgBlurEnable": 0,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 0
+  },
+  "layerList": [],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 0,
+    "cornerRadiusTL": 0,
+    "cornerRadiusTR": 0,
+    "cornerRadiusBL": 0,
+    "cornerRadiusBR": 0
+  },
+  "filmTearConfig": {
+    "filmPerforationEnable": 0,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 15,
+    "filmPerforationSpacing": 30
+  },
+  "lightEffect": {
+    "vignetteEnable": 0,
+    "vignetteStrength": 35,
+    "vignetteFeather": 50,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 0,
+    "filmGrainIntensity": 10
+  },
+  "decorConfig": {
+    "textLines": [],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  },
+  "logoElements": [],
+  "paramFontSize": 30,
+  "paramType": 0,
+  "paramPosition": "CENTER",
+  "xmLeica": {
+    "brandText": "",
+    "line1": "",
+    "line2": "CLASSIC · 影像定制",
+    "partnerBrand": "",
+    "showDiv": 1,
+    "showScrim": 1,
+    "align": 1,
+    "brandScale": 1,
+    "brandTracking": 0.16,
+    "lineWeight": 600,
+    "lineScale": 1,
+    "logoScale": 1,
+    "logoOpacity": 100,
+    "logoColor": "#ffffff",
+    "logoRaw": 1,
+    "padScale": 1,
+    "scrim": 45,
+    "fontFamily": "Courier New",
+    "textColor": "#ffffff",
+    "subColor": "#d9d9d9",
+    "divColor": "#ffffff"
+  },
+  "brandLogo": 1,
+  "photoFrameStyle": "XIAOMI_LEICA",
+  "photoFrameBorderSize": 40,
+  "blurIntensity": 50
+}

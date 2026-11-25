@@ -1,0 +1,119 @@
+{
+  "templateName": "磨砂玻璃卡",
+  "templateTag": "质感",
+  "exportDpi": 300,
+  "canvasRatio": "original",
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 70,
+    "marginBottom": 100,
+    "marginLeft": 70,
+    "marginRight": 70,
+    "imgScale": 0.93,
+    "imgOffsetX": 0,
+    "imgOffsetY": 0,
+    "bgBlurEnable": 1,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 30
+  },
+  "layerList": [
+    {
+      "visible": true,
+      "marginTop": 0,
+      "marginBottom": 0,
+      "marginLeft": 0,
+      "marginRight": 0,
+      "fillConfig": {
+        "fillType": "solid",
+        "fillHex": "#ffffff",
+        "fillOpacity": 40,
+        "gradientType": "linear",
+        "gradientAngle": 0,
+        "gradientStops": [
+          {
+            "position": 0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1,
+            "color": "#cccccc"
+          }
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "frost",
+        "textureScale": 1.8,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 50,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 1,
+        "strokePos": "inside",
+        "strokeColorHex": "#ffffff",
+        "strokeOpacity": 70,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 1,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 24,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 30,
+        "glowEnable": 0,
+        "glowColorHex": "#ffffff",
+        "glowBlur": 15,
+        "glowOpacity": 60
+      }
+    }
+  ],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 28,
+    "cornerRadiusTL": 28,
+    "cornerRadiusTR": 28,
+    "cornerRadiusBL": 28,
+    "cornerRadiusBR": 28
+  },
+  "filmTearConfig": {
+    "filmPerforationEnable": 0,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 15,
+    "filmPerforationSpacing": 30
+  },
+  "lightEffect": {
+    "vignetteEnable": 0,
+    "vignetteStrength": 35,
+    "vignetteFeather": 50,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 0,
+    "filmGrainIntensity": 10
+  },
+  "decorConfig": {
+    "textLines": [
+      {
+        "text": "FROSTED",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 13,
+        "fontWeight": 300,
+        "letterSpacing": 4,
+        "colorHex": "#ffffff",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 1
+      }
+    ],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  }
+}

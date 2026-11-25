@@ -1,0 +1,26 @@
+{
+  "name": "qingframe-mobile",
+  "version": "0.1.0-mobile",
+  "private": true,
+  "description": "清框影手机版：Capacitor + 共享 Web 引擎（Android / iOS）",
+  "scripts": {
+    "sync:engine": "node ../tools/sync-mobile-engine.js",
+    "serve": "node ../tools/mobile-serve.js",
+    "cap:sync": "cap sync",
+    "cap:android": "cap add android",
+    "cap:ios": "cap add ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/device": "^8.0.3",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/ios": "^8.6.2",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/share": "^8.0.3",
+    "qingframe-web": "file:.."
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2"
+  }
+}

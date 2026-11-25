@@ -1,0 +1,119 @@
+{
+  "templateName": "Canva错位拼贴",
+  "templateTag": "手作",
+  "exportDpi": 300,
+  "canvasRatio": "original",
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 130,
+    "marginBottom": 130,
+    "marginLeft": 130,
+    "marginRight": 130,
+    "imgScale": 0.95,
+    "imgOffsetX": 90,
+    "imgOffsetY": 60,
+    "bgBlurEnable": 0,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 0
+  },
+  "layerList": [
+    {
+      "visible": true,
+      "marginTop": -60,
+      "marginBottom": -60,
+      "marginLeft": -60,
+      "marginRight": -60,
+      "fillConfig": {
+        "fillType": "solid",
+        "fillHex": "#e9e5db",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 0,
+        "gradientStops": [
+          {
+            "position": 0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1,
+            "color": "#cccccc"
+          }
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 0,
+        "strokePos": "inside",
+        "strokeColorHex": "#c9c2b2",
+        "strokeOpacity": 100,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 0,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 10,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 40,
+        "glowEnable": 0,
+        "glowColorHex": "#ffffff",
+        "glowBlur": 15,
+        "glowOpacity": 60
+      }
+    }
+  ],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 0,
+    "cornerRadiusTL": 0,
+    "cornerRadiusTR": 0,
+    "cornerRadiusBL": 0,
+    "cornerRadiusBR": 0
+  },
+  "filmTearConfig": {
+    "filmPerforationEnable": 0,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 15,
+    "filmPerforationSpacing": 30
+  },
+  "lightEffect": {
+    "vignetteEnable": 0,
+    "vignetteStrength": 35,
+    "vignetteFeather": 50,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 0,
+    "filmGrainIntensity": 10
+  },
+  "decorConfig": {
+    "textLines": [
+      {
+        "text": "CANVA STYLE · 2026",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 11,
+        "fontWeight": 400,
+        "letterSpacing": 3,
+        "colorHex": "#a0a0a0",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  }
+}

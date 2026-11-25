@@ -1,0 +1,55 @@
+{
+  "templateName": "双重曝光",
+  "templateTag": "创意",
+  "exportDpi": 300,
+  "canvasRatio": "original",
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 0,
+    "marginBottom": 0,
+    "marginLeft": 0,
+    "marginRight": 0,
+    "imgScale": 1,
+    "imgOffsetX": 0,
+    "imgOffsetY": 0,
+    "bgBlurEnable": 0,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 0
+  },
+  "layerList": [],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 0,
+    "cornerRadiusTL": 0,
+    "cornerRadiusTR": 0,
+    "cornerRadiusBL": 0,
+    "cornerRadiusBR": 0
+  },
+  "filmTearConfig": {
+    "filmPerforationEnable": 0,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 15,
+    "filmPerforationSpacing": 30
+  },
+  "lightEffect": {
+    "vignetteEnable": 0,
+    "vignetteStrength": 35,
+    "vignetteFeather": 50,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 0,
+    "filmGrainIntensity": 10
+  },
+  "decorConfig": {
+    "textLines": [],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  },
+  "photoFrameStyle": "DOUBLE_EXPOSURE",
+  "photoFrameBorderSize": 50
+}

@@ -1,0 +1,194 @@
+{
+  "templateName": "渐变描边",
+  "templateTag": "现代",
+  "exportDpi": 300,
+  "canvasRatio": "original",
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 90,
+    "marginBottom": 110,
+    "marginLeft": 80,
+    "marginRight": 80,
+    "imgScale": 0.9,
+    "imgOffsetX": 0,
+    "imgOffsetY": 0,
+    "bgBlurEnable": 0,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 0
+  },
+  "layerList": [
+    {
+      "visible": true,
+      "marginTop": 18,
+      "marginBottom": 18,
+      "marginLeft": 18,
+      "marginRight": 18,
+      "fillConfig": {
+        "fillType": "gradient",
+        "fillHex": "#ffffff",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 135,
+        "gradientStops": [
+          {
+            "position": 0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1,
+            "color": "#f5f5fb"
+          }
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 0,
+        "strokePos": "inside",
+        "strokeColorHex": "#ffffff",
+        "strokeOpacity": 0,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 1,
+        "shadowOffsetX": 0,
+        "shadowOffsetY": 4,
+        "shadowBlur": 24,
+        "shadowColorHex": "#241338",
+        "shadowOpacity": 20,
+        "glowEnable": 0,
+        "glowColorHex": "#ffffff",
+        "glowBlur": 0,
+        "glowOpacity": 0
+      },
+      "cornerConfig": {
+        "cornerLock": 1,
+        "cornerRadiusAll": 28,
+        "cornerRadiusTL": 28,
+        "cornerRadiusTR": 28,
+        "cornerRadiusBL": 28,
+        "cornerRadiusBR": 28
+      }
+    },
+    {
+      "visible": true,
+      "marginTop": 0,
+      "marginBottom": 0,
+      "marginLeft": 0,
+      "marginRight": 0,
+      "fillConfig": {
+        "fillType": "gradient",
+        "fillHex": "#8b5cf6",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 135,
+        "gradientStops": [
+          {
+            "position": 0,
+            "color": "#4f8cff"
+          },
+          {
+            "position": 0.34,
+            "color": "#8b5cf6"
+          },
+          {
+            "position": 0.68,
+            "color": "#ff6fae"
+          },
+          {
+            "position": 1,
+            "color": "#ffb86b"
+          }
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 0,
+        "strokePos": "inside",
+        "strokeColorHex": "#ffffff",
+        "strokeOpacity": 0,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 0,
+        "shadowOffsetX": 0,
+        "shadowOffsetY": 0,
+        "shadowBlur": 0,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 0,
+        "glowEnable": 1,
+        "glowColorHex": "#8b5cf6",
+        "glowBlur": 55,
+        "glowOpacity": 22
+      },
+      "cornerConfig": {
+        "cornerLock": 1,
+        "cornerRadiusAll": 36,
+        "cornerRadiusTL": 36,
+        "cornerRadiusTR": 36,
+        "cornerRadiusBL": 36,
+        "cornerRadiusBR": 36
+      }
+    }
+  ],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 20,
+    "cornerRadiusTL": 20,
+    "cornerRadiusTR": 20,
+    "cornerRadiusBL": 20,
+    "cornerRadiusBR": 20
+  },
+  "filmTearConfig": {
+    "filmPerforationEnable": 0,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 15,
+    "filmPerforationSpacing": 30
+  },
+  "lightEffect": {
+    "vignetteEnable": 0,
+    "vignetteStrength": 35,
+    "vignetteFeather": 50,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 0,
+    "filmGrainIntensity": 10
+  },
+  "decorConfig": {
+    "textLines": [
+      {
+        "text": "S P E C T R U M",
+        "fontFamily": "Arial",
+        "fontSize": 11,
+        "fontWeight": 600,
+        "letterSpacing": 4,
+        "colorHex": "#7c7c87",
+        "opacity": 80,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  }
+}

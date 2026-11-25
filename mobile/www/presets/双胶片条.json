@@ -1,0 +1,131 @@
+{
+  "templateName": "双胶片条",
+  "templateTag": "胶片",
+  "exportDpi": 300,
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 0,
+    "marginBottom": 0,
+    "marginLeft": 74,
+    "marginRight": 74,
+    "imgScale": 0.82,
+    "imgOffsetX": 0,
+    "imgOffsetY": -22,
+    "bgBlurEnable": 0,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 0
+  },
+  "layerList": [
+    {
+      "visible": true,
+      "marginTop": 0,
+      "marginBottom": 0,
+      "marginLeft": 0,
+      "marginRight": 0,
+      "fillConfig": {
+        "fillType": "solid",
+        "fillHex": "#171310",
+        "fillOpacity": 100,
+        "gradientType": "linear",
+        "gradientAngle": 0,
+        "gradientStops": [
+          {
+            "position": 0,
+            "color": "#ffffff"
+          },
+          {
+            "position": 1,
+            "color": "#cccccc"
+          }
+        ],
+        "gradientOpacity": 100,
+        "textureSrc": "",
+        "textureScale": 1,
+        "textureOffsetX": 0,
+        "textureOffsetY": 0,
+        "textureOpacity": 100,
+        "textureBlend": "normal"
+      },
+      "strokeConfig": {
+        "strokeWidth": 0,
+        "strokePos": "inside",
+        "strokeColorHex": "#8b7355",
+        "strokeOpacity": 100,
+        "strokeDashArray": [],
+        "strokeDashOffset": 0
+      },
+      "shadowGlowConfig": {
+        "shadowEnable": 0,
+        "shadowOffsetX": 3,
+        "shadowOffsetY": 3,
+        "shadowBlur": 10,
+        "shadowColorHex": "#000000",
+        "shadowOpacity": 40,
+        "glowEnable": 0,
+        "glowColorHex": "#ffffff",
+        "glowBlur": 15,
+        "glowOpacity": 60
+      }
+    }
+  ],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 0,
+    "cornerRadiusTL": 0,
+    "cornerRadiusTR": 0,
+    "cornerRadiusBL": 0,
+    "cornerRadiusBR": 0
+  },
+  "filmTearConfig": {
+    "filmPerforationEnable": 1,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 11,
+    "filmPerforationSpacing": 21
+  },
+  "lightEffect": {
+    "vignetteEnable": 1,
+    "vignetteStrength": 38,
+    "vignetteFeather": 50,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 1,
+    "filmGrainIntensity": 12
+  },
+  "decorConfig": {
+    "textLines": [
+      {
+        "text": "KODAK  400 · 36 EXP",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 11,
+        "fontWeight": 400,
+        "letterSpacing": 6,
+        "colorHex": "#9a8560",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "top",
+        "enableShadow": 0
+      },
+      {
+        "text": "35mm · FILM ARCHIVE",
+        "fontFamily": "Microsoft YaHei",
+        "fontSize": 16,
+        "fontWeight": 400,
+        "letterSpacing": 6,
+        "colorHex": "#e8d3a3",
+        "opacity": 100,
+        "x": 0,
+        "y": 0,
+        "align": "bottom",
+        "enableShadow": 0
+      }
+    ],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  }
+}

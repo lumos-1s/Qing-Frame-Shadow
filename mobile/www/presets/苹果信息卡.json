@@ -1,0 +1,80 @@
+{
+  "templateName": "苹果信息卡",
+  "templateTag": "极简",
+  "exportDpi": 300,
+  "baseMargin": {
+    "marginLock": 0,
+    "marginTop": 0,
+    "marginBottom": 0,
+    "marginLeft": 0,
+    "marginRight": 0,
+    "imgScale": 1,
+    "imgOffsetX": 0,
+    "imgOffsetY": 0,
+    "bgBlurEnable": 0,
+    "bgBlurRadius": 30,
+    "bgBlurWhiteOverlay": 0
+  },
+  "layerList": [],
+  "cornerConfig": {
+    "cornerLock": 1,
+    "cornerRadiusAll": 0,
+    "cornerRadiusTL": 0,
+    "cornerRadiusTR": 0,
+    "cornerRadiusBL": 0,
+    "cornerRadiusBR": 0
+  },
+  "filmTearConfig": {
+    "filmPerforationEnable": 0,
+    "filmPerforationType": "round",
+    "filmPerforationSize": 15,
+    "filmPerforationSpacing": 30
+  },
+  "lightEffect": {
+    "vignetteEnable": 0,
+    "vignetteStrength": 35,
+    "vignetteFeather": 50,
+    "lightLeakEnable": 0,
+    "lightLeakType": "warm",
+    "lightLeakOpacity": 20,
+    "lightLeakAngle": 45,
+    "filmGrainEnable": 0,
+    "filmGrainIntensity": 10
+  },
+  "decorConfig": {
+    "textLines": [],
+    "stickers": [],
+    "cornerDecorEnable": 0,
+    "cornerDecorType": "none",
+    "cornerDecorSize": 30,
+    "exifAutoText": 0
+  },
+  "logoElements": [],
+  "paramFontSize": 30,
+  "paramType": 0,
+  "paramPosition": "CENTER",
+  "appleCard": {
+    "dateText": "",
+    "showBrand": 1,
+    "showModel": 1,
+    "showParams": 1,
+    "showDate": 1,
+    "showLogo": 1,
+    "showLine": 1,
+    "modelScale": 1,
+    "paramScale": 1,
+    "dateScale": 1,
+    "logoScale": 1,
+    "logoOpacity": 60,
+    "lineScale": 1,
+    "fontFamily": "Courier New",
+    "textColor": "#1d1d1f",
+    "subColor": "#86868b",
+    "lineColor": "#d2d2d7",
+    "barBg": "#ffffff"
+  },
+  "brandLogo": 1,
+  "photoFrameStyle": "CARD_APPLE",
+  "photoFrameBorderSize": 40,
+  "blurIntensity": 50
+}

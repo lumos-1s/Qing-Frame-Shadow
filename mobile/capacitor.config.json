@@ -1,0 +1,9 @@
+{
+  "appId": "com.qingframe.mobile",
+  "appName": "清框影",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
