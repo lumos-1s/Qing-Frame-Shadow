@@ -68,6 +68,8 @@ body {
   color: var(--text-2); font-size: 12px; text-align: center; padding: 6px;
 }
 .style-card:active { border-color: var(--primary); color: var(--primary); }
+.style-card.active { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.primary-btn.ghost { background: transparent; border: 1px solid var(--primary); color: var(--primary); margin-top: 8px; }
 .primary-btn {
   width: 100%; min-height: 46px; margin-top: 12px;
   border: none; border-radius: 8px; background: var(--primary); color: #0c1914;

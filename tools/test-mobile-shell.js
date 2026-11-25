@@ -48,6 +48,42 @@ app.whenReady().then(async () => {
     })()`);
     check(switched.active === 'grade' && /调色/.test(switched.text),
         '页签切换正常', JSON.stringify({ active: switched.active, text: switched.text.slice(0, 20) }));
+
+    // P1：原生适配层与风格页闭环（桩掉选图，避免真弹系统对话框）
+    const p1 = await win.webContents.executeJavaScript(`(async () => {
+        document.querySelector('[data-tab="style"]').click();
+        await new Promise((r) => setTimeout(r, 50));
+        const presets = (window.QF_PRESETS || []).length;
+        const shim = typeof window.qfsNative.pickImages === 'function'
+            && typeof window.qingframe.loadAllPresets === 'function';
+        const cv = document.createElement('canvas'); cv.width = 400; cv.height = 300;
+        cv.getContext('2d').fillRect(0, 0, 400, 300);
+        cv.naturalWidth = 400; cv.naturalHeight = 300; cv.complete = true;
+        window.qfsNative.pickImages = async () => [{ el: cv, name: 'fixture.png', w: 400, h: 300, grade: null }];
+        document.getElementById('btnPick').click();
+        await new Promise((r) => setTimeout(r, 200));
+        const imported = {
+            hidden: document.getElementById('stageEmpty').hidden,
+            name: document.getElementById('stageEmpty').querySelector('b').textContent,
+            canvasW: document.getElementById('previewCanvas').width
+        };
+        const card = document.querySelector('[data-preset="0"]');
+        if (card) card.click();
+        await new Promise((r) => setTimeout(r, 200));
+        const applied = {
+            active: !!document.querySelector('[data-preset="0"].active'),
+            title: document.getElementById('stageEmpty').querySelector('b').textContent,
+            canvasW: document.getElementById('previewCanvas').width
+        };
+        return { presets, shim, imported, applied, platform: window.qfsNative.platform() };
+    })()`);
+    check(p1.presets === 91 && p1.shim && p1.platform === 'web',
+        'P1 预设包与原生适配 shim 就绪', JSON.stringify({ presets: p1.presets, shim: p1.shim, platform: p1.platform }));
+    check(p1.imported.hidden && /fixture/.test(p1.imported.name) && p1.imported.canvasW > 0,
+        '导入照片后预览画布完成渲染', JSON.stringify(p1.imported));
+    check(p1.applied.active && p1.applied.canvasW > 0 && p1.applied.title !== p1.imported.name,
+        '点风格卡套用预设并重绘', JSON.stringify(p1.applied));
+
     check(errors.length === 0, '控制台无脚本异常', errors.slice(0, 3).join(' / '));
 
     console.log(fails.length ? `\n${fails.length} FAILURE(S)` : '\nALL PASS');

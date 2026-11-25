@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const MOBILE = path.join(ROOT, 'mobile', 'www');
@@ -44,8 +45,22 @@ const JS_FILES = [
 
 const PAIRS = [
     ...JS_FILES.map((f) => [path.join(ROOT, 'src', 'renderer', 'js', f), path.join(MOBILE, 'js', f)]),
-    [path.join(ROOT, 'src', 'shared', 'color-space.js'), path.join(MOBILE, 'js', 'color-space.js')]
+    [path.join(ROOT, 'src', 'shared', 'color-space.js'), path.join(MOBILE, 'js', 'color-space.js')],
+    [path.join(ROOT, 'mobile', 'node_modules', '@capacitor', 'core', 'dist', 'capacitor.js'), path.join(MOBILE, 'js', 'capacitor.js')]
 ];
+
+// 从桌面 app.js 直接求值出默认模板，避免手机端另写一份造成漂移。
+function defaultTemplateLiteral() {
+    const code = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'js', 'app.js'), 'utf8');
+    const sandbox = {
+        window: { App: {}, addEventListener() {} },
+        document: { addEventListener() {} },
+        localStorage: { getItem() { return null; }, setItem() {} },
+        console, setTimeout, clearTimeout
+    };
+    vm.runInNewContext(code, sandbox);
+    return `window.QF_DEFAULT_TEMPLATE = ${JSON.stringify(sandbox.window.App.defaultTemplate())};\n`;
+}
 
 const md5 = (p) => crypto.createHash('md5').update(fs.readFileSync(p)).digest('hex');
 let bad = 0;
@@ -82,6 +97,32 @@ if (fs.existsSync(presetSrc)) {
         }
         fs.mkdirSync(presetDst, { recursive: true });
         fs.copyFileSync(from, to);
+    }
+}
+
+// 预设打包成单个 JS，手机端一次读取，避免 91 次 fetch
+{
+    const src = path.join(presetSrc);
+    const names = fs.existsSync(src) ? fs.readdirSync(src).filter((n) => n.endsWith('.json')).sort() : [];
+    const list = names.map((n) => JSON.parse(fs.readFileSync(path.join(src, n), 'utf8')));
+    list.forEach((p, i) => { p._fileName = names[i].replace(/\.json$/, ''); });
+    const literal = `window.QF_PRESETS = ${JSON.stringify(list)};\n`;
+    const to = path.join(MOBILE, 'js', 'presets-bundle.js');
+    const cur = fs.existsSync(to) ? fs.readFileSync(to, 'utf8') : '';
+    if (cur !== literal) {
+        if (CHECK) { console.error('[sync-mobile-engine] presets-bundle.js 不同步'); bad++; }
+        else fs.writeFileSync(to, literal, 'utf8');
+    }
+}
+
+// 默认模板也从桌面求值生成
+{
+    const literal = defaultTemplateLiteral();
+    const to = path.join(MOBILE, 'js', 'default-template.js');
+    const cur = fs.existsSync(to) ? fs.readFileSync(to, 'utf8') : '';
+    if (cur !== literal) {
+        if (CHECK) { console.error('[sync-mobile-engine] default-template.js 不同步'); bad++; }
+        else fs.writeFileSync(to, literal, 'utf8');
     }
 }
 
