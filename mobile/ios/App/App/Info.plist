@@ -4,6 +4,10 @@
 <dict>
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>清框影需要读取你选择的照片，所有处理都在本机完成，不会上传。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>清框影需要把做好的照片保存到你的相册。</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>

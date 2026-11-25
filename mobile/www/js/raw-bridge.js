@@ -29,6 +29,11 @@ window.qfRawDecode = async (file) => {
             ? img.data : (img.buffer || img.data);
         const full = document.createElement('canvas');
         full.width = w; full.height = h;
+        // 手机内存红线：同时只保留一张 RAW 的全尺寸画布
+        if (window.QF_LAST_RAW_FULL && window.QF_LAST_RAW_FULL !== full) {
+            try { window.QF_LAST_RAW_FULL.width = 0; window.QF_LAST_RAW_FULL.height = 0; } catch (_) {}
+        }
+        window.QF_LAST_RAW_FULL = full;
         const ctx = full.getContext('2d');
         if (src && src.length >= w * h * 3) {
             ctx.putImageData(new ImageData(new Uint8ClampedArray(src.buffer || src, 0, w * h * 4), w, h), 0, 0);
