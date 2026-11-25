@@ -18,6 +18,10 @@
   <main id="mMain">
     <section id="stage">
       <canvas id="previewCanvas"></canvas>
+      <div id="stageBar">
+        <span id="stageName">未选择风格</span>
+        <span id="stageMeta">—</span>
+      </div>
       <div id="stageEmpty" class="empty-hint">
         <div class="empty-ico">▧</div>
         <b>先导入一张照片</b>
@@ -26,6 +30,12 @@
     </section>
 
     <section id="panel" aria-live="polite"></section>
+
+    <footer id="actionBar">
+      <button id="btnPick" class="act-btn">＋ 导入</button>
+      <button id="btnExport" class="act-btn primary">保存 / 分享</button>
+    </footer>
+
   </main>
 
   <nav id="tabs" aria-label="主功能">
@@ -40,6 +50,7 @@
 <script src="js/capacitor.js"></script>
 <script src="js/default-template.js"></script>
 <script src="js/presets-bundle.js"></script>
+<script src="js/wall-data.js"></script>
 <script src="js/native.js"></script>
 <script src="js/color-space.js"></script>
 <script src="js/qfs-img.js"></script>

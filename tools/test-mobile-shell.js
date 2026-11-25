@@ -84,6 +84,22 @@ app.whenReady().then(async () => {
     check(p1.applied.active && p1.applied.canvasW > 0 && p1.applied.title !== p1.imported.name,
         '点风格卡套用预设并重绘', JSON.stringify(p1.applied));
 
+    const p2 = await win.webContents.executeJavaScript(`(() => {
+        const wall = (window.QF_WALL && window.QF_WALL.items) || [];
+        const chips = Array.from(document.querySelectorAll('.chip')).map(b => b.textContent);
+        const tag = chips.find(t => t !== '全部');
+        const chip = Array.from(document.querySelectorAll('.chip')).find(b => b.textContent === tag);
+        if (chip) chip.click();
+        const cards = Array.from(document.querySelectorAll('.style-card'));
+        return { wall: wall.length, chips: chips.length, tag,
+                 cards: cards.length,
+                 hasCover: cards.some(c => { const img = c.querySelector('img'); return img && /covers\\//.test(img.getAttribute('src')); }) };
+    })()`);
+    check(p2.wall === 91 && p2.chips > 3 && p2.hasCover,
+        'P2 风格墙封面与分类数据已同步', JSON.stringify(p2));
+    check(p2.cards > 0 && p2.cards < 91,
+        '按分类筛选后卡片数量收窄', JSON.stringify({ tag: p2.tag, cards: p2.cards }));
+
     check(errors.length === 0, '控制台无脚本异常', errors.slice(0, 3).join(' / '));
 
     console.log(fails.length ? `\n${fails.length} FAILURE(S)` : '\nALL PASS');

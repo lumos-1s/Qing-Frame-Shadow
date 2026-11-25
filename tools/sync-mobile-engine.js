@@ -115,6 +115,35 @@ if (fs.existsSync(presetSrc)) {
     }
 }
 
+// 预设封面与分类数据：手机端按分类筛选，封面路径改成 c00.webp 形式
+{
+    const coverSrc = path.join(ROOT, 'src', 'renderer', 'assets', 'preset-wall', 'covers');
+    const coverDst = path.join(MOBILE, 'covers');
+    if (fs.existsSync(coverSrc)) {
+        for (const name of fs.readdirSync(coverSrc)) {
+            const from = path.join(coverSrc, name), to = path.join(coverDst, name);
+            if (fs.existsSync(to) && md5(from) === md5(to)) continue;
+            if (CHECK) { console.error(`[sync-mobile-engine] 封面不同步: ${name}`); bad++; continue; }
+            fs.mkdirSync(coverDst, { recursive: true });
+            fs.copyFileSync(from, to);
+        }
+    }
+    const wallFile = path.join(ROOT, 'src', 'renderer', 'assets', 'preset-wall', 'preset-wall-data.js');
+    if (fs.existsSync(wallFile)) {
+        const sandbox = { window: {} };
+        vm.runInNewContext(fs.readFileSync(wallFile, 'utf8'), sandbox);
+        const wall = sandbox.window.PRESET_WALL || { items: [] };
+        (wall.items || []).forEach((it) => { it.cover = 'covers/' + path.basename(String(it.cover || '')); });
+        const literal = `window.QF_WALL = ${JSON.stringify(wall)};\n`;
+        const to = path.join(MOBILE, 'js', 'wall-data.js');
+        const cur = fs.existsSync(to) ? fs.readFileSync(to, 'utf8') : '';
+        if (cur !== literal) {
+            if (CHECK) { console.error('[sync-mobile-engine] wall-data.js 不同步'); bad++; }
+            else fs.writeFileSync(to, literal, 'utf8');
+        }
+    }
+}
+
 // 默认模板也从桌面求值生成
 {
     const literal = defaultTemplateLiteral();
