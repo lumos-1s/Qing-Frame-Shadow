@@ -1126,6 +1126,13 @@ async function main() {
         A.setTpl(A.image, A.template);
         if (A.updatePersonalVisibility) A.updatePersonalVisibility();
         if (A.applyModeControls) A.applyModeControls();
+        // 调色面板改成 LR 式可折叠分段后，晕影/羽化/颗粒收在「效果」子段里。
+        // 默认只展开「亮」，不先展开「效果」时这些行当然不可见——不是控件被隐藏。
+        const fxSub = document.querySelector('.pg-sub[data-sub="fx"]');
+        if (fxSub && fxSub.classList.contains('collapsed')) {
+            const head = fxSub.querySelector('.pg-sub-head');
+            if (head) head.click();
+        }
         const ids = ['slVignetteStrength', 'slVignetteFeather', 'slFilmGrain', 'slLeakOpacity'];
         const shown = ids.map((id) => {
             const el = document.getElementById(id);
