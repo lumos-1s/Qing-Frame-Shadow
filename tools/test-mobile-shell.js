@@ -100,6 +100,43 @@ app.whenReady().then(async () => {
     check(p2.cards > 0 && p2.cards < 91,
         '按分类筛选后卡片数量收窄', JSON.stringify({ tag: p2.tag, cards: p2.cards }));
 
+    const p3 = await win.webContents.executeJavaScript(`(async () => {
+        const mk = async (n) => {
+            const c = document.createElement('canvas'); c.width = 120; c.height = 90;
+            const g = c.getContext('2d'); g.fillStyle = ['#c60','#0c0','#06c','#cc0'][n]; g.fillRect(0,0,120,90);
+            const cv = document.createElement('canvas'); cv.width = 120; cv.height = 90;
+            cv.getContext('2d').drawImage(c, 0, 0);
+            cv.toDataURL = () => c.toDataURL('image/jpeg', 0.5);
+            cv.naturalWidth = 120; cv.naturalHeight = 90; cv.complete = true;
+            return { el: cv, name: 'p' + n + '.png', w: 120, h: 90, grade: null };
+        };
+        window.qfsNative.pickImages = async () => [await mk(0), await mk(1), await mk(2), await mk(3)];
+        document.querySelector('[data-tab="style"]').click();
+        document.getElementById('btnPick').click();
+        await new Promise((r) => setTimeout(r, 250));
+        document.querySelector('[data-tab="puzzle"]').click();
+        await new Promise((r) => setTimeout(r, 200));
+        const slots = document.querySelectorAll('.slot').length;
+        const layouts = document.querySelectorAll('[data-layout]').length;
+        const photos = document.querySelectorAll('[data-photo]').length;
+        const slot1 = document.querySelector('[data-slot="1"]');
+        if (slot1) slot1.click();
+        const photo0 = document.querySelector('[data-photo="0"]');
+        if (photo0) photo0.click();
+        await new Promise((r) => setTimeout(r, 250));
+        const assigned = !!(document.querySelector('[data-slot="1"] img'));
+        const canvasW = document.getElementById('previewCanvas').width;
+        const fill = document.getElementById('btnFillAll');
+        if (fill) fill.click();
+        await new Promise((r) => setTimeout(r, 150));
+        const filled = document.querySelectorAll('.slot img').length;
+        return { slots, layouts, photos, assigned, canvasW, filled };
+    })()`);
+    check(p3.slots === 4 && p3.layouts === 12 && p3.photos === 4,
+        'P3 拼图布局/格子/照片库就绪', JSON.stringify(p3));
+    check(p3.assigned && p3.canvasW > 0 && p3.filled === 4,
+        '点照片入格并一键铺满后引擎重绘', JSON.stringify(p3));
+
     check(errors.length === 0, '控制台无脚本异常', errors.slice(0, 3).join(' / '));
 
     console.log(fails.length ? `\n${fails.length} FAILURE(S)` : '\nALL PASS');
