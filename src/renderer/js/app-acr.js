@@ -681,17 +681,13 @@
         return out;
     }
 
-    // 滤镜里除色调/曲线之外还有别的逐像素步骤吗（色彩平衡、渐变映射、整体 gamma）。
-    // 有的话反解就不成立，宁可不补——这些都不是 ACR 的档位，默认全关。
+    // 滤镜里除色调/曲线之外还有别的**逐像素标量**步骤吗（整体 gamma）。
+    // 有的话「按对角线反解」不成立，宁可不补。
+    // 色彩平衡 / 渐变映射不在此列：它们已改由 colorLut 的 extra 钩子接管，
+    // 不再写进滤镜表了（以前一旦开启就整个跳过三维色调补偿，连带把饱和度的
+    // 表现也改掉，是个隐蔽的串扰）。
     function extrasInFilter(p) {
-        if (Number(p.gam) || 0) return true;
-        const cb = p.cb;
-        if (cb) for (const z of ['shadow', 'mid', 'high']) {
-            const v = cb[z];
-            if (v && (Number(v.r) || Number(v.g) || Number(v.b))) return true;
-        }
-        const gm = p.gm;
-        return !!(gm && gm.on !== 0 && (Number(gm.amount) || 0) > 0);
+        return !!(Number(p.gam) || 0);
     }
 
     // ── 对外：颜色侧三维 LUT（校准 → 饱和度 → 自然饱和度 → 混色器 → 颜色分级）──
@@ -701,9 +697,15 @@
     //
     // bright：色调三维补偿所需的亮度测度（对比度/高光自适应档）。不传就不补，
     // 结果退回「对角线彩度」那一版（略欠饱和，但不会错色）。
+    //
+    // extra：色彩平衡 / 渐变映射这类**公式型跨通道**算子，由调用方给出
+    // { key, pre(r,g,b) → [r,g,b] }（app-grade.js 的 cbgmPrep）。它们没有实测表，
+    // 但同样必须按像素的真实 RGB 算 —— 逐通道表只能看见单通道的值，灰阶上碰巧
+    // 相等，彩色上就错（饱和橙走渐变映射差 76 级、色相反掉）。
+    // 位置接在色调修正之后、颜色档位之前，与原先「曲线之后」的滤镜顺序一致。
     const _lutCache = {};
     let _lutSeq = 0;
-    function colorLut(p, grid, bright) {
+    function colorLut(p, grid, bright, extra) {
         if (!T || !p) return null;
         const parts = [];
         if (p.cal) parts.push.apply(parts, calStages(p.cal));
@@ -716,13 +718,20 @@
         const C2 = window.QfsCurve;
         const curveSig = (C2 && C2.curveActive(p.curve)) ? C2.curveSignature(p.curve) : '-';
         const fix = (bright && !extrasInFilter(p)) ? toneFix(p, bright, curveSig) : null;
-        if (!parts.length && !fix) return null;
+        // 格点先反解回「真实三维色调」，再交给色彩平衡 / 渐变映射
+        // （fix.pre 返回数组，extra.pre 收三个数字，这里转一次）
+        const pre = (fix && extra) ? (r, g, b) => {
+            const c = fix.pre(r, g, b);
+            return extra.pre(c[0], c[1], c[2]);
+        } : (fix ? fix.pre : (extra ? extra.pre : null));
+        if (!parts.length && !pre) return null;
         const key = (fix ? 'T|' + fix.key + '|' : '')
+            + (extra ? 'X|' + extra.key + '|' : '')
             + parts.map((q) => q.map((x) => x.off + ':' + x.w.toFixed(4)).join(' ')).join('|');
         const g = grid || GRID;
         const slot = _lutCache[g];
         if (slot && slot.key === key && slot.lut) return slot.lut;
-        const out = compose3d(parts, g, fix ? fix.pre : null, true);
+        const out = compose3d(parts, g, pre, true);
         out.token = ++_lutSeq;   // 纹理上传的变更凭据
         _lutCache[g] = { key, lut: out };
         return out;
@@ -851,6 +860,8 @@
         // 与 Compositor 的 CameraRawTables.neutralize 同一个思路：不求解析解，直接在
         // 实测表的 9×9 网格上搜，再在邻居里细化；结果对本渲染器是"精确"的。
         neutralize: neutralizeColor,
+        // 三线性采样一张已合成的 grid³ 表（r,g,b 0..255）。测试与标定脚本用。
+        sampleTable,
         diag256: (stage) => T ? { r: toLut256(stage.r), g: toLut256(stage.g), b: toLut256(stage.b) } : null
     };
 

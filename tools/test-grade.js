@@ -1520,6 +1520,89 @@ async function main() {
         '渐变映射强度 40 只是轻上色（中灰离原值更近）',
         `强度100 ${gmPix.full.mid.join('/')} → 强度40 ${gmPix.half.mid.join('/')}`);
 
+    // ── 31b. 色彩平衡 / 渐变映射：跨通道算子在**彩色像素**上要按真实亮度选区 ──
+    // 这两档以前写在 feComponentTransfer 的逐通道表里。表对每个通道独立作用，
+    // 只看得见「这个通道是多少」，看不见「这个像素有多亮」——灰阶上两者恰好相等
+    // （所以 30/31 组一直通过），一上彩色就错：渐变映射对饱和红能差 116 级、
+    // 色相反掉；色彩平衡「高光 +蓝」会把一块饱和蓝又推高 28 级。
+    // 现在改由三维网格的 pre 钩子按真实 RGB 算，下面逐项钉死。
+    const cbgm = await exec(`(() => {
+        const A = window.QfsAcr;
+        const zero = { exp: 0, con: 0, sat: 0, vib: 0, temp: 0, tint: 0, hi: 0, sh: 0,
+            white: 0, black: 0, gam: 0, curve: null, cal: null, det: null, mix: null,
+            cg: null, bw: null, cb: null, gm: null, lc: null };
+        const lutOf = (p) => A.colorLut(p, 33, null, window.QfsCbgm.prep(p));
+        const at = (lut, r, g, b) => A.sampleTable(lut, r, g, b).map((v) => Math.round(v));
+        const cbRed = lutOf(Object.assign({}, zero, { cb: { shadow: { r: 100, g: 0, b: 0 },
+            mid: { r: 0, g: 0, b: 0 }, high: { r: 0, g: 0, b: 0 }, preserve: 0 } }));
+        const cbBlue = lutOf(Object.assign({}, zero, { cb: { shadow: { r: 0, g: 0, b: 0 },
+            mid: { r: 0, g: 0, b: 0 }, high: { r: 0, g: 0, b: 100 }, preserve: 0 } }));
+        const gm = lutOf(Object.assign({}, zero, { gm: { on: 1, dark: '#200040', light: '#ffe000', amount: 100 } }));
+        const gmHalf = lutOf(Object.assign({}, zero, { gm: { on: 1, dark: '#200040', light: '#ffe000', amount: 40 } }));
+        return {
+            red: at(cbRed, 220, 30, 30),
+            blue: at(cbBlue, 40, 60, 210),
+            gmRed: at(gm, 220, 30, 30),
+            // 与 (220,30,30) 同亮度（Rec.601 都是 86.8）的另一种颜色
+            gmBlue: at(gm, 96, 60, 200),
+            gmGray: at(gm, 87, 87, 87),
+            gmHalfMid: at(gmHalf, 128, 128, 128),
+            gmFullMid: at(gm, 128, 128, 128)
+        };
+    })()`);
+    check(cbgm.red[0] - 220 >= 8 && Math.abs(cbgm.red[1] - 30) <= 2 && Math.abs(cbgm.red[2] - 30) <= 2,
+        '色彩平衡·阴影+红 作用在饱和红上：只有 R 抬（+12），G/B 不动（旧实现是三通道都不动）',
+        `220/30/30 → ${cbgm.red.join('/')}`);
+    check(Math.abs(cbgm.blue[2] - 210) <= 3,
+        '色彩平衡·高光+蓝 不碰饱和蓝：它亮度只有 89，不属于高光（旧实现按 B=210 误判成高光，推到 238）',
+        `40/60/210 → ${cbgm.blue.join('/')}`);
+    check(Math.abs(cbgm.gmRed[0] - cbgm.gmBlue[0]) <= 6
+          && Math.abs(cbgm.gmRed[1] - cbgm.gmBlue[1]) <= 6
+          && Math.abs(cbgm.gmRed[2] - cbgm.gmBlue[2]) <= 6,
+        '渐变映射只取决于亮度：同亮度的饱和红与饱和蓝输出同一个颜色（旧实现差 157 级）',
+        `红 ${cbgm.gmRed.join('/')} vs 蓝 ${cbgm.gmBlue.join('/')}`);
+    check(Math.abs(cbgm.gmRed[0] - 108) <= 4 && Math.abs(cbgm.gmRed[1] - 76) <= 4
+          && Math.abs(cbgm.gmRed[2] - 42) <= 4,
+        '渐变映射落在两色渐变上（亮度 0.34 → #200040 与 #ffe000 之间）',
+        `${cbgm.gmRed.join('/')}（应为 108/76/42）`);
+    check(Math.abs(cbgm.gmFullMid[0] - 128) > Math.abs(cbgm.gmHalfMid[0] - 128),
+        '渐变映射强度 40 只是轻上色（中灰离原值更近）',
+        `强度100 ${cbgm.gmFullMid.join('/')} → 强度40 ${cbgm.gmHalfMid.join('/')}`);
+
+    // 接线：真烘一张时 colorLut 要收到 extra；同时逐通道表里不能再写一遍（否则两遍）
+    const cbWire = await exec(`(async () => {
+        const A = window.App;
+        const zero = { exp: 0, con: 0, sat: 0, vib: 0, temp: 0, tint: 0, hi: 0, sh: 0,
+            white: 0, black: 0, gam: 0, curve: null, cal: null, det: null, mix: null,
+            cg: null, bw: null, cb: null, gm: null, lc: null };
+        const p = Object.assign({}, zero, { cb: { shadow: { r: 100, g: 0, b: 0 },
+            mid: { r: 0, g: 0, b: 0 }, high: { r: 0, g: 0, b: 0 }, preserve: 0 } });
+        const skip = window.QfsCbgm.buildTables(p, true);
+        const full = window.QfsCbgm.buildTables(p, false);
+        const base = window.QfsCbgm.buildTables(zero, true);
+        const diff = (a, b) => Math.max.apply(null, a.r.map((v, i) => Math.abs(+v - +b.r[i])));
+        let gotExtra = false;
+        const orig = window.QfsAcr.colorLut;
+        window.QfsAcr.colorLut = function (pp, g, b, extra) {
+            if (extra && extra.key) gotExtra = true;
+            return orig.apply(window.QfsAcr, arguments);
+        };
+        A.setGrade(p, { full: true, replace: true });
+        await new Promise((r) => setTimeout(r, 300));
+        window.QfsAcr.colorLut = orig;
+        A.resetGrade();
+        return { gotExtra, skipDiff: diff(skip, base), fullDiff: diff(full, base),
+                 gl: !!(window.QfsColor && QfsColor.usingGL && QfsColor.usingGL()) };
+    })()`);
+    check(cbWire.gotExtra, '色彩平衡真烘时确实走三维表（colorLut 收到 extra）',
+        `WebGL=${cbWire.gl}`);
+    check(cbWire.skipDiff < 0.001,
+        '三维表接管后逐通道表里不再写色彩平衡（否则同一档生效两遍）',
+        `差 ${cbWire.skipDiff}`);
+    check(cbWire.fullDiff > 0.05,
+        '没有三维表时逐通道表仍负责色彩平衡（降级路径不丢功能）',
+        `差 ${cbWire.fullDiff.toFixed(3)}`);
+
     // ── 32. 镜头畸变：几何重采样（GL 路径）──
     const lcPix = await exec(`(async () => {
         const A = window.App;

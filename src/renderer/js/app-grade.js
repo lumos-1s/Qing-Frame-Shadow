@@ -177,6 +177,82 @@
         return [parseInt(s.slice(1, 3), 16) / 255, parseInt(s.slice(3, 5), 16) / 255, parseInt(s.slice(5, 7), 16) / 255];
     }
 
+    // ── 色彩平衡 / 渐变映射：一个像素怎么算 ───────────────────────
+    // 这两档都是**跨通道**算子：先按这个像素的亮度选权重（阴影/中间调/高光，
+    // 或渐变索引），再同时动三个通道。feComponentTransfer 的表对每个通道独立
+    // 作用，它只能看见「这个通道是多少」，看不见「这个像素有多亮」——灰阶上两者
+    // 恰好相等，一上彩色就错：饱和橙走渐变映射能差 76 级，色相直接反掉。
+    // 所以公式只留这一份，由两条路共用：
+    //   · 三维表（WebGL 可用）：colorLut 的 pre 钩子，在每个格点上按真实 RGB 算；
+    //   · 逐通道 256 表（无 GL 兜底）：拿灰阶 v 当输入算，彩色仍会退化，
+    //     但灰度与中性色的表现与三维路径一致。
+    function cbgmPrep(p) {
+        const cbOn = cbActive(p.cb);
+        const gmOn = gmActive(p.gm);
+        if (!cbOn && !gmOn) return null;
+        let zones = null, preserve = false;
+        if (cbOn) {
+            zones = CB_ZONES.map((z) => {
+                const v = p.cb[z.k] || {};
+                return [(Number(v.r) || 0) / 100, (Number(v.g) || 0) / 100, (Number(v.b) || 0) / 100];
+            });
+            preserve = p.cb.preserve !== 0;
+        }
+        let gm = null;
+        if (gmOn) {
+            const dk = hexToRgb(p.gm.dark), lt = hexToRgb(p.gm.light);
+            gm = [dk[0], dk[1], dk[2], lt[0], lt[1], lt[2],
+                Math.max(0, Math.min(100, Number(p.gm.amount) || 0)) / 100];
+        }
+        const key = 'c' + (cbOn
+            ? zones.map((z) => z.map((x) => Math.round(x * 100)).join('.')).join(',') + (preserve ? 'p' : '')
+            : '-')
+            + 'g' + (gmOn ? p.gm.dark + p.gm.light + Math.round(gm[6] * 100) : '-');
+        return {
+            key,
+            // r/g/b：0..255。返回同一量纲，方便直接喂给三维网格。
+            // 必须有 **三个数字** 的参数：compose3d 的 pre 钩子就是这么调的。
+            pre(r, g, b) {
+                let vr = r / 255, vg = g / 255, vb = b / 255;
+                if (zones) {
+                    const y0 = 0.299 * vr + 0.587 * vg + 0.114 * vb;
+                    const w = cbWeights(y0);
+                    // 极暗门控：纯黑不染色（0→0）。否则「暗部加红」会把画面的黑边、
+                    // 白边阴影一起染成暗红，看起来像脏了。6% 以上是满权重。
+                    const gate = smoothstep(0, 0.06, y0);
+                    let dr = 0, dg = 0, db = 0;
+                    for (let zi = 0; zi < 3; zi++) {
+                        const z = zones[zi], wz = w[zi] * gate;
+                        if (!wz) continue;
+                        dr += z[0] * wz * CB_AMP;
+                        dg += z[1] * wz * CB_AMP;
+                        db += z[2] * wz * CB_AMP;
+                    }
+                    vr = clamp01(vr + dr); vg = clamp01(vg + dg); vb = clamp01(vb + db);
+                    // 保持明度：把亮度的净变化补回去（PS 的 Preserve Luminosity）。
+                    // 直接按比例缩放会把色度一起削掉，用差值补偿更接近 PS 的观感。
+                    if (preserve) {
+                        const y1 = 0.299 * vr + 0.587 * vg + 0.114 * vb;
+                        const dl = (y0 - y1) * 0.9;
+                        vr = clamp01(vr + dl); vg = clamp01(vg + dl); vb = clamp01(vb + dl);
+                    }
+                }
+                if (gm) {
+                    // 拿当前亮度当索引去查那条两色渐变，再按强度混回去。
+                    const t = clamp01(0.299 * vr + 0.587 * vg + 0.114 * vb);
+                    const amt = gm[6];
+                    vr = clamp01(vr + (gm[0] + (gm[3] - gm[0]) * t - vr) * amt);
+                    vg = clamp01(vg + (gm[1] + (gm[4] - gm[1]) * t - vg) * amt);
+                    vb = clamp01(vb + (gm[2] + (gm[5] - gm[2]) * t - vb) * amt);
+                }
+                return [vr * 255, vg * 255, vb * 255];
+            }
+        };
+    }
+    // 测试与 tools/ 下的标定脚本要用同一份公式
+    // （buildTables 是函数声明，提前引用没问题：它在这一行之后才定义，但已提升）
+    window.QfsCbgm = { prep: cbgmPrep, buildTables };
+
     // ── 镜头校正（目前只做畸变） ─────────────────────────────────
     // distort>0 校正桶形（把外围往里收），<0 校正枕形。几何重采样只能在
     // GL pass 里做（Canvas2D 逐像素重采样没有双线性插值，边缘会锯齿）。
@@ -682,30 +758,18 @@
     }
 
     // 色温/高光/阴影/白点黑点合成每通道一条曲线，再串联用户曲线与薄雾黑场
-    function buildTables(p) {
+    //
+    // skipCbgm：三维表在用时（WebGL 可用）色彩平衡 / 渐变映射改由 colorLut 的
+    // pre 钩子按真实 RGB 计算。这两档必须看见「这个像素有多亮」，逐通道表看不见，
+    // 所以不能再写进表里 —— 否则同一个档位会生效两遍。
+    function buildTables(p, skipCbgm) {
         const sh = (p.sh || 0) / 100, hi = (p.hi || 0) / 100, tp = (p.temp || 0) / 100;
         const tn = (p.tint || 0) / 100;
         const wht = (p.white || 0) / 100, blk = (p.black || 0) / 100;
         const evGain = Math.pow(2, Number(p.exp) || 0);
         const gam = (Number(p.gam) || 0) / 100;
-        // 色彩平衡 / 渐变映射：与亮度无关的量先算好，循环里只查权重
-        let cbPrep = null;
-        if (cbActive(p.cb)) {
-            cbPrep = CB_ZONES.map((z) => {
-                const v = p.cb[z.k] || {};
-                return { r: (Number(v.r) || 0) / 100, g: (Number(v.g) || 0) / 100, b: (Number(v.b) || 0) / 100 };
-            });
-            cbPrep.preserve = p.cb.preserve !== 0;
-        }
-        let gmPrep = null;
-        if (gmActive(p.gm)) {
-            const dk = hexToRgb(p.gm.dark), lt = hexToRgb(p.gm.light);
-            gmPrep = {
-                dr: dk[0], dg: dk[1], db: dk[2],
-                lr: lt[0], lg: lt[1], lb: lt[2],
-                amt: Math.max(0, Math.min(100, Number(p.gm.amount) || 0)) / 100
-            };
-        }
+        // 色彩平衡 / 渐变映射：与亮度无关的量先算好，循环里只做一次查表
+        const cbgm = skipCbgm ? null : cbgmPrep(p);
         const C = window.QfsCurve;
         const cl = (C && C.curveActive(p.curve)) ? C.buildCurveLuts(p.curve) : null;
         // ACR 实测 stage（QfsAcr）：曝光→白平衡→对比度→高光→阴影→白→黑，
@@ -782,38 +846,12 @@
                 if (cl.g) vg = C.sampleLut(cl.g, vg);
                 if (cl.b) vb = C.sampleLut(cl.b, vb);
             }
-            // 色彩平衡：按当前亮度分三区，每区在 R/G/B 轴上做加减。
+            // 色彩平衡 / 渐变映射：按这个像素的真实亮度（不是本通道的值）算。
             // 顺序在曲线之后 —— 与 PS 的调整图层顺序一致（曲线定骨架、色彩平衡着色）。
-            if (cbPrep) {
-                const y0 = 0.299 * vr + 0.587 * vg + 0.114 * vb;
-                const w = cbWeights(y0);
-                // 极暗门控：纯黑不染色（0→0）。否则「暗部加红」会把画面的黑边、
-                // 白边阴影一起染成暗红，看起来像脏了。6% 以上是满权重。
-                const gate = smoothstep(0, 0.06, y0);
-                let dr = 0, dg = 0, db = 0;
-                for (let zi = 0; zi < 3; zi++) {
-                    const z = cbPrep[zi], wz = w[zi] * gate;
-                    if (!wz) continue;
-                    dr += z.r * wz * CB_AMP;
-                    dg += z.g * wz * CB_AMP;
-                    db += z.b * wz * CB_AMP;
-                }
-                vr = clamp01(vr + dr); vg = clamp01(vg + dg); vb = clamp01(vb + db);
-                // 保持明度：把亮度的净变化补回去（PS 的 Preserve Luminosity）。
-                // 直接按比例缩放会把色度一起削掉，用差值补偿更接近 PS 的观感。
-                if (cbPrep.preserve) {
-                    const y1 = 0.299 * vr + 0.587 * vg + 0.114 * vb;
-                    const dl = (y0 - y1) * 0.9;
-                    vr = clamp01(vr + dl); vg = clamp01(vg + dl); vb = clamp01(vb + dl);
-                }
-            }
-            // 渐变映射：拿当前亮度当索引去查那条两色渐变，再按强度混回去。
-            if (gmPrep) {
-                const t = clamp01(0.299 * vr + 0.587 * vg + 0.114 * vb);
-                vr += (gmPrep.dr + (gmPrep.lr - gmPrep.dr) * t - vr) * gmPrep.amt;
-                vg += (gmPrep.dg + (gmPrep.lg - gmPrep.dg) * t - vg) * gmPrep.amt;
-                vb += (gmPrep.db + (gmPrep.lb - gmPrep.db) * t - vb) * gmPrep.amt;
-                vr = clamp01(vr); vg = clamp01(vg); vb = clamp01(vb);
+            // 三维路径上这两档由 colorLut 的 pre 钩子接管，这里只服务无 GL 的兜底。
+            if (cbgm) {
+                const o = cbgm.pre(vr * 255, vg * 255, vb * 255);
+                vr = o[0] / 255; vg = o[1] / 255; vb = o[2] / 255;
             }
             r[i] = vr.toFixed(5);
             g[i] = vg.toFixed(5);
@@ -822,9 +860,9 @@
         return { r, g, b };
     }
 
-    function writeTables(p) {
+    function writeTables(p, skipCbgm) {
         ensureFilter();
-        const t = buildTables(p);
+        const t = buildTables(p, skipCbgm);
         _ctEl.r.setAttribute('tableValues', t.r.join(' '));
         _ctEl.g.setAttribute('tableValues', t.g.join(' '));
         _ctEl.b.setAttribute('tableValues', t.b.join(' '));
@@ -847,11 +885,14 @@
         // 曝光也在这张表里（线性光乘 2^EV），不再用 brightness()。
         const gamOn = Number(p.gam) || 0;
         // 阴影不进表：它由 QfsShadows 的空间 pass 负责（见 bakeOne）
+        // 色彩平衡 / 渐变映射只在没有三维表时进滤镜；有表时它们由 colorLut 接管
+        // （按真实 RGB 算，见 cbgmPrep），这时滤镜里若也写一遍就会生效两遍。
+        const cbgmOn = !lutOn && (cbActive(p.cb) || gmActive(p.gm));
         if (hi || tp || tn || wht || blk || exp || gamOn || curved
             || (Number(p.con) || 0)
-            || cbActive(p.cb) || gmActive(p.gm)
+            || cbgmOn
             || calOn || detActive(p.det)) {
-            writeTables(p);
+            writeTables(p, lutOn);
             parts.push('url(#' + GRADE_FILTER_ID + ')');
         }
         const acrCon = (window.QfsAcr && window.QfsAcr.ready())
@@ -951,8 +992,10 @@
         // 预览用小网格、定稿用大网格：33³ 合成约 6ms，25³ 约 3ms，而两者逐点
         // 平均只差 0.3/255 级（肉眼不可见）。拖动时省下的 3ms 更值钱。
         const lutGrid = Math.max(tw, th) <= GRID_PREVIEW_MAX ? 25 : 33;
+        // 色彩平衡 / 渐变映射也进三维表：它们是跨通道算子，逐通道表看不见像素亮度
+        const cbgm = cbgmPrep(params);
         let lut = (window.QfsAcr && window.QfsAcr.ready())
-            ? window.QfsAcr.colorLut(params, lutGrid, acrBrightness()) : null;
+            ? window.QfsAcr.colorLut(params, lutGrid, acrBrightness(), cbgm) : null;
         const useLut = !!lut && !!(window.QfsColor && window.QfsColor.usingGL());
         if (!useLut) lut = null;
         // 混色器已并进三维表，就不再需要前置的 GL 混色 pass
