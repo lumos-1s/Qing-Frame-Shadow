@@ -46,16 +46,25 @@ body {
 
 #mMain { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 
-#stage { position: relative; flex: 0 0 50%; display: grid; place-items: center; background: #101312; overflow: hidden; border-bottom: 1px solid var(--border); }
+#stage {
+  position: relative; flex: 0 0 50%; min-height: 200px;
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  background: #101312; overflow: hidden; border-bottom: 1px solid var(--border);
+}
+/* 状态条改成独立一条深色栏：以前浮在照片上，浅色相框/白边把青色字全吃掉了 */
 #stageBar {
-  position: absolute; left: 0; right: 0; top: 0; z-index: 2;
-  display: flex; justify-content: space-between; gap: 8px;
-  padding: 8px 12px; font-size: 12px; color: var(--text-2);
-  background: linear-gradient(rgba(16,19,18,.9), rgba(16,19,18,0));
+  position: relative; z-index: 2; order: -1; align-self: stretch; flex: 0 0 auto;
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 7px 12px; font-size: 12px; line-height: 18px; color: var(--text-2);
+  background: rgba(11, 14, 13, .96); border-bottom: 1px solid rgba(255,255,255,.06);
 }
 #stageBar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #stageBar #stageName { color: var(--primary); font-weight: 600; }
-#previewCanvas { max-width: 100%; max-height: 100%; display: block; }
+/* 状态条独占一行后，画布吃掉剩下的空间；object-fit 保证缩放不变形 */
+#previewCanvas {
+  flex: 1 1 auto; min-height: 0; width: 100%; height: 100%;
+  object-fit: contain; display: block;
+}
 .empty-hint {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 6px;
@@ -65,15 +74,23 @@ body {
 .empty-hint span { font-size: 12px; }
 .empty-ico { font-size: 40px; color: var(--text-3); line-height: 1; opacity: .6; }
 
+/* 放在头部下方、预览区上方：以前停在底部操作条上面，正好盖住风格卡/调色滑块第一排 */
 #toast {
-  position: fixed; left: 50%; bottom: calc(var(--tab-h) + 64px); transform: translateX(-50%);
+  position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 86px);
+  transform: translateX(-50%);
   z-index: 30; max-width: min(86vw, 420px); padding: 9px 16px; border-radius: 10px;
-  background: rgba(12, 25, 20, .94); border: 1px solid var(--primary-soft);
+  background: rgba(12, 25, 20, .96); border: 1px solid var(--primary-soft);
   color: var(--text); font-size: 12px; line-height: 1.5; text-align: center;
-  box-shadow: 0 6px 20px rgba(0,0,0,.35); pointer-events: none;
+  box-shadow: 0 6px 20px rgba(0,0,0,.45); pointer-events: none;
 }
 
-#panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 12px 14px; }
+#panel {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 14px 18px;
+  scrollbar-width: thin; scrollbar-color: #39423D transparent;
+}
+#panel::-webkit-scrollbar { width: 4px; }
+#panel::-webkit-scrollbar-track { background: transparent; }
+#panel::-webkit-scrollbar-thumb { background: #39423D; border-radius: 4px; }
 #panel h2 { font-size: 15px; margin-bottom: 8px; font-weight: 600; }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
@@ -119,7 +136,8 @@ body {
   background: var(--surface); color: var(--text-2); font-size: 12px;
 }
 .puzzle-acts button:active { border-color: var(--primary); color: var(--primary); }
-.photo-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; }
+.photo-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+.photo-strip::-webkit-scrollbar { display: none; }
 .photo-thumb {
   position: relative; flex: 0 0 64px; height: 64px; padding: 0; border: 1px solid var(--border);
   border-radius: 8px; overflow: hidden; background: var(--surface-alt);
