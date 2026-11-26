@@ -6,6 +6,14 @@
     let tmpl = null;
     let style = '';
     let ctls = [];
+    let selectedText = 0;
+    let info = {};
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
 
     function num(v, d) { const n = Number(v); return isFinite(n) ? n : d; }
     function color(v, d) {
@@ -143,6 +151,106 @@
         ['shadow', '阴影 / 发光']
     ];
 
+    const TEXT_GROUPS = [
+        ['free', '自由文字'],
+        ['sign', '签名 / 头像'],
+        ['exif', 'EXIF 参数'],
+        ['param', '参数带']
+    ];
+
+    function addText(t) {
+        const decor = t.decorConfig || (t.decorConfig = {});
+        const lines = decor.textLines || (decor.textLines = []);
+        const bw = Math.max(100, Number(info.baseW) || 1000);
+        const bh = Math.max(100, Number(info.baseH) || 1000);
+        const fs = Math.max(12, Math.round(Math.min(bw, bh) * 0.06));
+        lines.push({
+            text: '文字', align: 'free',
+            x: Math.round(bw / 2), y: Math.round(bh / 2),
+            fontFamily: 'Microsoft YaHei', fontSize: fs, fontWeight: 400, letterSpacing: 0,
+            colorHex: '#ffffff', opacity: 100, rotation: 0,
+            enableShadow: 1, shadowColorHex: '#000000', shadowOpacity: 45,
+            shadowBlur: Math.max(2, Math.round(fs * 0.18)),
+            shadowOffsetX: 0, shadowOffsetY: Math.max(1, Math.round(fs * 0.05))
+        });
+        selectedText = lines.length - 1;
+    }
+
+    function textDefs(t) {
+        const decor = t.decorConfig || (t.decorConfig = {});
+        const lines = decor.textLines || (decor.textLines = []);
+        const line = lines[selectedText] || null;
+        const man = t.manualExif || (t.manualExif = {});
+        const bw = Math.max(100, Number(info.baseW) || 1000);
+        const bh = Math.max(100, Number(info.baseH) || 1000);
+        const out = [];
+        const S = (g, label, type, value, setter, extra) =>
+            out.push(Object.assign({ g, label, type, value, set: setter }, extra || {}));
+
+        if (line) {
+            S('free', '内容', 'text', line.text || '', (v) => { line.text = v; });
+            S('free', '字号', 'range', line.fontSize || 48, (v) => { line.fontSize = v; },
+                { min: 12, max: 240, step: 1, unit: '' });
+            S('free', '颜色', 'color', color(line.colorHex, '#ffffff'), (v) => { line.colorHex = v; });
+            S('free', '位置 X', 'range', num(line.x, 0), (v) => { line.x = v; },
+                { min: 0, max: bw, step: 5, unit: '' });
+            S('free', '位置 Y', 'range', num(line.y, 0), (v) => { line.y = v; },
+                { min: 0, max: bh, step: 5, unit: '' });
+            S('free', '旋转', 'range', num(line.rotation, 0), (v) => { line.rotation = v; },
+                { min: -180, max: 180, step: 5, unit: '°' });
+            S('free', '透明度', 'range', num(line.opacity, 100), (v) => { line.opacity = v; },
+                { min: 0, max: 100, step: 1, unit: '%' });
+        }
+        S('sign', '署名内容', 'text', t.userSignature || '', (v) => { t.userSignature = v; });
+        S('sign', '署名字体', 'select', t.signFont || 'Courier New', (v) => { t.signFont = v; },
+            { options: [['Courier New', 'Courier New'], ['Microsoft YaHei', '微软雅黑'], ['SimSun', '宋体'], ['Trebuchet MS', 'Trebuchet']] });
+        S('sign', '署名颜色', 'color', color(t.signColor, '#555555'), (v) => { t.signColor = v; });
+        S('sign', '署名大小', 'range', Math.round((t.signSize == null ? 1 : t.signSize) * 100),
+            (v) => { t.signSize = v / 100; }, { min: 50, max: 200, step: 5, unit: '%' });
+        S('sign', '显示头像', 'check', t.avatarShow !== 0, (v) => { t.avatarShow = v ? 1 : 0; });
+
+        S('exif', 'EXIF 参数条', 'check', (decor.exifAutoText || 0) === 1,
+            (v) => { decor.exifAutoText = v ? 1 : 0; });
+        S('exif', '等效焦距', 'check', (t.focalEq || 0) === 1, (v) => { t.focalEq = v ? 1 : 0; });
+        [['brand', '品牌'], ['model', '型号'], ['focal', '焦距'], ['aperture', '光圈'],
+            ['iso', 'ISO'], ['shutter', '快门']].forEach(([k, label]) => {
+            S('exif', label, 'text', man[k] || '', (v) => { man[k] = v; });
+        });
+
+        S('param', '参数字号', 'range', num(t.paramFontSize, 33), (v) => { t.paramFontSize = v; },
+            { min: 12, max: 160, step: 1, unit: '' });
+        S('param', '参数位置', 'select', t.paramPosition || 'CENTER', (v) => { t.paramPosition = v; },
+            { options: [['CENTER', '居中'], ['LEFT', '左'], ['RIGHT', '右'], ['TOP', '上']] });
+        return out;
+    }
+
+    function textHtml(t) {
+        const decor = t.decorConfig || (t.decorConfig = {});
+        const lines = decor.textLines || (decor.textLines = []);
+        if (selectedText >= lines.length) selectedText = Math.max(0, lines.length - 1);
+        let out = `<div class="text-acts">`
+            + `<button id="btnAddText" type="button">＋ 添加文字</button>`
+            + (lines.length ? `<button id="btnDeleteText" type="button">删除选中</button>` : '')
+            + `</div>`;
+        if (lines.length) {
+            out += `<div class="chips">` + lines.map((l, i) =>
+                `<button class="chip${i === selectedText ? ' active' : ''}" data-text-index="${i}">${esc((l.text || '文字').slice(0, 8))}</button>`
+            ).join('') + `</div>`;
+        }
+        const list = textDefs(t);
+        for (const [key, title] of TEXT_GROUPS) {
+            const rows = list.filter((c) => c.g === key);
+            if (!rows.length) continue;
+            const body = rows.map((c) => {
+                c.id = ctls.length;
+                ctls.push(c);
+                return rowHtml(c);
+            }).join('');
+            out += `<details class="ctl-group"${key === 'free' ? ' open' : ''}><summary>${title}</summary>${body}</details>`;
+        }
+        return out;
+    }
+
     function rowHtml(c) {
         const id = c.id;
         let input = '';
@@ -154,17 +262,23 @@
                 `<option value="${v}"${v === c.value ? ' selected' : ''}>${label}</option>`).join('') + `</select>`;
         } else if (c.type === 'color') {
             input = `<input type="color" data-ctl="${id}" value="${c.value}">`;
+        } else if (c.type === 'text') {
+            input = `<input type="text" data-ctl="${id}" value="${esc(c.value)}">`;
+        } else if (c.type === 'check') {
+            input = `<input type="checkbox" data-ctl="${id}"${c.value ? ' checked' : ''}>`;
         }
         return `<div class="ctl-row"><label>${c.label}</label>${input}</div>`
             + (c.hint ? `<p class="ctl-hint">${c.hint}</p>` : '');
     }
 
-    function html(sub, tpl, styleName) {
+    function html(sub, tpl, styleName, extra) {
         tmpl = tpl;
         style = String(styleName || '');
+        info = extra || {};
         ctls = [];
+        if (sub === 'text') return textHtml(tmpl);
         if (sub !== 'border') {
-            return `<p class="panel-note">${sub === 'text' ? '文字 / 签名 / EXIF' : sub === 'element' ? 'Logo / 贴纸 / 元素' : '样式管理'}将在后续版本开放。</p>`;
+            return `<p class="panel-note">${sub === 'element' ? 'Logo / 贴纸 / 元素' : '样式管理'}将在后续版本开放。</p>`;
         }
         const rows = window.StyleParams || {};
         const vis = (window.StyleCaps && window.StyleCaps.visibleRows)
@@ -213,12 +327,13 @@
         panel.querySelectorAll('[data-ctl]').forEach((el) => {
             const c = ctls[Number(el.dataset.ctl)];
             if (!c) return;
-            const ev = (c.type === 'range' || c.type === 'color') ? 'input' : 'change';
+            const ev = (c.type === 'select' || c.type === 'check') ? 'change' : 'input';
             el.addEventListener(ev, () => {
-                const v = c.type === 'range' ? Number(el.value) : el.value;
+                const v = c.type === 'range' ? Number(el.value)
+                    : (c.type === 'check' ? el.checked : el.value);
                 c.set(v);
                 const out = panel.querySelector(`[data-out="${c.id}"]`);
-                if (out) out.textContent = v + (c.unit || '');
+                if (out && c.type === 'range') out.textContent = v + (c.unit || '');
                 onChange();
             });
         });
@@ -226,6 +341,21 @@
         if (reset) reset.addEventListener('click', () => {
             if (window.StyleParams && window.StyleParams.reset) window.StyleParams.reset(tmpl, style);
             onRebuild();
+        });
+        const add = panel.querySelector('#btnAddText');
+        if (add) add.addEventListener('click', () => { addText(tmpl); onRebuild(); });
+        const del = panel.querySelector('#btnDeleteText');
+        if (del) del.addEventListener('click', () => {
+            const lines = (tmpl.decorConfig || {}).textLines || [];
+            if (lines.length) lines.splice(selectedText, 1);
+            selectedText = Math.max(0, selectedText - 1);
+            onRebuild();
+        });
+        panel.querySelectorAll('[data-text-index]').forEach((b) => {
+            b.addEventListener('click', () => {
+                selectedText = Number(b.dataset.textIndex) || 0;
+                onRebuild();
+            });
         });
     }
 

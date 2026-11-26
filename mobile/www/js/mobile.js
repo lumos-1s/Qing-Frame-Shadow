@@ -518,8 +518,10 @@
         return `<h2>编辑</h2>
             ${currentStrip()}
             <div class="chips">${chips}</div>
-            ${(window.QF_EditPanel && window.QF_EditPanel.html(state.editSub, state.template, state.template.photoFrameStyle))
-                || '<p class="panel-note">编辑面板尚未就绪</p>'}`;
+            ${(window.QF_EditPanel && window.QF_EditPanel.html(state.editSub, state.template, state.template.photoFrameStyle, {
+                baseW: A._canvasBaseW || (state.image && state.image.el && state.image.el.naturalWidth) || 1000,
+                baseH: A._canvasBaseH || (state.image && state.image.el && state.image.el.naturalHeight) || 1000
+            })) || '<p class="panel-note">编辑面板尚未就绪</p>'}`;
     }
 
     const PAGES = {

@@ -268,12 +268,52 @@ app.whenReady().then(async () => {
             edit.fill = (layer.fillConfig || {}).fillHex;
             document.querySelector('[data-edit-sub="text"]').click();
             await wait(200);
-            edit.textPlaceholder = (document.querySelector('#panel .panel-note') || {}).textContent || '';
+            edit.textCtls = document.querySelectorAll('[data-ctl]').length;
             document.querySelector('[data-tab="crop"]').click();
             await wait(250);
         } catch (e) { editErr = String(e && e.message || e); }
 
-        // 13) RAW 全尺寸重解（本地有样本时）
+        // 13) 编辑 › 文字：自由文字/署名/EXIF 都能写回模板
+        let text = {}, textErr = '';
+        try {
+            document.querySelector('[data-tab="edit"]').click();
+            await wait(300);
+            document.querySelector('[data-edit-sub="text"]').click();
+            await wait(300);
+            const byLabel = (label) => {
+                const row = Array.from(document.querySelectorAll('.ctl-row')).find((x) => {
+                    const l = x.querySelector('label');
+                    return l && l.textContent === label;
+                });
+                return row && row.querySelector('[data-ctl]');
+            };
+            text.baseline = (window.App.template.decorConfig.textLines || []).length;
+            document.getElementById('btnAddText').click();
+            await wait(250);
+            text.lines = (window.App.template.decorConfig.textLines || []).length;
+            const content = byLabel('内容');
+            if (content) { content.value = '回归文字'; content.dispatchEvent(new Event('input', { bubbles: true })); }
+            const size = byLabel('字号');
+            if (size) { size.value = '80'; size.dispatchEvent(new Event('input', { bubbles: true })); }
+            const sig = byLabel('署名内容');
+            if (sig) { sig.value = '回归署名'; sig.dispatchEvent(new Event('input', { bubbles: true })); }
+            const exif = byLabel('EXIF 参数条');
+            if (exif) { exif.checked = true; exif.dispatchEvent(new Event('change', { bubbles: true })); }
+            await wait(400);
+            const lines2 = window.App.template.decorConfig.textLines || [];
+            const line = lines2[lines2.length - 1] || {};
+            text.text = line.text;
+            text.fontSize = line.fontSize;
+            text.signature = window.App.template.userSignature;
+            text.exifAutoText = window.App.template.decorConfig.exifAutoText;
+            document.getElementById('btnDeleteText') && document.getElementById('btnDeleteText').click();
+            await wait(250);
+            text.afterDelete = (window.App.template.decorConfig.textLines || []).length;
+            document.querySelector('[data-tab="crop"]').click();
+            await wait(200);
+        } catch (e) { textErr = String(e && e.message || e); }
+
+        // 14) RAW 全尺寸重解（本地有样本时）
         let rawFull = {}, rawFullErr = '';
         if (${JSON.stringify(fs.existsSync(rawSample))}) {
             try {
@@ -299,7 +339,7 @@ app.whenReady().then(async () => {
             rawBridge: typeof window.qfRawDecode === 'function',
             heic, heicErr, heicFull, heicFullErr, fullExport, fullExportErr,
             puzzleExport, puzzleExportErr, cropFull, cropFullErr,
-            edit, editErr, rawFull, rawFullErr
+            edit, editErr, text, textErr, rawFull, rawFullErr
         };
     })()`);
 
@@ -339,10 +379,15 @@ app.whenReady().then(async () => {
         '切图从全尺寸成品上切出 9 块', JSON.stringify({ crop: r.cropFull, err: r.cropFullErr }));
 
     check(!r.editErr && r.edit.tabs === 5 && r.edit.subs === 4 && r.edit.ctls > 10
-        && r.edit.stageName === '编辑 · 边框' && /后续版本开放/.test(r.edit.textPlaceholder),
-        '编辑页五个页签、四个子页与边框控件都在', JSON.stringify({ edit: r.edit, err: r.editErr }));
+        && r.edit.textCtls > 10 && r.edit.stageName === '编辑 · 边框',
+        '编辑页五个页签、四个子页与边框/文字控件都在', JSON.stringify({ edit: r.edit, err: r.editErr }));
     check(!r.editErr && r.edit.changedStroke && r.edit.changedFill && r.edit.stroke === 40 && r.edit.fill === '00ff00',
         '边框控件写入 template.layerList（描边宽度/填充颜色）', JSON.stringify({ edit: r.edit, err: r.editErr }));
+
+    check(!r.textErr && r.text.lines === r.text.baseline + 1 && r.text.text === '回归文字' && r.text.fontSize === 80,
+        '编辑 › 文字能添加并修改自由文字', JSON.stringify({ text: r.text, err: r.textErr }));
+    check(!r.textErr && r.text.signature === '回归署名' && r.text.exifAutoText === 1 && r.text.afterDelete === r.text.baseline,
+        '署名/EXIF 写回模板且删除文字生效', JSON.stringify({ text: r.text, err: r.textErr }));
 
     if (fs.existsSync(rawSample)) {
         check(!r.rawFullErr && r.rawFull.w >= 3000 && r.rawFull.h >= 2000 && r.rawFull.px.some((v) => v > 0),

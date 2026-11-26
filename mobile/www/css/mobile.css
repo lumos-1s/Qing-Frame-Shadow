@@ -179,6 +179,18 @@ body {
 }
 .ctl-hint { padding: 0 12px 8px; font-size: 11px; color: var(--text-3); }
 .ctl-sub { padding: 8px 12px 2px; font-size: 11px; color: var(--text-3); }
+.text-acts { display: flex; gap: 8px; margin-bottom: 10px; }
+.text-acts button {
+  flex: 1; min-height: 36px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text-2); font-size: 12px;
+}
+.text-acts button:active { border-color: var(--primary); color: var(--primary); }
+.ctl-row input[type=text] {
+  flex: 1; min-width: 0; min-height: 30px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface-alt);
+  color: var(--text); font-size: 12px;
+}
+.ctl-row input[type=checkbox] { flex: 0 0 20px; width: 20px; height: 20px; accent-color: var(--primary); }
 
 .crop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .crop-cell { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-alt); }
