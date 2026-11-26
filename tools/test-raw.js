@@ -414,6 +414,18 @@ async function main() {
             JSON.stringify({ before: before.recycles, after: after.recycles, rss: after.rss }));
     }
 
+    // ── ⑩ 位深策略：代理走 8 位、全尺寸走 16 位 ──
+    // 位深由 maxEdge 决定而不是由调用方随手传：代理只用来拖动时看效果，8 位够且解码快；
+    // 全尺寸要过曝光/高光肩再量化，8 位在那个环节只剩 256 级可拉。
+    // 断言 meta.bits：它记的是 worker 里实际拿到的 TypedArray 类型，不是"我要求了什么"。
+    {
+        const proxy = await RAW.develop(SAMPLE, { params: { exposure: 0.2 }, maxEdge: 1600, halfSize: true, cache: false });
+        const full = await RAW.develop(SAMPLE, { params: { exposure: 0.2 }, maxEdge: 0, cache: false });
+        check(proxy.meta.bits === 8, '代理图按 8 位解码', `bits=${proxy.meta.bits} ${proxy.width}px`);
+        check(full.meta.bits === 16, '全尺寸按 16 位解码（库支持，不是只会 8 位）',
+            `bits=${full.meta.bits} ${full.width}px ${full.ms}ms`);
+    }
+
     console.log(failures.length ? `\n${failures.length} 项失败` : '\n全部通过');
     await sleep(120);
     await win.destroy();

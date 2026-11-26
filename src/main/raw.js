@@ -66,6 +66,22 @@ function tonemapPath() {
 
 // worker 用 eval 字符串启动：避免 asar 里的 .js 能不能被 worker_threads 加载这种环境问题。
 // 线程里只做三件事：载入 wasm、解码、缩放 + 套表，然后把 BGRA 整块传回来（零拷贝转移）。
+
+// LibRaw 的 -H 档位：0 = 把过曝通道直接裁掉，1..9 = 尝试用相邻通道补回。
+//
+// 试过 2，最后关掉，原因是实测数据不支持（不是没抄）：
+//   · -H 2 会让 LibRaw 重新分配量程，整张图被压到约 0.57 倍，99.7% 分位从 182 掉到 104，
+//     autoGain 要 6.5 才补得回来，而它被 [0.5,3] 夹住 → 全图暗 0.8 档，这是回归不是改进；
+//   · 把增益手动补到 6.5 让亮度追平后，顶部 2% 的级数是 60，而 -H 0 是 59——高光并没有
+//     "活过来"。
+// 原因在我们自己的管线里：autoGain 把 99.7% 分位归一到 0.9 线性，高光肩又从固定 knee 起压，
+// 恢复出来的那点余量正好被这两步重新归一化掉。想让 -H 有意义，得先改成"按实际数据范围
+// 决定肩位"，那是另一件事。
+const HIGHLIGHT_MODE = 0;
+
+// 解码口径版本：动 outputBps / highlight 这类「看不见但会改变像素」的开关时必须 +1，
+// 否则磁盘里按旧口径解出来的 JPEG 会按同一个键命中，用户看到的还是改之前的画面。
+const DECODE_VERSION = 3;
 const WORKER_SRC = `
 'use strict';
 const { parentPort, workerData } = require('worker_threads');
@@ -103,10 +119,15 @@ async function handle(job) {
         await raw.open(ab, {
             useCameraWb: true,
             noAutoBright: true,
-            outputBps: 8,
+            // 位深由上游决定：全尺寸走 16、代理图走 8。
+            // 代理只在拖动滑块时看效果，8 位够用、解码还快一截；
+            // 全尺寸要经过曝光和高光肩再量化，8 位在那个环节已经只剩 256 级可拉。
+            outputBps: job.bits === 16 ? 16 : 8,
             userQual: job.quality || 3,
             halfSize: !!job.halfSize,
-            highlight: 0,
+            // -H：0 = 把过曝通道直接裁掉，1..9 = 用相邻通道把炸掉的那一两个补回来。
+            // 过曝通常只先炸一个通道，另两个还有数据，0 等于把这份数据扔了。
+            highlight: job.highlight == null ? 2 : job.highlight,
             // -1 = 按相机里的翻转标记输出。输出已经是正的，渲染层不能再按 EXIF Orientation 转一次。
             userFlip: -1
         });
@@ -118,10 +139,13 @@ async function handle(job) {
         const ch = img.colors || 3;
         const total = sw * sh;
         const src = img.data;
+        // 以实际拿到的类型为准：库有可能按别的位深打包，按要求的位深盲信会读出半张黑图。
+        const wide = src instanceof Uint16Array;
 
         // 自动基线按原图算：裁切一块暗角不应该让整张照片的曝光跟着变。
         // 缩放后再算会受插值影响偏亮，所以也在缩放前。
-        const gain = tm.autoGain(src, ch, total);
+        const gain = (wide ? tm.autoGain16(src, ch, total) : tm.autoGain(src, ch, total))
+            * (Number(job.gainScale) || 1);
         // 裁切/旋转在缩放前做：代理图先从原图裁出目标区域再缩到 1600，
         // 不会先整图缩小再裁一次。裁切框是归一化坐标，代理/全尺寸共用。
         const view = tm.cropRotate(src, sw, sh, ch, job.crop, job.rotate);
@@ -138,7 +162,7 @@ async function handle(job) {
                 dh = Math.max(1, Math.round(vh * k));
             }
         }
-        const lut = tm.buildLut(job.params, gain);
+        const lut = wide ? tm.buildLut16(job.params, gain) : tm.buildLut(job.params, gain);
         let pixels;
         let colors;
         if (dw !== vw || dh !== vh) {
@@ -148,7 +172,9 @@ async function handle(job) {
             pixels = view.data;
             colors = vch;
         }
-        const bgra = tm.toBgra(pixels, colors, dw, dh, lut);
+        const bgra = wide
+            ? tm.toBgra16(pixels, colors, dw, dh, lut)
+            : tm.toBgra(pixels, colors, dw, dh, lut);
         parentPort.postMessage({
             id: job.id,
             ok: true,
@@ -158,6 +184,7 @@ async function handle(job) {
             mem: process.memoryUsage().rss,
             width: dw,
             height: dh,
+            bits: wide ? 16 : 8,
             gain: gain,
             ms: Date.now() - t0,
             meta: {
@@ -292,7 +319,7 @@ function decode(job) {
     return new Promise((resolve, reject) => {
         const id = ++seq;
         pending.set(id, { resolve, reject });
-        w.postMessage({ id, ...job });
+        w.postMessage({ id, highlight: HIGHLIGHT_MODE, ...job });
     });
 }
 
@@ -305,11 +332,13 @@ function cacheDir() {
     return cacheRoot;
 }
 
-function cacheKey(file, stat, params, maxEdge, view) {
+function cacheKey(file, stat, params, maxEdge, view, bits, highlight, gainScale) {
     const h = crypto.createHash('sha1');
+    h.update('v' + DECODE_VERSION);           // 解码口径（位深策略 / highlight 档）变了就整体作废
     h.update(String(file));
     h.update('|' + stat.size + '|' + Math.round(stat.mtimeMs));
-    h.update('|' + JSON.stringify(params) + '|' + maxEdge);
+    h.update('|' + JSON.stringify(params) + '|' + maxEdge + '|' + (bits || 0)
+        + '|h' + (highlight || 0) + '|g' + (gainScale || 1));
     // 裁切/旋转也是显影参数的一部分：同一组滑块、不同裁切框必须分开缓存。
     h.update('|' + JSON.stringify(view || null));
     return h.digest('hex');
@@ -392,51 +421,61 @@ async function develop(file, opts) {
     // view 也要经过同一套裁剪：URL、草稿、旧版本都可能塞进越界值。
     const view = tonemap.normalizeView(o.crop, o.rotate);
     const maxEdge = Math.max(0, Number(o.maxEdge) || 0);
+    // 位深策略：全尺寸（导出 / 停手后补齐）走 16 位，代理图走 8 位。
+    // 16 位真正的作用不是"更好看"，是拖高光/曝光时脚下的台阶从 256 级变成 65536 级。
+    const bits = o.bits === 8 || o.bits === 16 ? o.bits : (maxEdge === 0 ? 16 : 8);
+    // -H 档位也允许外部指定：测试要拿 0 和 2 做对照，否则没法证明这一档真的改了东西。
+    const highlight = o.highlight == null || !Number.isFinite(Number(o.highlight))
+        ? HIGHLIGHT_MODE
+        : Math.max(0, Math.min(9, Math.round(Number(o.highlight))));
     const stat = await fs.promises.stat(file).catch(() => null);
     if (!stat) throw new Error('文件不存在：' + path.basename(file));
 
-    const key = cacheKey(file, stat, params, maxEdge, view);
+    const gainScale = Number(o.gainScale) || 1;
+    const key = cacheKey(file, stat, params, maxEdge, view, bits, highlight, gainScale);
     if (o.cache !== false) {
         const hit = readCache(key);
         if (hit) return { jpg: hit.buf, meta: hit.meta, cached: true, width: hit.meta.width, height: hit.meta.height };
     }
 
+    const job = {
+        file,
+        params,
+        maxEdge,
+        bits,
+        highlight,
+        // 对照实验用：自动基线再乘一个倍数。改 -H 档位会让 LibRaw 重新分配量程，
+        // 亮度整体位移，要判断"高光是真活了还是只是变暗"，必须先把亮度追平再比。
+        gainScale: Number(o.gainScale) || 1,
+        quality: o.quality || 3,
+        halfSize: !!o.halfSize,
+        crop: view.crop,
+        rotate: view.rotate
+    };
     let res;
     try {
-        res = await decode({
-            file,
-            params,
-            maxEdge,
-            quality: o.quality || 3,
-            halfSize: !!o.halfSize,
-            crop: view.crop,
-            rotate: view.rotate
-        });
+        res = await decode(job);
     } catch (e) {
         // 解码失败多半是线程被 wasm 堆顶死了。线程已经不健康，换掉后用同一份参数
         // 再试一次：这一层是兜底，渲染层的重试只在「导出前补齐」那条路上生效。
         const heavy = workerRss > 200 * 1024 * 1024 || fullJobs > 0;
         recycleWorker();
         if (!heavy) throw e;
-        res = await decode({
-            file,
-            params,
-            maxEdge,
-            quality: o.quality || 3,
-            halfSize: !!o.halfSize,
-            crop: view.crop,
-            rotate: view.rotate
-        });
+        res = await decode(job);
     }
 
     const img = jpegEncoder().createFromBitmap(Buffer.from(res.bgra.buffer, res.bgra.byteOffset, res.bgra.byteLength), {
         width: res.width,
         height: res.height
     });
-    const jpg = img.toJPEG(maxEdge && maxEdge <= 2048 ? 90 : 93);
+    // 16 位解出来的渐变，靠 8 位 JPEG 落盘时最怕的就是量化把台阶又装回去。
+    // q95 比 q93 多约 12% 体积，换来天空不再出现横条——全尺寸缓存是按参数键存的，
+    // 不会每次加载都重编码，这点体积值得。
+    const jpg = img.toJPEG(maxEdge && maxEdge <= 2048 ? 90 : 95);
     const meta = {
         width: res.width,
         height: res.height,
+        bits: res.bits || bits,
         gain: Number(res.gain.toFixed(3)),
         camera: [res.meta.make, res.meta.model].filter(Boolean).join(' ').trim()
     };

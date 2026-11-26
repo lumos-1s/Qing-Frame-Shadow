@@ -1,7 +1,12 @@
 'use strict';
 
-// RAW 显影的色调映射：LibRaw 给出 8bit sRGB（已去马赛克 + 相机白平衡 + 色彩矩阵），
-// 这里把「曝光 / 对比 / 高光肩 / 色温 / 色调」折成三条 256 项查表，再逐像素套用。
+// RAW 显影的色调映射：LibRaw 给出 sRGB（已去马赛克 + 相机白平衡 + 色彩矩阵），
+// 这里把「曝光 / 对比 / 高光肩 / 色温 / 色调」折成查表，再逐像素套用。
+//
+// 两条路径，同一份曲线（toneLinear），只是表的大小不同：
+//   · 8bit  — 256 项表，代理图走这条，解码快一倍；
+//   · 16bit — 65536 项表，全尺寸/导出走这条，量化损失只发生在最后一步 BGRA。
+// 两条路径的自动基线（autoGain）必须算出同一个 gain，否则代理图和导出图会一亮一暗。
 //
 // 为什么不逐像素算：24MP 每通道一次 Math.pow 要 2s 以上，拖不动滑块。而这几档调整
 // 都是逐通道单调函数（色温色调只是通道增益），完全可以预先折进表里，全图只剩
@@ -13,6 +18,21 @@
 // 高光肩默认 25：渲染层导入时也是这个基线，两边必须一致——以前一边 0 一边 25，
 // URL 里少一个字段（旧工程/旧草稿）画面就会突然硬一档。
 const DEFAULTS = { exposure: 0, contrast: 0, highlights: 25, temperature: 0, tint: 0 };
+
+// 16bit 输入的线性化表：65536 项 Float32（256KB），建表约 6ms。
+// 逐像素算 pow 要 24MP×3 次，等于把导出卡死；建表一次后面全查表，和 8bit 那条路径同一个套路。
+// 延迟到真正用到时再建：只导入 JPEG 的用户不该为这 6ms 和 256KB 买单。
+let LIN16 = null;
+function lin16Table() {
+    if (LIN16) return LIN16;
+    const t = new Float32Array(65536);
+    for (let i = 0; i < 65536; i++) {
+        const c = i / 65535;
+        t[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+    LIN16 = t;
+    return t;
+}
 const LIMITS = {
     exposure: [-5, 5],
     contrast: [-100, 100],
@@ -73,6 +93,38 @@ function autoGain(src, colors, total) {
     return Math.min(3, Math.max(0.5, 0.9 / Math.max(lin, 0.002)));
 }
 
+// 16bit 的自动基线。故意和 8bit 版用同一个 256 档直方图：
+//
+// 一度想用 4096 档「更准」，实测反而出问题——同一张片子两条路径算出的 gain 差 4%，
+// 代理图（8bit）和导出图（16bit）就会一亮一暗，而且只在导出时才发现。
+// 分位数本来就是全局的一个数，8bit 的分辨率（0.4%）对基线足够；
+// 把精度留给逐像素的 LUT（那张表还是 65536 项），一致性比"更准"重要。
+function autoGain16(src, colors, total) {
+    const hist = new Uint32Array(256);
+    const step = total > 4000000 ? 7 : 1;
+    const ch = colors || 3;
+    for (let i = 0; i < total; i += step) {
+        const j = i * ch;
+        const l = (src[j] * 77 + src[j + 1] * 150 + src[j + 2] * 29) >> 8; // 0..65280
+        hist[Math.min(255, l >> 8)]++;
+    }
+    let counted = 0;
+    for (let i = 0; i < 256; i++) counted += hist[i];
+    if (!counted) return 1;
+    const target = counted * 0.997;
+    let seen = 0;
+    let p = 255;
+    for (let i = 0; i < 256; i++) {
+        seen += hist[i];
+        if (seen >= target) { p = i; break; }
+    }
+    // 取这一级 8bit 值的中间位置做线性化：和 8bit 那条路径查的是同一个编码值。
+    // p=255 时 p*257+128 会越过表尾（65663 > 65535），必须夹住——不夹的话查出来是
+    // undefined，`|| 0.0001` 兜底成"几乎没有光"，gain 直接被推到上限 3，整张图变亮。
+    const lin = lin16Table()[Math.min(65535, p * 257 + 128)] || 0.0001;
+    return Math.min(3, Math.max(0.5, 0.9 / Math.max(lin, 0.002)));
+}
+
 // 通道增益。色温在绿-红/蓝之间反向推，色调在绿-洋红之间推；系数取保守值，
 // 滑块拉到头也不会变成滤镜，只是白平衡偏移。
 function channelGains(p) {
@@ -85,30 +137,61 @@ function channelGains(p) {
     ];
 }
 
+// 单通道的曲线部分：线性值进去，sRGB 编码值出来（0..1）。
+//
+// 8bit 和 16bit 两条路径共用这一份公式。曲线一旦在两边分叉，代理图和导出图的亮度
+// 就会差一档——那种 bug 只在"导出来发现比预览亮"的时候才被发现，很难定位。
+function toneLinear(v, knee, contrast) {
+    if (v > knee) {
+        const room = 1 - knee;
+        v = knee + room * (1 - Math.exp(-(v - knee) / room));
+    }
+    let e = linToSrgb(clamp01(v));
+    if (contrast) {
+        const s = e * e * (3 - 2 * e); // smoothstep：中间调不变，两端拉开
+        e = e + contrast * 0.62 * (s - e);
+    }
+    return clamp01(e);
+}
+
+// 曲线参数整理：三条 LUT 共用同一组 knee / contrast。
+function curveArgs(p) {
+    const hl = p.highlights / 100;
+    return {
+        // highlights > 0 提前压高光，< 0 反而把肩抬高（让高光更硬）
+        knee: Math.min(0.98, Math.max(0.35, 0.80 - 0.30 * hl)),
+        contrast: p.contrast / 100,
+        gains: channelGains(p),
+        expo: Math.pow(2, p.exposure)
+    };
+}
+
 function buildLut(params, gain) {
     const p = normalize(params);
-    const g = channelGains(p);
-    const expo = Math.pow(2, p.exposure);
-    const hl = p.highlights / 100;
-    // highlights > 0 提前压高光，< 0 反而把肩抬高（让高光更硬）
-    const knee = Math.min(0.98, Math.max(0.35, 0.80 - 0.30 * hl));
-    const contrast = p.contrast / 100;
+    const { knee, contrast, gains, expo } = curveArgs(p);
     const lut = new Uint8Array(768);
     for (let c = 0; c < 3; c++) {
-        const k = g[c] * gain * expo;
+        const k = gains[c] * gain * expo;
         for (let i = 0; i < 256; i++) {
-            let v = SRGB_TO_LIN[i] * k;
-            if (v > knee) {
-                const over = v - knee;
-                const room = 1 - knee;
-                v = knee + room * (1 - Math.exp(-over / room));
-            }
-            let e = linToSrgb(clamp01(v));
-            if (contrast) {
-                const s = e * e * (3 - 2 * e); // smoothstep：中间调不变，两端拉开
-                e = e + contrast * 0.62 * (s - e);
-            }
-            lut[c * 256 + i] = Math.round(clamp01(e) * 255);
+            lut[c * 256 + i] = Math.round(toneLinear(SRGB_TO_LIN[i] * k, knee, contrast) * 255);
+        }
+    }
+    return lut;
+}
+
+// 16bit 版：表按输入值直接索引，65536 项 × 3 通道 = 393KB，不需要插值补间。
+// 建表 196k 次 pow/exp 约 20ms，只在全尺寸显影时发生一次。
+function buildLut16(params, gain) {
+    const p = normalize(params);
+    const { knee, contrast, gains, expo } = curveArgs(p);
+    const lin = lin16Table();
+    const T = 65536;
+    const lut = new Uint16Array(3 * T);
+    for (let c = 0; c < 3; c++) {
+        const k = gains[c] * gain * expo;
+        const base = c * T;
+        for (let i = 0; i < T; i++) {
+            lut[base + i] = Math.round(toneLinear(lin[i] * k, knee, contrast) * 65535);
         }
     }
     return lut;
@@ -143,9 +226,14 @@ function normalizeView(crop, rotate) {
 // 裁切 + 90°×turns 旋转，返回一块新的 RGB(A) 缓冲。
 // 放在缩放之前：代理图也先从原图裁出目标区域，再缩到 1600，清晰度不会先被
 // 整图缩小再裁一次。整图且不旋转时直接返回原缓冲，零拷贝。
+//
+// 位深按输入缓冲的类型走（Uint16Array → Uint16Array），不额外传参：
+// 少一个「调用方说是 16 位、实际给了 8 位」的机会，那种错会静默产出半张黑图。
 function cropRotate(src, sw, sh, channels, crop, turns) {
     const stride = channels || 3;
     const och = stride === 4 ? 4 : 3;
+    const wide = src instanceof Uint16Array;
+    const full16 = wide ? 65535 : 255;
     const t = ((Math.round(num(turns, 0)) % 4) + 4) % 4;
     let x0 = 0, y0 = 0, cw = sw, ch = sh;
     if (crop) {
@@ -159,7 +247,7 @@ function cropRotate(src, sw, sh, channels, crop, turns) {
 
     const ow = (t & 1) ? ch : cw;
     const oh = (t & 1) ? cw : ch;
-    const out = new Uint8Array(ow * oh * och);
+    const out = wide ? new Uint16Array(ow * oh * och) : new Uint8Array(ow * oh * och);
 
     // 不旋转时按行拷贝，24MP 也只是一次线性复制。
     if (t === 0 && och === stride) {
@@ -177,7 +265,7 @@ function cropRotate(src, sw, sh, channels, crop, turns) {
             out[d] = v; out[d + 1] = v; out[d + 2] = v;
         } else {
             out[d] = src[s]; out[d + 1] = src[s + 1]; out[d + 2] = src[s + 2];
-            if (och === 4) out[d + 3] = stride === 4 ? src[s + 3] : 255;
+            if (och === 4) out[d + 3] = stride === 4 ? src[s + 3] : full16;
         }
     };
     // 旋转方向的推导：90° 顺时针把源 (x,y) 送到 (ch-1-y, x)。
@@ -195,9 +283,13 @@ function cropRotate(src, sw, sh, channels, crop, turns) {
 }
 
 // 缩放用面积平均（box）：缩小不会像最近邻那样出现锯齿，对代理图足够。
+// 输出跟随输入位深——16 位源在缩放阶段就降到 8 位的话，后面的曝光/高光全部是在
+// 已经被砍掉 8 位的数值上做，等于把 16 位解码白买了。
 function resizeBox(src, sw, sh, dw, dh, channels) {
     if (dw === sw && dh === sh) return src;
-    const out = new Uint8Array(dw * dh * 4);
+    const wide = src instanceof Uint16Array;
+    const out = wide ? new Uint16Array(dw * dh * 4) : new Uint8Array(dw * dh * 4);
+    const full = wide ? 65535 : 255;
     const xr = sw / dw;
     const yr = sh / dh;
     const ch = channels || 3;
@@ -222,7 +314,7 @@ function resizeBox(src, sw, sh, dw, dh, channels) {
             out[o] = (r / n) | 0;
             out[o + 1] = (g / n) | 0;
             out[o + 2] = (b / n) | 0;
-            out[o + 3] = 255;
+            out[o + 3] = full;
         }
     }
     return out;
@@ -244,7 +336,29 @@ function toBgra(src, colors, width, height, lut) {
     return out;
 }
 
+// 16bit 版：查 65536 项表，最后一步才降到 8 位 BGRA。
+// 量化只发生在这里一次——这才是「16 位有用」的全部意义：中间每一次曝光/对比/
+// 高光肩运算都在 16 位精度上做，不是每调一次就先砍成 256 级再救。
+function toBgra16(src, colors, width, height, lut) {
+    const total = width * height;
+    const out = new Uint8ClampedArray(total * 4);
+    const ch = colors || 3;
+    const T = 65536;
+    for (let i = 0; i < total; i++) {
+        const s = i * ch;
+        const o = i * 4;
+        // +128 再右移 8：四舍五入到最近的 8 位值，直接截断会让整体暗 0.5/255
+        out[o] = (lut[2 * T + src[s + 2]] + 128) >> 8;
+        out[o + 1] = (lut[T + src[s + 1]] + 128) >> 8;
+        out[o + 2] = (lut[src[s]] + 128) >> 8;
+        out[o + 3] = 255;
+    }
+    return out;
+}
+
 module.exports = {
     DEFAULTS, LIMITS, normalize, normalizeView, autoGain, buildLut,
-    cropRotate, resizeBox, toBgra, SRGB_TO_LIN
+    cropRotate, resizeBox, toBgra, SRGB_TO_LIN,
+    // 16bit 路径：全尺寸显影才走，代理图继续用上面那套 8bit 的（解码快一倍）
+    autoGain16, buildLut16, toBgra16, lin16Table, toneLinear
 };

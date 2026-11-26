@@ -122,5 +122,61 @@ const px = (buf, w, x, y, ch) => Array.from(buf.subarray((y * w + x) * ch, (y * 
         '越界/非法参数被裁回合法区间', JSON.stringify(clamped));
 }
 
+// ── 16 位路径：全尺寸显影走这条，8 位那套逻辑一个字没改 ──
+// 重点不是"16 位更细腻"，而是别把位深搞错：Uint16 的数据按 Uint8 读会直接黑一半，
+// 这种错在缩略图上看不出来，只有导出大图时才发现。
+{
+    // ① 裁切/旋转要跟着输入的位深走
+    const src16 = new Uint16Array([1000, 2000, 3000, 40000, 50000, 60000]);
+    const r = tm.cropRotate(src16, 2, 1, 3, null, 1);
+    check(r.data instanceof Uint16Array && r.width === 1 && r.height === 2,
+        '16 位输入裁切后仍是 Uint16Array（不会被按 8 位截断）',
+        `${r.data.constructor.name} ${r.width}×${r.height}`);
+    check(r.data[0] === 1000 && r.data[3] === 40000,
+        '16 位裁切后像素值不变（60000 级里的 40000 还在）',
+        `${r.data[0]} / ${r.data[3]}`);
+
+    // ② 缩放同样保持位深，否则 16 位解码白买
+    const rs = tm.resizeBox(new Uint16Array([65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535]), 2, 1, 1, 1, 4);
+    check(rs instanceof Uint16Array && rs[0] > 65000 && rs[3] === 65535,
+        '16 位缩放输出仍保 16 位，平均后接近满量程',
+        `${rs.constructor.name} v=${rs[0]} a=${rs[3]}`);
+
+    // ③ 两条链路对同一个编码值要给同一个结果
+    const lut8 = tm.buildLut(tm.DEFAULTS, 1);
+    const lut16 = tm.buildLut16(tm.DEFAULTS, 1);
+    const at16 = (c, v8) => (lut16[c * 65536 + Math.min(65535, v8 * 257 + 128)] + 128) >> 8;
+    const diffs = [];
+    for (const v of [0, 18, 64, 128, 200, 255]) {
+        diffs.push(Math.abs(at16(0, v) - lut8[v]));
+    }
+    check(Math.max(...diffs) <= 1,
+        '8 位与 16 位两条 LUT 对同一编码值输出一致（代理图和导出图不会一亮一暗）',
+        `最大差 ${Math.max(...diffs)} 级 | ${[0, 18, 64, 128, 200, 255].map((v) => `${v}:${lut8[v]}/${at16(0, v)}`).join(' ')}`);
+
+    // ④ 自动基线：两条路径算出的 gain 必须一致，否则代理/全尺寸亮度会跳
+    const ramp = new Uint8Array(256 * 3);
+    const ramp16 = new Uint16Array(65536 * 3);
+    for (let i = 0; i < 256; i++) {
+        ramp[i * 3] = ramp[i * 3 + 1] = ramp[i * 3 + 2] = i;
+    }
+    for (let i = 0; i < 65536; i++) {
+        const v = Math.round(i * 65535 / 65535);
+        ramp16[i * 3] = ramp16[i * 3 + 1] = ramp16[i * 3 + 2] = v;
+    }
+    const g8 = tm.autoGain(ramp, 3, 256);
+    const g16 = tm.autoGain16(ramp16, 3, 65536);
+    check(Math.abs(g8 - g16) / g8 < 0.01,
+        '两条路径的自动基线相差 <1%',
+        `8bit=${g8.toFixed(4)} 16bit=${g16.toFixed(4)}`);
+
+    // ⑤ 满量程白落到同一个 8 位输出
+    const w8 = tm.toBgra(new Uint8Array([255, 255, 255]), 3, 1, 1, lut8)[2];
+    const w16 = tm.toBgra16(new Uint16Array([65535, 65535, 65535]), 3, 1, 1, lut16)[2];
+    check(Math.abs(w8 - w16) <= 1,
+        '16 位满量程白与 8 位 255 输出同一级',
+        `8bit=${w8} 16bit=${w16}`);
+}
+
 console.log(failures.length ? `\n${failures.length} 项失败` : '\n全部通过');
 process.exit(failures.length ? 1 : 0);
