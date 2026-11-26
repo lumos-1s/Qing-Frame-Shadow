@@ -2,9 +2,20 @@
 // 手机版回归：把这一批抓到的逻辑 bug 逐条钉住，避免以后又改回去。
 // 依赖 `npm run mobile:serve`（4173 端口）：RAW 桥是 ES module，file:// 会被 CORS 拦。
 const { app, BrowserWindow } = require('electron');
+const fs = require('fs');
+const path = require('path');
 
 process.stdout.on('error', () => {});
 process.stderr.on('error', () => {});
+
+const ROOT = path.resolve(__dirname, '..');
+// 测试图来自 strukturag/libheif 的 tests/data/rainbow-451x461.heic（BSD 许可），只用于回归
+const heicB64 = fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'rainbow-451x461.heic')).toString('base64');
+// RAW 样本在 .tmp（不入库）：有就顺手验一次全尺寸重解，没有就跳过这一条
+const rawSample = path.join(ROOT, '.tmp', 'rawspike', 'sample.ARW');
+const rawTestName = '.tmp-raw-full.ARW';
+const rawTestFile = path.join(ROOT, 'mobile', 'www', rawTestName);
+if (fs.existsSync(rawSample)) fs.copyFileSync(rawSample, rawTestFile);
 
 const fails = [];
 const check = (ok, label, extra) => {
@@ -98,6 +109,9 @@ app.whenReady().then(async () => {
         const hd = histo.getContext('2d').getImageData(0, 0, histo.width, histo.height).data;
         let hsum = 0;
         for (let i = 3; i < hd.length; i += 4) hsum += hd[i];
+        // 后面还会再导入一张图并重绘面板，这里必须当场取样，不能等到 return 时再读
+        const histoConnected = histo.isConnected;
+        const gradeExp = Number((window.App.image.grade && window.App.image.grade.exp) || 0);
 
         // 5) libraw-wasm 的 3 通道像素不能再按 w*h*4 取（之前 100% 抛 RangeError）。
         let rawErr = '';
@@ -107,13 +121,150 @@ app.whenReady().then(async () => {
             rawPx = Array.from(rawCv.getContext('2d').getImageData(0, 0, 2, 1).data);
         } catch (e) { rawErr = String(e && e.message || e); }
 
+        // 8) HEIC 系统解不了时，libheif(WASM) 兜底必须真能解出像素
+        let heic = {}, heicErr = '', heicBytes = null, heicFull = {}, heicFullErr = '';
+        try {
+            const bin = atob(${JSON.stringify(heicB64)});
+            heicBytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) heicBytes[i] = bin.charCodeAt(i);
+            const cv = await window.qfHeicDecode(heicBytes);
+            heic = {
+                w: cv.width, h: cv.height,
+                px: Array.from(cv.getContext('2d').getImageData(0, 0, 1, 1).data)
+            };
+            cv.width = 0; cv.height = 0;
+        } catch (e) { heicErr = String(e && e.message || e); }
+
+        try {
+            const small = document.createElement('canvas');
+            small.width = 160; small.height = 160;
+            small.naturalWidth = 160; small.naturalHeight = 160; small.complete = true;
+            const file = new File([heicBytes], 'sample.heic', { type: 'image/heic' });
+            const src = await window.qfFullSource({
+                el: small, name: 'sample.heic', w: 160, h: 160,
+                srcW: 451, srcH: 461, heic: true, grade: null, file
+            });
+            heicFull = { w: src.canvas.width, h: src.canvas.height, changed: src.changed };
+            src.release();
+        } catch (e) { heicFullErr = String(e && e.message || e); }
+
+        // 9) 导出必须按原图尺寸，不能把 3000×2000 的图停在 1600px 预览
+        let fullExport = {}, fullExportErr = '';
+        try {
+            const big = document.createElement('canvas');
+            big.width = 3000; big.height = 2000;
+            const bg = big.getContext('2d');
+            bg.fillStyle = '#345'; bg.fillRect(0, 0, 3000, 2000);
+            bg.fillStyle = '#fff'; bg.fillRect(100, 100, 800, 800);
+            const blob = await new Promise((res) => big.toBlob(res, 'image/jpeg', 0.9));
+            const file = new File([blob], 'full.jpg', { type: 'image/jpeg' });
+            const pv = document.createElement('canvas');
+            pv.width = 1600; pv.height = 1067;
+            pv.getContext('2d').drawImage(big, 0, 0, 1600, 1067);
+            pv.naturalWidth = 1600; pv.naturalHeight = 1067; pv.complete = true;
+            window.qfsNative.pickImages = async () => [{
+                el: pv, name: 'full.jpg', w: 1600, h: 1067,
+                srcW: 3000, srcH: 2000, grade: null, file
+            }];
+            document.getElementById('btnPick').click();
+            await wait(600);
+            let dims = '', name = '';
+            const save0 = window.qfsNative.saveImage;
+            window.qfsNative.saveImage = async (d, n) => {
+                name = n;
+                dims = await new Promise((res) => {
+                    const im = new Image();
+                    im.onload = () => res(im.naturalWidth + 'x' + im.naturalHeight);
+                    im.onerror = () => res('bad');
+                    im.src = d;
+                });
+                return { ok: true, mode: 'test' };
+            };
+            document.getElementById('btnExport').click();
+            await wait(4500);
+            window.qfsNative.saveImage = save0;
+            fullExport = {
+                dims, name,
+                after: document.getElementById('previewCanvas').width,
+                exportScale: window.App.exportScale
+            };
+        } catch (e) { fullExportErr = String(e && e.message || e); }
+
+        // 10) 拼图导出走 4000px 版式，不能停在 1600px 预览
+        let puzzleExport = {}, puzzleExportErr = '';
+        try {
+            document.querySelector('[data-tab="puzzle"]').click();
+            await wait(450);
+            let pdims = '';
+            const save1 = window.qfsNative.saveImage;
+            window.qfsNative.saveImage = async (d) => {
+                pdims = await new Promise((res) => {
+                    const im = new Image();
+                    im.onload = () => res(im.naturalWidth + 'x' + im.naturalHeight);
+                    im.onerror = () => res('bad');
+                    im.src = d;
+                });
+                return { ok: true, mode: 'test' };
+            };
+            document.getElementById('btnExport').click();
+            await wait(2500);
+            window.qfsNative.saveImage = save1;
+            puzzleExport = {
+                dims: pdims,
+                after: document.getElementById('previewCanvas').width,
+                exportScale: window.App.exportScale
+            };
+        } catch (e) { puzzleExportErr = String(e && e.message || e); }
+
+        // 11) 切图从全尺寸成品上切，而不是 1600px 预览块
+        let cropFull = {}, cropFullErr = '';
+        try {
+            document.querySelector('[data-tab="crop"]').click();
+            await wait(550);
+            const dims = [];
+            const save2 = window.qfsNative.saveImage;
+            window.qfsNative.saveImage = async (d) => {
+                dims.push(await new Promise((res) => {
+                    const im = new Image();
+                    im.onload = () => res(im.naturalWidth + 'x' + im.naturalHeight);
+                    im.onerror = () => res('bad');
+                    im.src = d;
+                }));
+                return { ok: true };
+            };
+            document.getElementById('btnExport').click();
+            await wait(3500);
+            window.qfsNative.saveImage = save2;
+            cropFull = { dims: dims.slice(0, 2), count: dims.length };
+        } catch (e) { cropFullErr = String(e && e.message || e); }
+
+        // 12) RAW 全尺寸重解（本地有样本时）
+        let rawFull = {}, rawFullErr = '';
+        if (${JSON.stringify(fs.existsSync(rawSample))}) {
+            try {
+                const resp = await fetch('/' + ${JSON.stringify(rawTestName)});
+                if (!resp.ok) throw new Error('RAW 样本 HTTP ' + resp.status);
+                const blob = await resp.blob();
+                const file = new File([blob], 'sample.ARW');
+                const cv = await window.qfRawDecodeFull(file);
+                rawFull = {
+                    w: cv.width, h: cv.height,
+                    px: Array.from(cv.getContext('2d').getImageData(0, 0, 1, 1).data)
+                };
+                cv.width = 0; cv.height = 0;
+            } catch (e) { rawFullErr = String(e && e.message || e); }
+        }
+
         return {
             idx, tplPf, presetPf, styleW, styleH, puzzleW, backW, backH, exported,
             cropNames: saved.map((s) => s.n), cropDims: saved.map((s) => s.dims), cropCount: saved.length,
-            histoConnected: histo.isConnected, histoSum: hsum,
-            gradeExp: Number((window.App.image.grade && window.App.image.grade.exp) || 0),
+            histoConnected, histoSum: hsum,
+            gradeExp,
             rawErr, rawPx,
-            rawBridge: typeof window.qfRawDecode === 'function'
+            rawBridge: typeof window.qfRawDecode === 'function',
+            heic, heicErr, heicFull, heicFullErr, fullExport, fullExportErr,
+            puzzleExport, puzzleExportErr, cropFull, cropFullErr,
+            rawFull, rawFullErr
         };
     })()`);
 
@@ -135,9 +286,36 @@ app.whenReady().then(async () => {
     check(r.rawBridge && !r.rawErr && r.rawPx.join(',') === '255,0,0,255,0,255,0,255',
         'RAW 3 通道像素补 alpha 后正确（不再 RangeError）', JSON.stringify({ err: r.rawErr, px: r.rawPx.slice(0, 8) }));
 
+    check(!r.heicErr && r.heic.w === 451 && r.heic.h === 461 && r.heic.px.some((v) => v > 0),
+        'HEIC 系统解码失败时 libheif(WASM) 兜底解出正确像素', JSON.stringify({ heic: r.heic, err: r.heicErr }));
+    check(!r.heicFullErr && r.heicFull.w === 451 && r.heicFull.h === 461 && r.heicFull.changed,
+        '全尺寸导出从 HEIC 原文件重解而不是放大 1600px 预览', JSON.stringify({ heicFull: r.heicFull, err: r.heicFullErr }));
+
+    check(!r.fullExportErr && Number(String(r.fullExport.dims).split('x')[0]) >= 2400,
+        '导出按原图尺寸而不是 1600px 预览', JSON.stringify({ export: r.fullExport, err: r.fullExportErr }));
+    check(Number(r.fullExport.after) < 1800 && !r.fullExport.exportScale,
+        '导出后画布和临时档位都回到 1600px 预览', JSON.stringify(r.fullExport));
+
+    check(!r.puzzleExportErr && Number(String(r.puzzleExport.dims).split('x')[0]) >= 3000
+        && Number(r.puzzleExport.after) < 1800 && !r.puzzleExport.exportScale,
+        '拼图导出按 4000px 版式且导出后回到 1600px 预览', JSON.stringify({ puzzle: r.puzzleExport, err: r.puzzleExportErr }));
+
+    check(!r.cropFullErr && Number(String(r.cropFull.dims[0]).split('x')[0]) >= 800 && r.cropFull.count === 9,
+        '切图从全尺寸成品上切出 9 块', JSON.stringify({ crop: r.cropFull, err: r.cropFullErr }));
+
+    if (fs.existsSync(rawSample)) {
+        check(!r.rawFullErr && r.rawFull.w >= 3000 && r.rawFull.h >= 2000 && r.rawFull.px.some((v) => v > 0),
+            'RAW 导出前能按原图尺寸重解（不再是半尺寸代理）', JSON.stringify({ raw: r.rawFull, err: r.rawFullErr }));
+    }
+
     check(errors.length === 0, '本次回归全程无相框占位/渲染失败警告', errors.slice(0, 3).join(' / '));
 
     console.log(fails.length ? `\n${fails.length} FAILURE(S)` : '\nALL PASS');
     win.destroy();
+    if (fs.existsSync(rawTestFile)) fs.unlinkSync(rawTestFile);
     app.exit(fails.length ? 1 : 0);
-}).catch((e) => { console.error(e && e.stack || e); app.exit(1); });
+}).catch((e) => {
+    console.error(e && e.stack || e);
+    if (fs.existsSync(rawTestFile)) fs.unlinkSync(rawTestFile);
+    app.exit(1);
+});

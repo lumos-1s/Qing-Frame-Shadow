@@ -89,12 +89,37 @@ window.qfRawDecode = async (file) => {
         window.QF_LAST_RAW_FULL = full;
         full.getContext('2d').putImageData(toImageData(img, w, h), 0, 0);
         const el = downsample(full, 1600);
+        // 原图尺寸给「全尺寸导出」用：iwidth/iheight 是应用相机旋转后的可见尺寸，
+        // 没有时按半尺寸代理 ×2 估算。注意 w/h 仍是 1600px 代理尺寸，界面显示不变。
+        const srcW = Number(meta.iwidth) || w * 2;
+        const srcH = Number(meta.iheight) || h * 2;
         const out = {
             el, full, file, name: file.name, w: el.width, h: el.height,
-            grade: null, isRaw: true, rawMeta: meta
+            srcW, srcH, grade: null, isRaw: true, rawMeta: meta
         };
         full.__qfOwner = out;
         return out;
+    } finally {
+        try { raw.dispose(); } catch (_) {}
+    }
+};
+
+// 导出前按需解一次全尺寸：平时只保留 1600px 代理，避免手机同时驻留多张大图。
+// 调用方负责在渲染/编码结束后把返回画布的 width/height 置 0 释放内存。
+window.qfRawDecodeFull = async (file) => {
+    const raw = new LibRaw();
+    try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        await raw.open(bytes, { halfSize: false });
+        const img = await raw.imageData();
+        const w = Number(img.width || img.w) || 0;
+        const h = Number(img.height || img.h) || 0;
+        if (!w || !h) throw new Error('RAW 全尺寸解码尺寸无效');
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').putImageData(toImageData(img, w, h), 0, 0);
+        cv.naturalWidth = w; cv.naturalHeight = h; cv.complete = true;
+        return cv;
     } finally {
         try { raw.dispose(); } catch (_) {}
     }

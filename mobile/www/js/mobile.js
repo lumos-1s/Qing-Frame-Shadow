@@ -26,6 +26,8 @@
         clearTimeout(toastTimer);
         toastTimer = setTimeout(() => { toast.hidden = true; }, ms || 2800);
     }
+    // 原生适配层（HEIC 兜底解码）在 mobile.js 之前加载，通过它复用同一个 toast
+    window.qfHint = hint;
 
     function clone(v) { return JSON.parse(JSON.stringify(v)); }
     function esc(s) {
@@ -98,8 +100,11 @@
     }
 
     // 把当前页签的内容画到预览画布。puzzle 走独立管线；其余页签都画「照片 + 风格 + 调色」。
-    function renderPreview(skipHistogram) {
-        Object.assign(A, { dom: { canvas }, image: state.image, images: state.images, template: state.template }, renderStubs);
+    // opts 可临时覆盖 displayMax/exportScale 等渲染档位（导出原尺寸时用），
+    // 不传则回到 1600px 预览档，并清掉上一次导出残留的 exportScale。
+    function renderPreview(skipHistogram, opts) {
+        Object.assign(A, { dom: { canvas }, image: state.image, images: state.images, template: state.template }, renderStubs, opts || {});
+        if (!opts || !('exportScale' in opts)) delete A.exportScale;
         if (state.tab === 'puzzle') {
             if (!state.images.length) { updateEmpty(); return; }
             state.template.puzzle = state.puzzle;
@@ -213,32 +218,96 @@
         });
     }
 
+    // 临时把当前照片换成全尺寸源，渲染导出帧后立即还原。
+    // 预览/调色缓存都按 im.el 的尺寸烘焙，换源后必须 invalidateGrade + ensureFullGrade，
+    // 否则导出的仍是 1600px 代理放大的糊图。
+    async function withFullImage(im, fn) {
+        let full = null;
+        let prevEl = null, prevW = 0, prevH = 0;
+        try {
+            if (!im || typeof window.qfFullSource !== 'function') {
+                return await fn(1600, false, false);
+            }
+            hint('正在准备原尺寸…', 12000);
+            full = await window.qfFullSource(im);
+            if (!full || !full.canvas) return await fn(1600, false, false);
+            if (full.changed) {
+                prevEl = im.el; prevW = im.w; prevH = im.h;
+                im.el = full.canvas;
+                im.w = full.canvas.naturalWidth || full.canvas.width;
+                im.h = full.canvas.naturalHeight || full.canvas.height;
+                if (typeof A.invalidateGrade === 'function') A.invalidateGrade(im);
+                if (typeof window.ensureFullGrade === 'function') window.ensureFullGrade(im);
+            }
+            const target = Math.max(Number(im.w) || 0, Number(im.h) || 0) || 1600;
+            return await fn(target, !!full.fallback, !!full.capped);
+        } finally {
+            if (prevEl) {
+                im.el = prevEl; im.w = prevW; im.h = prevH;
+                if (typeof A.invalidateGrade === 'function') A.invalidateGrade(im);
+            }
+            if (full && full.release) full.release();
+        }
+    }
+
     async function exportCurrent() {
         if (state.exporting) return;
-        if (state.tab === 'puzzle') {
+        const isPuzzle = state.tab === 'puzzle';
+        if (isPuzzle) {
             if (!state.images.length) { hint('先导入照片'); return; }
         } else if (!state.image) { hint('先导入照片'); return; }
         state.exporting = true;
+        let data = '';
+        let note = '';
         try {
-            // 导出前按当前页签重画一次，避免从拼图切回风格后导出上一页的画布。
-            renderPreview(true);
-            let data = '';
-            try { data = canvas.toDataURL('image/jpeg', 0.92); }
-            catch (e) { hint('导出失败：' + ((e && e.message) || e), 4200); return; }
+            if (isPuzzle) {
+                hint('正在渲染拼图…', 12000);
+                // 拼图版式坐标固定在 1000 单位，只有 exportScale 能把成品真正放大到 4000px
+                renderPreview(true, { displayMax: 4000, uiDprOverride: 1, exportScale: 4000 });
+                try { data = canvas.toDataURL('image/jpeg', 0.92); }
+                catch (e) { hint('导出失败：' + ((e && e.message) || e), 4200); return; }
+            } else {
+                // 先渲染全尺寸帧，再释放原图、编码。编码期间不再占着两张 6000px 画布。
+                await withFullImage(state.image, async (targetPx, fallback, capped) => {
+                    if (fallback) note = ' · 全尺寸解码失败，已用预览尺寸';
+                    else if (capped) note = ' · 已按 6000px 上限导出';
+                    renderPreview(true, { displayMax: targetPx, uiDprOverride: 1 });
+                });
+                try { data = canvas.toDataURL('image/jpeg', 0.92); }
+                catch (e) { hint('导出失败：' + ((e && e.message) || e), 4200); return; }
+            }
             if (!data || data.length < 64) { hint('导出失败：画布为空'); return; }
             const base = String((state.image && state.image.name) || 'photo')
                 .replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]+/g, '_');
-            const suffix = state.tab === 'puzzle' ? '_拼图' : '_清框影';
+            const suffix = isPuzzle ? '_拼图' : '_清框影';
             hint('正在保存…', 12000);
             const r = await window.qfsNative.saveImage(data, `${base}${suffix}.jpg`);
             if (r && r.canceled) hint('已取消保存');
-            else if (r && r.ok) hint(r.mode === 'native' ? '已调起系统分享，可存到相册' : '已下载到本机');
+            else if (r && r.ok) hint((r.mode === 'native' ? '已调起系统分享，可存到相册' : '已下载到本机') + note);
             else hint('保存失败：' + ((r && r.error) || '未知错误'), 4800);
         } catch (e) {
             hint('保存失败：' + ((e && e.message) || e), 4800);
         } finally {
+            delete A.exportScale;
+            // 导出帧可能是 4000px 拼图/原尺寸，保存结束后切回 1600px 预览，别让大画布常驻
+            try { renderPreview(true); } catch (_) {}
             state.exporting = false;
         }
+    }
+
+    // 从成品画布切一块（与 app-export.js 的 _sliceGrid 同口径：行优先、无留白）。
+    // 逐块生成而不是一次切 9 块：6000px 画布上 9 块加起来又是一整张全尺寸图。
+    function sliceOne(src, rows, cols, index) {
+        const rn = Math.max(1, Math.min(12, Math.round(rows) || 1));
+        const cn = Math.max(1, Math.min(12, Math.round(cols) || 1));
+        const r = Math.floor(index / cn), c = index % cn;
+        const x = Math.round(c * src.width / cn), x2 = Math.round((c + 1) * src.width / cn);
+        const y = Math.round(r * src.height / rn), y2 = Math.round((r + 1) * src.height / rn);
+        const w = Math.max(1, x2 - x), h = Math.max(1, y2 - y);
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(src, x, y, w, h, 0, 0, w, h);
+        return cv;
     }
 
     function stylePage() {
@@ -261,7 +330,7 @@
             ${currentStrip()}
             <div class="chips">${chips}</div>
             <div class="style-grid">${cards || '<div class="style-card">这个分类下暂无风格</div>'}</div>
-            <p class="panel-note">共 ${presets.length} 款内置风格 · 预览长边 1600px · 照片全程本地处理</p>`;
+            <p class="panel-note">共 ${presets.length} 款内置风格 · 预览 1600px · 导出按原图（最长 6000px）· 照片全程本地处理</p>`;
     }
 
     const PUZZLE_N = { single: 1, h2: 2, v2: 2, as2: 2, h3: 3, v3: 3, grid4: 4, as4: 4, h4: 4, v4: 4, grid6: 6, grid9: 9 };
@@ -360,33 +429,47 @@
     async function exportGrid() {
         if (state.exporting) return;
         if (!state.image) { hint('先导入照片'); return; }
-        const blocks = (state.crop.blocks || []).slice();
-        if (!blocks.length) { hint('切图尚未生成，请重新进入切图页'); return; }
+        const rows = state.crop.rows, cols = state.crop.cols;
+        const total = rows * cols;
         const picks = Array.from(state.crop.picked)
-            .filter((i) => i >= 0 && i < blocks.length)
+            .filter((i) => i >= 0 && i < total)
             .sort((a, b) => a - b);
         if (!picks.length) { hint('至少勾选一块'); return; }
         const base = String(state.image.name || 'photo')
             .replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]+/g, '_');
-        const tag = `${state.crop.rows}x${state.crop.cols}`;
+        const tag = `${rows}x${cols}`;
         state.exporting = true;
         let ok = 0, fail = 0, canceled = false;
+        let note = '';
         try {
+            // 切图必须从「加风格/调色后的全尺寸成品」上切；预览画布只有 1600px，
+            // 9 块放大到手机相册尺寸会明显糊。渲染完立即还原代理，逐块编码。
+            await withFullImage(state.image, async (targetPx, fallback, capped) => {
+                if (fallback) note = ' · 全尺寸解码失败，已用预览尺寸';
+                else if (capped) note = ' · 已按 6000px 上限导出';
+                renderPreview(true, { displayMax: targetPx, uiDprOverride: 1 });
+            });
             for (let n = 0; n < picks.length; n++) {
                 const i = picks[n];
                 hint(`正在导出 ${n + 1}/${picks.length}…`, 12000);
+                let block = null;
                 try {
-                    if (!blocks[i]) { fail++; continue; }
-                    const data = blocks[i].toDataURL('image/jpeg', 0.92);
+                    block = sliceOne(canvas, rows, cols, i);
+                    const data = block.toDataURL('image/jpeg', 0.92);
                     const r = await window.qfsNative.saveImage(data, `${base}_${tag}_${i + 1}.jpg`);
                     if (r && r.canceled) { canceled = true; break; }
                     if (r && r.ok) ok++; else fail++;
                 } catch (_) { fail++; }
+                finally {
+                    if (block) { block.width = 0; block.height = 0; }
+                }
             }
-            hint(canceled ? `已取消（已导出 ${ok} 块）`
-                : `已导出 ${ok}/${picks.length} 块${fail ? `，${fail} 块失败` : ''}`,
+            hint((canceled ? `已取消（已导出 ${ok} 块）`
+                : `已导出 ${ok}/${picks.length} 块${fail ? `，${fail} 块失败` : ''}`) + note,
             canceled || fail ? 4200 : 2800);
         } finally {
+            delete A.exportScale;
+            try { renderPreview(true); } catch (_) {}
             state.exporting = false;
         }
     }
@@ -559,6 +642,8 @@
     });
 
     document.getElementById('tabs').addEventListener('click', (e) => {
+        // 导出/切图途中切页签会把画布重画回预览，正在编码的那一帧就废了
+        if (state.exporting) return;
         const tab = e.target.closest('.tab');
         if (tab) render(tab.dataset.tab);
     });

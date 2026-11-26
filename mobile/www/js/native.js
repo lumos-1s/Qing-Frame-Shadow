@@ -26,6 +26,63 @@
     let pickErrors = [];
     function getPickErrors() { return pickErrors.slice(); }
 
+    function notify(text, ms) {
+        if (typeof window.qfHint === 'function') window.qfHint(text, ms);
+    }
+
+    function drawDown(img, max) {
+        const iw = img.naturalWidth || img.width || 0;
+        const ih = img.naturalHeight || img.height || 0;
+        const k = Math.min(1, max / Math.max(iw, ih));
+        const w = Math.max(1, Math.round(iw * k));
+        const h = Math.max(1, Math.round(ih * k));
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        cv.naturalWidth = w; cv.naturalHeight = h; cv.complete = true;
+        return cv;
+    }
+
+    function loadImageFile(file) {
+        return new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+                try { URL.revokeObjectURL(url); } catch (_) {}
+                resolve(img);
+            };
+            img.onerror = () => {
+                try { URL.revokeObjectURL(url); } catch (_) {}
+                reject(new Error('图片格式无法解码'));
+            };
+            img.src = url;
+        });
+    }
+
+    // 先让系统/WebView 解；HEIC 在 Android WebView 上经常直接失败，
+    // 这时再懒加载 libheif(WASM) 兜底。解码结果统一缩到 1600px 预览。
+    async function decodeStill(file) {
+        const name = file.name || '';
+        try {
+            const img = await loadImageFile(file);
+            return {
+                el: drawDown(img, 1600),
+                srcW: img.naturalWidth || img.width,
+                srcH: img.naturalHeight || img.height,
+                heic: false
+            };
+        } catch (e) {
+            if (!/\.(heic|heif)$/i.test(name) || typeof window.qfHeicDecode !== 'function') throw e;
+            notify('系统无法解码 HEIC，正在用内置解码器…', 12000);
+            const full = await window.qfHeicDecode(file);
+            const srcW = full.naturalWidth || full.width;
+            const srcH = full.naturalHeight || full.height;
+            const el = drawDown(full, 1600);
+            try { full.width = 0; full.height = 0; } catch (_) {}
+            return { el, srcW, srcH, heic: true };
+        }
+    }
+
     function pickImages() {
         return new Promise((resolve) => {
             if (!fileInput) {
@@ -72,29 +129,12 @@
                             out.push(await window.qfRawDecode(f));
                             continue;
                         }
-                        const url = URL.createObjectURL(f);
-                        let img;
-                        try {
-                            img = await new Promise((res, rej) => {
-                                const i = new Image();
-                                i.onload = () => res(i);
-                                i.onerror = () => rej(new Error('图片格式无法解码'));
-                                i.src = url;
-                            });
-                        } finally {
-                            // 解码后立刻释放 blob URL，别让几十张大图一直挂在内存里
-                            try { URL.revokeObjectURL(url); } catch (_) {}
-                        }
-                        // 预览限制 1600px，避免手机上大图直接占满内存
-                        const max = 1600;
-                        const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-                        const w = Math.max(1, Math.round(img.naturalWidth * scale));
-                        const h = Math.max(1, Math.round(img.naturalHeight * scale));
-                        const cv = document.createElement('canvas');
-                        cv.width = w; cv.height = h;
-                        cv.getContext('2d').drawImage(img, 0, 0, w, h);
-                        cv.naturalWidth = w; cv.naturalHeight = h; cv.complete = true;
-                        out.push({ el: cv, name: f.name, w, h, grade: null, file: f });
+                        const dec = await decodeStill(f);
+                        out.push({
+                            el: dec.el, name: f.name, w: dec.el.width, h: dec.el.height,
+                            srcW: dec.srcW, srcH: dec.srcH, heic: dec.heic,
+                            grade: null, file: f
+                        });
                     } catch (e) {
                         // 单张失败不影响其他照片，但要留下可展示的原因
                         pickErrors.push({ name: f.name, error: String((e && e.message) || e) });
