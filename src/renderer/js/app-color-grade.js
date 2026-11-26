@@ -87,9 +87,11 @@
         'vec3 lutLookup(vec3 c){',
         '  float g=uGrid;',
         '  float z=clamp(c.b,0.0,1.0)*(g-1.0);',
-        '  float b0=floor(z);',
-        '  float fb=z-b0;',
-        '  b0=min(b0,g-2.0);',
+        // 先夹 b0 再算 fb。反过来的话 b=1.0 时 b0=32 被夹成 31、fb 却仍是 0，
+        // 采样结果退回第 31 片 —— 蓝通道正好 255 的像素会比 254 的偏一度，
+        // 亮蓝天空里会出现孤立的错色点。夹完再算，b=1.0 落到 (31, 32] 的 fb=1 上。
+        '  float b0=min(floor(z),g-2.0);',
+        '  float fb=clamp(z-b0,0.0,1.0);',
         '  float rx=(clamp(c.r,0.0,1.0)*(g-1.0)+0.5)/g;',
         '  float gy=(clamp(c.g,0.0,1.0)*(g-1.0)+0.5)/g;',
         '  vec3 s0=texture2D(uLut,vec2((b0+rx)/g,gy)).rgb;',
