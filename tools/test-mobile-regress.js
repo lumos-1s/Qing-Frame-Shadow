@@ -313,7 +313,45 @@ app.whenReady().then(async () => {
             await wait(200);
         } catch (e) { textErr = String(e && e.message || e); }
 
-        // 14) RAW 全尺寸重解（本地有样本时）
+        // 14) 编辑 › 元素：文字 Logo / 贴纸 / 复制删除清空
+        let el = {}, elErr = '';
+        try {
+            document.querySelector('[data-tab="edit"]').click();
+            await wait(300);
+            document.querySelector('[data-edit-sub="element"]').click();
+            await wait(300);
+            const draft = document.querySelector('[data-draft-logo]');
+            if (draft) { draft.value = '回归LOGO'; draft.dispatchEvent(new Event('input', { bubbles: true })); }
+            el.baseline = (window.App.template.logoElements || []).length;
+            document.getElementById('btnAddTextLogo').click();
+            await wait(250);
+            el.logos = (window.App.template.logoElements || []).length;
+            el.name = ((window.App.template.logoElements || [])[el.logos - 1] || {}).name;
+            const byLabel = (label) => {
+                const row = Array.from(document.querySelectorAll('.ctl-row')).find((x) => {
+                    const l = x.querySelector('label'); return l && l.textContent === label;
+                });
+                return row && row.querySelector('[data-ctl]');
+            };
+            const size = byLabel('大小');
+            if (size) { size.value = '300'; size.dispatchEvent(new Event('input', { bubbles: true })); }
+            const opacity = byLabel('透明度');
+            if (opacity) { opacity.value = '60'; opacity.dispatchEvent(new Event('input', { bubbles: true })); }
+            await wait(250);
+            el.size = ((window.App.template.logoElements || [])[el.logos - 1] || {}).size;
+            el.opacity = ((window.App.template.logoElements || [])[el.logos - 1] || {}).opacity;
+            document.getElementById('btnAddSticker').click();
+            await wait(200);
+            el.stickers = ((window.App.template.decorConfig || {}).stickers || []).length;
+            document.getElementById('btnClearEls').click();
+            await wait(200);
+            el.afterClear = ((window.App.template.logoElements || []).length)
+                + (((window.App.template.decorConfig || {}).stickers || []).length);
+            document.querySelector('[data-tab="crop"]').click();
+            await wait(200);
+        } catch (e) { elErr = String(e && e.message || e); }
+
+        // 15) RAW 全尺寸重解（本地有样本时）
         let rawFull = {}, rawFullErr = '';
         if (${JSON.stringify(fs.existsSync(rawSample))}) {
             try {
@@ -339,7 +377,7 @@ app.whenReady().then(async () => {
             rawBridge: typeof window.qfRawDecode === 'function',
             heic, heicErr, heicFull, heicFullErr, fullExport, fullExportErr,
             puzzleExport, puzzleExportErr, cropFull, cropFullErr,
-            edit, editErr, text, textErr, rawFull, rawFullErr
+            edit, editErr, text, textErr, el, elErr, rawFull, rawFullErr
         };
     })()`);
 
@@ -388,6 +426,10 @@ app.whenReady().then(async () => {
         '编辑 › 文字能添加并修改自由文字', JSON.stringify({ text: r.text, err: r.textErr }));
     check(!r.textErr && r.text.signature === '回归署名' && r.text.exifAutoText === 1 && r.text.afterDelete === r.text.baseline,
         '署名/EXIF 写回模板且删除文字生效', JSON.stringify({ text: r.text, err: r.textErr }));
+
+    check(!r.elErr && r.el.logos === r.el.baseline + 1 && /回归LOGO/.test(String(r.el.name))
+        && r.el.size === 300 && r.el.opacity === 60 && r.el.stickers >= 1 && r.el.afterClear === 0,
+        '编辑 › 元素能加 Logo/贴纸、调几何并清空', JSON.stringify({ el: r.el, err: r.elErr }));
 
     if (fs.existsSync(rawSample)) {
         check(!r.rawFullErr && r.rawFull.w >= 3000 && r.rawFull.h >= 2000 && r.rawFull.px.some((v) => v > 0),
