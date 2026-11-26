@@ -37,7 +37,7 @@ app.whenReady().then(async () => {
         panel: (document.getElementById('panel').textContent || '').slice(0, 40)
     }))()`);
     check(r.ready, '手机壳页面初始化完成', JSON.stringify(r.ready));
-    check(r.tabs.join(',') === 'style,puzzle,grade,crop', '四个底部页签齐全', r.tabs.join(','));
+    check(r.tabs.join(',') === 'style,edit,puzzle,grade,crop', '五个底部页签齐全', r.tabs.join(','));
     check(r.active === 'style', '默认停在风格页', r.active);
     check(r.canvas && r.render === 'function' && r.applyGeo === 'function' && r.presets === 'function',
         '共享引擎脚本已加载且可用', JSON.stringify(r));

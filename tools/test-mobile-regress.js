@@ -238,7 +238,42 @@ app.whenReady().then(async () => {
             cropFull = { dims: dims.slice(0, 2), count: dims.length };
         } catch (e) { cropFullErr = String(e && e.message || e); }
 
-        // 12) RAW 全尺寸重解（本地有样本时）
+        // 12) 编辑 › 边框页：控件能改到模板，且状态条跟着切换
+        let edit = {}, editErr = '';
+        try {
+            document.querySelector('[data-tab="edit"]').click();
+            await wait(450);
+            edit = {
+                tabs: document.querySelectorAll('#tabs .tab').length,
+                subs: document.querySelectorAll('[data-edit-sub]').length,
+                ctls: document.querySelectorAll('[data-ctl]').length,
+                stageName: document.getElementById('stageName').textContent
+            };
+            const setByLabel = (label, value) => {
+                const row = Array.from(document.querySelectorAll('.ctl-row')).find((x) => {
+                    const l = x.querySelector('label');
+                    return l && l.textContent === label;
+                });
+                const el = row && row.querySelector('[data-ctl]');
+                if (!el) return false;
+                el.value = String(value);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                return true;
+            };
+            edit.changedStroke = setByLabel('描边宽度', 40);
+            edit.changedFill = setByLabel('填充颜色', '#00ff00');
+            await wait(350);
+            const layer = (window.App.template.layerList || [])[0] || {};
+            edit.stroke = (layer.strokeConfig || {}).strokeWidth;
+            edit.fill = (layer.fillConfig || {}).fillHex;
+            document.querySelector('[data-edit-sub="text"]').click();
+            await wait(200);
+            edit.textPlaceholder = (document.querySelector('#panel .panel-note') || {}).textContent || '';
+            document.querySelector('[data-tab="crop"]').click();
+            await wait(250);
+        } catch (e) { editErr = String(e && e.message || e); }
+
+        // 13) RAW 全尺寸重解（本地有样本时）
         let rawFull = {}, rawFullErr = '';
         if (${JSON.stringify(fs.existsSync(rawSample))}) {
             try {
@@ -264,7 +299,7 @@ app.whenReady().then(async () => {
             rawBridge: typeof window.qfRawDecode === 'function',
             heic, heicErr, heicFull, heicFullErr, fullExport, fullExportErr,
             puzzleExport, puzzleExportErr, cropFull, cropFullErr,
-            rawFull, rawFullErr
+            edit, editErr, rawFull, rawFullErr
         };
     })()`);
 
@@ -302,6 +337,12 @@ app.whenReady().then(async () => {
 
     check(!r.cropFullErr && Number(String(r.cropFull.dims[0]).split('x')[0]) >= 800 && r.cropFull.count === 9,
         '切图从全尺寸成品上切出 9 块', JSON.stringify({ crop: r.cropFull, err: r.cropFullErr }));
+
+    check(!r.editErr && r.edit.tabs === 5 && r.edit.subs === 4 && r.edit.ctls > 10
+        && r.edit.stageName === '编辑 · 边框' && /后续版本开放/.test(r.edit.textPlaceholder),
+        '编辑页五个页签、四个子页与边框控件都在', JSON.stringify({ edit: r.edit, err: r.editErr }));
+    check(!r.editErr && r.edit.changedStroke && r.edit.changedFill && r.edit.stroke === 40 && r.edit.fill === '00ff00',
+        '边框控件写入 template.layerList（描边宽度/填充颜色）', JSON.stringify({ edit: r.edit, err: r.editErr }));
 
     if (fs.existsSync(rawSample)) {
         check(!r.rawFullErr && r.rawFull.w >= 3000 && r.rawFull.h >= 2000 && r.rawFull.px.some((v) => v > 0),

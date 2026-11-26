@@ -8,7 +8,7 @@
     const A = window.App;
     const state = {
         image: null, images: [], preset: null, template: window.qfsNative.defaultTemplate(),
-        tab: 'style', filter: '全部', activeSlot: 0, importing: false, exporting: false,
+        tab: 'style', editSub: 'border', filter: '全部', activeSlot: 0, importing: false, exporting: false,
         puzzle: { enabled: 1, layout: 'grid4', gap: 6, bgMode: 0, slots: {} },
         crop: { rows: 3, cols: 3, picked: new Set(), blocks: [], touched: false }
     };
@@ -508,8 +508,23 @@
             <p class="panel-note">已勾选 ${state.crop.picked.size}/${blocks.length} 块 · 点底部「导出选中块」逐块保存/分享</p>`;
     }
 
+    const EDIT_SUBS = [['border', '边框'], ['text', '文字'], ['element', '元素'], ['style', '样式']];
+    function editPage() {
+        const chips = EDIT_SUBS.map(([k, label]) =>
+            `<button class="chip${state.editSub === k ? ' active' : ''}" data-edit-sub="${k}">${label}</button>`).join('');
+        if (!state.image) {
+            return `<h2>编辑</h2><div class="chips">${chips}</div><p class="panel-note">先导入一张照片，再选一个风格</p>`;
+        }
+        return `<h2>编辑</h2>
+            ${currentStrip()}
+            <div class="chips">${chips}</div>
+            ${(window.QF_EditPanel && window.QF_EditPanel.html(state.editSub, state.template, state.template.photoFrameStyle))
+                || '<p class="panel-note">编辑面板尚未就绪</p>'}`;
+    }
+
     const PAGES = {
         style: stylePage,
+        edit: editPage,
         puzzle: puzzlePage,
         grade: gradePage,
         crop: cropPage
@@ -531,6 +546,13 @@
         panel.querySelectorAll('[data-tag]').forEach((b) => {
             b.addEventListener('click', () => { state.filter = b.dataset.tag; render('style'); });
         });
+        panel.querySelectorAll('[data-edit-sub]').forEach((b) => {
+            b.addEventListener('click', () => { state.editSub = b.dataset.editSub; render('edit'); });
+        });
+        if (state.tab === 'edit' && window.QF_EditPanel) {
+            window.QF_EditPanel.bind(panel, () => renderPreviewSoon(),
+                () => { render('edit'); renderPreviewSoon(); });
+        }
         panel.querySelectorAll('[data-layout]').forEach((b) => {
             b.addEventListener('click', () => setLayout(b.dataset.layout));
         });
@@ -620,6 +642,10 @@
         } else if (state.tab === 'crop') {
             stageBar(`切图 · ${state.crop.rows}×${state.crop.cols}`,
                 state.image ? `${state.crop.picked.size}/${state.crop.blocks.length} 块` : '未导入照片');
+        } else if (state.tab === 'edit') {
+            const sub = (EDIT_SUBS.find(([k]) => k === state.editSub) || EDIT_SUBS[0])[1];
+            stageBar(`编辑 · ${sub}`,
+                state.image ? (state.preset ? presetLabel() : dimsOf(state.image)) : '未导入照片');
         } else if (state.tab === 'grade') {
             stageBar(state.image ? (state.preset ? presetLabel() : state.image.name) : '调色',
                 state.image ? dimsOf(state.image) : '未导入照片');

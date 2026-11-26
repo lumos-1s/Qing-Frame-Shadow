@@ -155,6 +155,31 @@ body {
 .grade-row input[type=range] { flex: 1; min-width: 0; height: 32px; accent-color: var(--primary); }
 .grade-row output { flex: 0 0 44px; text-align: right; font-size: 11px; color: var(--primary); font-variant-numeric: tabular-nums; }
 
+/* 编辑页：边框/图层参数按组折叠，防止一屏塞不下 */
+.ctl-group { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin-bottom: 10px; overflow: hidden; }
+.ctl-group > summary {
+  padding: 10px 12px; font-size: 13px; font-weight: 600; color: var(--text);
+  cursor: pointer; list-style: none;
+}
+.ctl-group > summary::-webkit-details-marker { display: none; }
+.ctl-group > summary::after { content: '+'; float: right; color: var(--text-3); font-weight: 400; }
+.ctl-group[open] > summary { border-bottom: 1px solid var(--border); }
+.ctl-group[open] > summary::after { content: '−'; }
+.ctl-row { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 12px; }
+.ctl-row label { flex: 0 0 76px; font-size: 12px; color: var(--text-2); }
+.ctl-row input[type=range] { flex: 1; min-width: 0; height: 30px; accent-color: var(--primary); }
+.ctl-row output { flex: 0 0 46px; text-align: right; font-size: 11px; color: var(--primary); font-variant-numeric: tabular-nums; }
+.ctl-row select {
+  flex: 1; min-width: 0; min-height: 30px; padding: 0 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface-alt); color: var(--text); font-size: 12px;
+}
+.ctl-row input[type=color] {
+  flex: 0 0 34px; width: 34px; height: 30px; padding: 0;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface-alt);
+}
+.ctl-hint { padding: 0 12px 8px; font-size: 11px; color: var(--text-3); }
+.ctl-sub { padding: 8px 12px 2px; font-size: 11px; color: var(--text-3); }
+
 .crop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .crop-cell { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-alt); }
 .crop-cell img { display: block; width: 100%; aspect-ratio: 1/1; object-fit: cover; }
