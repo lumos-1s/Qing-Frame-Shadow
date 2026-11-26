@@ -351,7 +351,54 @@ app.whenReady().then(async () => {
             await wait(200);
         } catch (e) { elErr = String(e && e.message || e); }
 
-        // 15) RAW 全尺寸重解（本地有样本时）
+        // 15) 编辑 › 样式：保存/载入/导出配置/分享码往返
+        let tpl = {}, tplErr = '';
+        try {
+            document.querySelector('[data-tab="edit"]').click();
+            await wait(300);
+            document.querySelector('[data-edit-sub="style"]').click();
+            await wait(300);
+            const name = document.querySelector('[data-tpl-name]');
+            if (name) { name.value = '回归模板'; name.dispatchEvent(new Event('input', { bubbles: true })); }
+            document.getElementById('btnTplSave').click();
+            await wait(300);
+            tpl.saved = (await window.qfsNative.listTemplates()).indexOf('回归模板') >= 0;
+            tpl.savedChips = document.querySelectorAll('[data-load-template]').length;
+
+            let exported = '';
+            const saveText0 = window.qfsNative.saveText;
+            window.qfsNative.saveText = async (text) => { exported = text; return { ok: true, mode: 'test' }; };
+            document.getElementById('btnTplExport').click();
+            await wait(250);
+            window.qfsNative.saveText = saveText0;
+            tpl.kind = (() => { try { return JSON.parse(exported).kind; } catch (e) { return 'bad'; } })();
+
+            const clone = JSON.parse(JSON.stringify(window.App.template));
+            clone.templateName = '码导入';
+            clone.baseMargin = clone.baseMargin || {};
+            clone.baseMargin.globalMargin = 1.7;
+            const json = JSON.stringify({ v: 1, kind: 'qfs-config', app: 'qingframe-web', name: '码导入', template: clone });
+            const bytes = new TextEncoder().encode(json);
+            let bin = '';
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            const ta = document.querySelector('[data-share-input]');
+            ta.value = 'QFSCFG1:' + btoa(bin);
+            tpl.codeLen = ta.value.length;
+            document.getElementById('btnTplPaste').click();
+            await wait(350);
+            tpl.hint = document.getElementById('toast').textContent;
+            tpl.importedName = window.App.template.templateName;
+            tpl.importedMargin = (window.App.template.baseMargin || {}).globalMargin;
+
+            const chip = document.querySelector('[data-load-template="回归模板"]');
+            if (chip) chip.click();
+            await wait(300);
+            tpl.loadedName = window.App.template.templateName;
+            document.querySelector('[data-tab="crop"]').click();
+            await wait(200);
+        } catch (e) { tplErr = String(e && e.message || e); }
+
+        // 16) RAW 全尺寸重解（本地有样本时）
         let rawFull = {}, rawFullErr = '';
         if (${JSON.stringify(fs.existsSync(rawSample))}) {
             try {
@@ -377,7 +424,7 @@ app.whenReady().then(async () => {
             rawBridge: typeof window.qfRawDecode === 'function',
             heic, heicErr, heicFull, heicFullErr, fullExport, fullExportErr,
             puzzleExport, puzzleExportErr, cropFull, cropFullErr,
-            edit, editErr, text, textErr, el, elErr, rawFull, rawFullErr
+            edit, editErr, text, textErr, el, elErr, tpl, tplErr, rawFull, rawFullErr
         };
     })()`);
 
@@ -430,6 +477,10 @@ app.whenReady().then(async () => {
     check(!r.elErr && r.el.logos === r.el.baseline + 1 && /回归LOGO/.test(String(r.el.name))
         && r.el.size === 300 && r.el.opacity === 60 && r.el.stickers >= 1 && r.el.afterClear === 0,
         '编辑 › 元素能加 Logo/贴纸、调几何并清空', JSON.stringify({ el: r.el, err: r.elErr }));
+
+    check(!r.tplErr && r.tpl.saved && r.tpl.savedChips >= 1 && r.tpl.kind === 'qfs-config'
+        && r.tpl.importedName === '码导入' && r.tpl.importedMargin === 1.7 && r.tpl.loadedName === '回归模板',
+        '编辑 › 样式能保存/导出/分享码导入/载入模板', JSON.stringify({ tpl: r.tpl, err: r.tplErr }));
 
     if (fs.existsSync(rawSample)) {
         check(!r.rawFullErr && r.rawFull.w >= 3000 && r.rawFull.h >= 2000 && r.rawFull.px.some((v) => v > 0),

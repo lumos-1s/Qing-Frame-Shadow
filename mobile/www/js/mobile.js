@@ -553,7 +553,8 @@
         });
         if (state.tab === 'edit' && window.QF_EditPanel) {
             window.QF_EditPanel.bind(panel, () => renderPreviewSoon(),
-                () => { render('edit'); renderPreviewSoon(); });
+                () => { render('edit'); renderPreviewSoon(); },
+                () => { state.preset = null; A.template = state.template; });
         }
         panel.querySelectorAll('[data-layout]').forEach((b) => {
             b.addEventListener('click', () => setLayout(b.dataset.layout));

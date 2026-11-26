@@ -191,6 +191,11 @@ body {
   color: var(--text); font-size: 12px;
 }
 .ctl-row input[type=checkbox] { flex: 0 0 20px; width: 20px; height: 20px; accent-color: var(--primary); }
+.share-input {
+  display: block; width: 100%; min-height: 64px; margin: 0 0 10px; padding: 8px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt);
+  color: var(--text); font: 11px/1.5 ui-monospace, Consolas, monospace; resize: vertical;
+}
 
 .crop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .crop-cell { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-alt); }

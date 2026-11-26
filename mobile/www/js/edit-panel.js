@@ -388,6 +388,62 @@
         return out;
     }
 
+    function jsonToB64(json) {
+        const bytes = new TextEncoder().encode(json);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        }
+        return btoa(bin);
+    }
+
+    function b64ToJson(b64) {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return new TextDecoder().decode(bytes);
+    }
+
+    async function copyText(text) {
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+                return;
+            }
+        } catch (_) { /* 退回 execCommand */ }
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;opacity:0;left:0;top:0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (_) {}
+        ta.remove();
+    }
+
+    function validTemplate(d) {
+        if (!d || typeof d !== 'object' || Array.isArray(d)) return false;
+        // 桌面版只认 photoFrameStyle 字符串；手机上「无相框风格」的预设压根没有这个键，
+        // 分享码会被误判为无效。放宽到任何带模板字段的对象。
+        return !!(Array.isArray(d.layerList) || Array.isArray(d.aiLayers) || Array.isArray(d.layers)
+            || d.decorConfig || d.baseMargin || typeof d.templateName === 'string'
+            || typeof d.photoFrameStyle === 'string');
+    }
+
+    function templateHtml(t) {
+        return `<div class="ctl-row"><label>名称</label><input type="text" data-tpl-name value="${esc(t.templateName || '')}"></div>`
+            + `<div class="text-acts">`
+            + `<button id="btnTplSave" type="button">保存模板</button>`
+            + `<button id="btnTplDelete" type="button">删除模板</button>`
+            + `<button id="btnTplExport" type="button">导出配置</button>`
+            + `<button id="btnTplImport" type="button">导入配置</button></div>`
+            + `<div class="text-acts">`
+            + `<button id="btnTplShare" type="button">复制分享码</button>`
+            + `<button id="btnTplPaste" type="button">导入分享码</button></div>`
+            + `<p class="ctl-sub">粘贴分享码（QFSCFG1: 开头）</p>`
+            + `<textarea class="share-input" data-share-input rows="3" placeholder="QFSCFG1:..."></textarea>`
+            + `<details class="ctl-group" open><summary>已保存的模板</summary>`
+            + `<div id="savedTemplates" class="chips"></div></details>`;
+    }
+
     function rowHtml(c) {
         const id = c.id;
         let input = '';
@@ -415,7 +471,8 @@
         ctls = [];
         if (sub === 'text') return textHtml(tmpl);
         if (sub === 'element') return elementHtml(tmpl);
-        if (sub !== 'border') return '<p class="panel-note">样式管理将在后续版本开放。</p>';
+        if (sub === 'style') return templateHtml(tmpl);
+        if (sub !== 'border') return '<p class="panel-note">未知编辑子页</p>';
         const rows = window.StyleParams || {};
         const vis = (window.StyleCaps && window.StyleCaps.visibleRows)
             ? window.StyleCaps.visibleRows(style) : {};
@@ -459,7 +516,7 @@
         return out || '<p class="panel-note">这个风格没有可调参数</p>';
     }
 
-    function bind(panel, onChange, onRebuild) {
+    function bind(panel, onChange, onRebuild, onReplaced) {
         panel.querySelectorAll('[data-ctl]').forEach((el) => {
             const c = ctls[Number(el.dataset.ctl)];
             if (!c) return;
@@ -543,6 +600,104 @@
             selectedEl = '';
             selectedText = 0;
             onRebuild();
+        });
+
+        const hint = (s) => { if (window.qfHint) window.qfHint(s); };
+        const nameEl = panel.querySelector('[data-tpl-name]');
+        if (nameEl) nameEl.addEventListener('input', () => { tmpl.templateName = nameEl.value; });
+
+        const applyData = (data) => {
+            if (!validTemplate(data)) { hint('配置无法识别'); return; }
+            Object.keys(tmpl).forEach((k) => delete tmpl[k]);
+            Object.assign(tmpl, JSON.parse(JSON.stringify(data)));
+            if (typeof onReplaced === 'function') onReplaced();
+            onChange();
+            onRebuild();
+            hint('已导入「' + (tmpl.templateName || '未命名配置') + '」');
+        };
+        const parseConfig = (text) => {
+            const s = String(text || '').trim();
+            if (!s) return null;
+            if (s.indexOf('QFSCFG1:') === 0) {
+                const d = JSON.parse(b64ToJson(s.slice(8).replace(/\s+/g, '')));
+                return (d && d.kind === 'qfs-config' && d.template) ? d.template : d;
+            }
+            const d = JSON.parse(s);
+            return (d && d.kind === 'qfs-config' && d.template) ? d.template : d;
+        };
+        const bundle = () => ({
+            v: 1, kind: 'qfs-config', app: 'qingframe-web',
+            name: tmpl.templateName || '我的配置',
+            exportedAt: new Date().toISOString(),
+            template: JSON.parse(JSON.stringify(tmpl))
+        });
+
+        const refreshSaved = async () => {
+            const box = panel.querySelector('#savedTemplates');
+            if (!box) return;
+            let names = [];
+            try { names = await window.qfsNative.listTemplates(); } catch (_) {}
+            box.innerHTML = names.length
+                ? names.map((n) => `<button class="chip" data-load-template="${esc(n)}">${esc(n)}</button>`).join('')
+                : '<span class="panel-note">还没有保存的模板</span>';
+            box.querySelectorAll('[data-load-template]').forEach((b) => {
+                b.addEventListener('click', async () => {
+                    try {
+                        const d = await window.qfsNative.loadTemplate(b.dataset.loadTemplate);
+                        if (d) applyData(d);
+                    } catch (e) { hint('载入失败：' + ((e && e.message) || e)); }
+                });
+            });
+        };
+        refreshSaved();
+
+        const btnSave = panel.querySelector('#btnTplSave');
+        if (btnSave) btnSave.addEventListener('click', async () => {
+            const name = (nameEl && nameEl.value.trim()) || tmpl.templateName || '我的配置';
+            tmpl.templateName = name;
+            try {
+                await window.qfsNative.saveTemplate(name, JSON.parse(JSON.stringify(tmpl)));
+                hint('已保存模板「' + name + '」');
+                refreshSaved();
+            } catch (e) { hint('保存失败：' + ((e && e.message) || e)); }
+        });
+        const btnDelete = panel.querySelector('#btnTplDelete');
+        if (btnDelete) btnDelete.addEventListener('click', async () => {
+            const name = (nameEl && nameEl.value.trim()) || tmpl.templateName;
+            if (!name) { hint('先填模板名称'); return; }
+            try {
+                await window.qfsNative.deleteTemplate(name);
+                hint('已删除模板「' + name + '」');
+                refreshSaved();
+            } catch (e) { hint('删除失败：' + ((e && e.message) || e)); }
+        });
+        const btnExport = panel.querySelector('#btnTplExport');
+        if (btnExport) btnExport.addEventListener('click', async () => {
+            const name = tmpl.templateName || '我的配置';
+            const json = JSON.stringify(bundle(), null, 2);
+            const r = await window.qfsNative.saveText(json, name + '.json', 'application/json');
+            hint(r && r.ok ? '配置已导出' : ('导出失败：' + ((r && r.error) || '未知错误')));
+        });
+        const btnImport = panel.querySelector('#btnTplImport');
+        if (btnImport) btnImport.addEventListener('click', async () => {
+            const r = await window.qfsNative.pickJson();
+            if (!r) return;
+            if (r.error) { hint('读取失败：' + r.error); return; }
+            try { applyData(parseConfig(r.text)); }
+            catch (e) { hint('配置解析失败：' + ((e && e.message) || e)); }
+        });
+        const btnShare = panel.querySelector('#btnTplShare');
+        if (btnShare) btnShare.addEventListener('click', async () => {
+            const code = 'QFSCFG1:' + jsonToB64(JSON.stringify(bundle()));
+            await copyText(code);
+            hint('分享码已复制（约 ' + Math.round(code.length / 1024) + ' KB）');
+        });
+        const btnPaste = panel.querySelector('#btnTplPaste');
+        if (btnPaste) btnPaste.addEventListener('click', () => {
+            const ta = panel.querySelector('[data-share-input]');
+            if (!ta || !ta.value.trim()) { hint('先粘贴分享码'); return; }
+            try { applyData(parseConfig(ta.value)); }
+            catch (e) { hint('分享码无效：' + ((e && e.message) || e)); }
         });
     }
 

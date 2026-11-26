@@ -186,6 +186,63 @@
         } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
     }
 
+    // 配置文件（JSON / 分享码）的写出：原生走 Filesystem + Share，浏览器走 Blob 下载
+    async function saveText(text, filename, mime) {
+        const name = String(filename || 'export.txt');
+        try {
+            if (isNative) {
+                const FS = plugin('Filesystem');
+                const r = await FS.writeFile({
+                    directory: 'CACHE', path: name, data: String(text), encoding: 'utf8'
+                });
+                const Share = plugin('Share');
+                await Share.share({ title: '清框影', text: '配置文件', url: r && r.uri,
+                    dialogTitle: '保存或分享配置' });
+                return { ok: true, mode: 'native', uri: r && r.uri };
+            }
+        } catch (e) {
+            const msg = String((e && e.message) || e);
+            return { ok: false, canceled: /cancel|取消|dismiss/i.test(msg), error: msg };
+        }
+        try {
+            const url = URL.createObjectURL(new Blob([String(text)], { type: mime || 'text/plain' }));
+            const a = document.createElement('a');
+            a.href = url; a.download = name;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 1000);
+            return { ok: true, mode: 'download' };
+        } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+    }
+
+    // 选一个 JSON / .qfs 配置文件；取消时 resolve(null)，不会把 UI 卡死
+    function pickJson() {
+        return new Promise((resolve) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json,.qfs,application/json,text/plain';
+            input.style.display = 'none';
+            document.body.appendChild(input);
+            let settled = false;
+            const done = (v) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                input.onchange = null; input.oncancel = null;
+                input.remove();
+                resolve(v);
+            };
+            input.onchange = async () => {
+                const f = input.files && input.files[0];
+                if (!f) { done(null); return; }
+                try { done({ name: f.name, text: await f.text() }); }
+                catch (e) { done({ error: String((e && e.message) || e) }); }
+            };
+            input.oncancel = () => done(null);
+            const timer = setTimeout(() => done(null), 180000);
+            input.click();
+        });
+    }
+
     /* ── 偏好 ── */
     async function getPrefs() {
         if (isNative) {
@@ -223,8 +280,10 @@
         platform: () => platform,
         isMac: () => platform === 'ios',
         pickImages,
+        pickJson,
         getPickErrors,
         saveImage,
+        saveText,
         getPrefs,
         savePrefs,
         loadAllPresets: async () => window.QF_PRESETS || [],
